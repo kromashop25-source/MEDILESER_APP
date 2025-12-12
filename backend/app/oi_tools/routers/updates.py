@@ -1,10 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import StreamingResponse, Response
 from typing import List, Optional, Dict
 import os
 import json
 
-from app.services.updates.update_base_by_model import (
+from app.oi_tools.services.updates.update_base_by_model import (
     OIFile,
     PasswordBundle,
     UpdateOptions,
@@ -14,9 +14,11 @@ from app.services.updates.update_base_by_model import (
     PasswordRequiredError,
     WrongPasswordError,
 )
-from app.services.progress_manager import progress_manager
+from app.oi_tools.services.progress_manager import progress_manager
 
-router = APIRouter(prefix="/bases/actualizar", tags=["actualizacion-bases"])
+from app.api.auth import get_current_user_session
+
+router = APIRouter(prefix="/bases/actualizar", tags=["actualizacion-bases"], dependencies=[Depends(get_current_user_session)])
 
 def ndjson_stream(events):
     def _iter():

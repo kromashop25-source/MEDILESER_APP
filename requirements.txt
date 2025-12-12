@@ -1,0 +1,21 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings
+sqlmodel
+numpy==2.3.0
+pandas==2.3.3
+openpyxl==3.1.5
+python-multipart>=0.0.9,<0.1.0
+
+# Herramientas / soporte
+httpx==0.27.2
+pytest==8.3.3
+pyinstaller==6.10.0
+
+# Windows / Excel protegido (si aplica)
+pywin32==306
+msoffcrypto-tool==5.4.2
+
+# Recomendado si dependes de .env en CMD
+python-dotenv==1.0.1

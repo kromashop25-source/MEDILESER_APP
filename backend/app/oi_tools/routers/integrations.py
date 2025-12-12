@@ -1,22 +1,22 @@
 ﻿from __future__ import annotations
 import asyncio
 import json
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, cast, Dict, Any, Tuple
 from openpyxl import load_workbook
 from openpyxl.utils import column_index_from_string
 from openpyxl.worksheet.worksheet import Worksheet
-from app.services.excel_password import (
+from app.oi_tools.services.excel_password import (
     load_workbook_maybe_encrypted,
     load_workbook_fast_for_scan,
     release_workbook_stream,
 )
 from time import perf_counter
 import re
-from app.services.excel_io import close_workbook_safe
-from app.services.progress_manager import progress_manager, SENTINEL
-from app.services.integrations.vima_to_lista import (
+from app.oi_tools.services.excel_io import close_workbook_safe
+from app.oi_tools.services.progress_manager import progress_manager, SENTINEL
+from app.oi_tools.services.integrations.vima_to_lista import (
     VimaToListaConfig,
     map_vima_to_lista,
     _last_oi_in_lista,
@@ -33,8 +33,9 @@ except Exception:  # ModuleNotFoundError u otros
     class _InvalidKeyError(Exception):
         """Dummy cuando msoffcrypto no está disponible."""
         pass
+from app.api.auth import get_current_user_session
 
-router = APIRouter(prefix="/integrations", tags=["integrations"])
+router = APIRouter(prefix="/integrations", tags=["integrations"], dependencies=[Depends(get_current_user_session)])
 
 @router.get("/vima-to-lista/progress/{operation_id}")
 async def vima_progress_stream(operation_id: str):

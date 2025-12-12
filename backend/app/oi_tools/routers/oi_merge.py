@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, File, UploadFile, Query
+from fastapi import APIRouter, File, UploadFile, Query, Depends
 
 # Reutilizamos la logica probada del mini-servicio oi_merge_b
-from app.modules.oi_merge_b import main as legacy_merge
+from app.api.auth import get_current_user_session
+from app.oi_tools.modules.oi_merge_b import main as legacy_merge
 
-router = APIRouter()
+router = APIRouter(prefix="/merge", tags=["merge"], dependencies=[Depends(get_current_user_session)])
 
 
 @router.get("/config/upload-limits")
@@ -19,7 +20,7 @@ async def get_upload_limits():
     return await legacy_merge.get_upload_limits()
 
 
-@router.post("/merge")
+@router.post("/")
 async def merge(
     master: UploadFile = File(...),
     technicians: List[UploadFile] = File(...),

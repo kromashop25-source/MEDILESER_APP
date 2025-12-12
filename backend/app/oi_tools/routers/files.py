@@ -1,16 +1,18 @@
 from __future__ import annotations
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Form, Depends
 from pathlib import Path
 from typing import Optional
 import uuid
 import shutil
 
-from app.utils.refs import sanitize_filename
+from app.api.auth import get_current_user_session
+from app.core.settings import get_settings
+from app.oi_tools.utils.refs import sanitize_filename
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_session)])
 
 ALLOWED_EXTS = {".xlsx", ".xlsm"}
-UPLOAD_DIR = Path("data")/"uploads"
+UPLOAD_DIR = get_settings().data_dir / "uploads"
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_file(file: UploadFile = File(...), suggested_name: Optional[str] = Form(None)):

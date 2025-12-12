@@ -1,13 +1,14 @@
 from __future__ import annotations
 from typing import List, Optional, Literal, Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field, SecretStr
 
-from app.services.excel_io import inspect_excel, update_excel, ExcelError
-from app.services import read_as_dataframe, validate_dataframe
-from app.utils.refs import is_valid_cell_ref
+from app.api.auth import get_current_user_session
+from app.oi_tools.services.excel_io import inspect_excel, update_excel, ExcelError
+from app.oi_tools.services import read_as_dataframe, validate_dataframe
+from app.oi_tools.utils.refs import is_valid_cell_ref
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_session)])
 
 class EditItem(BaseModel):
     sheet: str = Field(..., description="Nombre de la hoja de Excel")
