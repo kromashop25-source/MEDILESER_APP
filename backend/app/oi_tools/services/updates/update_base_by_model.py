@@ -855,11 +855,14 @@ def _coerce_int(value: Any) -> Optional[int]:
 
 # ================= Plantilla Excel (fuente única de estilos/CF) ==============
 
-# Ruta: app/data/BASE_TEMPLATE.xlsx
+# Ruta: app/data/templates/oi_tools/BASE_TEMPLATE.xlsx
 
 TEMPLATE_XLSX_NAME = "BASE_TEMPLATE.xlsx"
 
-TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "data" / TEMPLATE_XLSX_NAME
+# Este archivo vive en: app/oi_tools/services/updates/update_base_by_model.py
+# parents[3] apunta a .../backend/app
+APP_DIR = Path(__file__).resolve().parents[3]
+TEMPLATE_PATH = APP_DIR / "data" / "templates" / "oi_tools" / TEMPLATE_XLSX_NAME
 
 # Tipos admitidos por openpyxl.Rule (para apaciguar al type checker y validar entrada)
 
@@ -975,7 +978,7 @@ def _open_template_ws(target_sheet_name: Optional[str]) -> Optional[Worksheet]:
 
     """
 
-    Abre app/data/BASE_TEMPLATE.xlsx y devuelve la hoja a usar (o None si no existe).
+    Abre app/data/templates/oi_tools/BASE_TEMPLATE.xlsx y devuelve la hoja a usar (o None si no existe).
 
     """
 
@@ -1738,4 +1741,3 @@ def execute_update_base_from_ois(base_bytes: bytes,
     }
 
     return out_bytes, result
-
