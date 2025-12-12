@@ -6,6 +6,11 @@ import AdminatorLayout from "../layouts/AdminatorLayout";
 import OiListPage from "../features/oi/OiListPage";
 import UsersPage from "../features/users/UsersPage";
 import ChangePasswordPage from "../features/auth/ChangePasswordPage";
+import AdminPermisosPage from "../features/admin/AdminPermisosPage";
+import VimaToListaPage from "../features/oi_tools/VimaToListaPage";
+import ActualizacionBasePage from "../features/oi_tools/ActualizacionBasePage";
+import ConsolidacionOisPage from "../features/oi_tools/ConsolidacionOisPage";
+import ExcelToolsPage from "../features/oi_tools/ExcelToolsPage";
 
 export default function AppRouter() {
   return (
@@ -21,7 +26,14 @@ export default function AppRouter() {
             <Route path="/oi/list" element={<OiListPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/password" element={<ChangePasswordPage />} />
-          </Route>
+            <Route path="/admin/permisos" element={<AdminPermisosPage />} />
+
+            {/* OI Tools (Fase 2.2: páginas cascarón; menú se habilita luego) */}
+            <Route path="/oi/tools/vima-to-lista" element={<VimaToListaPage />} />
+            <Route path="/oi/tools/actualizacion-base" element={<ActualizacionBasePage />} />
+            <Route path="/oi/tools/consolidacion" element={<ConsolidacionOisPage />} />
+            <Route path="/oi/tools/excel" element={<ExcelToolsPage />} />
+           </Route>
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

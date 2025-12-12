@@ -70,6 +70,14 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
             </NavLink>
           </li>
         )}
+        {isAdmin && (
+          <li className="vi-sidebar-item">
+            <NavLink to="/admin/permisos" className={linkCls} title="Permisos" aria-label="Permisos">
+              <i className="ti ti-lock vi-sidebar-icon" />
+              <span className="vi-sidebar-text">Permisos</span>
+            </NavLink>
+          </li>
+        )}
       </ul>
     </aside>
   );
