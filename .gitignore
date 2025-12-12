@@ -1,0 +1,22 @@
+# Node
+node_modules/
+dist/
+build/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+backend/app/data/uploads/
+backend/app/oi_tools/data/uploads/
+backend/app/data/tmp/
+backend/data/*.db*
+Thumbs.db

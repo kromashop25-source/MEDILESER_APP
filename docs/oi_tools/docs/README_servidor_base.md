@@ -1,0 +1,1 @@
+Se creó scripts/run_server.py y se generó .exe con PyInstaller. Motivo: distribución simple para usuarios no técnicos

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guía de Estilos – FORMATO A y C</title>
+  <link rel="stylesheet" href="../app/static/css/tokens.css">
+  <link rel="stylesheet" href="../app/static/css/vima.css">
+  <style>
+    body { padding: 24px; }
+    h1, h2 { margin-top: 24px; }
+    .swatch { display:inline-block; width: 120px; height: 50px; border-radius: 10px; border:1px solid var(--border); margin: 6px; }
+    .swatch-label { font-size: 12px; color: var(--muted); text-align: center; }
+    code { background: var(--zebra); padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body class="container">
+  <h1>Guía de Estilos (UI)</h1>
+  <p>Tokens, componentes base y ejemplos de contraste. Está página es estática para revisión visual.</p>
+
+  <h2>Paleta</h2>
+  <div>
+    <div class="swatch" style="background: var(--bg)"></div><div class="swatch-label">--bg</div>
+    <div class="swatch" style="background: var(--surface)"></div><div class="swatch-label">--surface</div>
+    <div class="swatch" style="background: var(--primary)"></div><div class="swatch-label">--primary</div>
+    <div class="swatch" style="background: var(--success)"></div><div class="swatch-label">--success</div>
+    <div class="swatch" style="background: var(--warning)"></div><div class="swatch-label">--warning</div>
+    <div class="swatch" style="background: var(--danger)"></div><div class="swatch-label">--danger</div>
+    <div class="swatch" style="background: var(--info)"></div><div class="swatch-label">--info</div>
+  </div>
+
+  <h2>Botones</h2>
+  <div class="mt-2">
+    <button class="btn">Default</button>
+    <button class="btn btn-primary">Primario</button>
+    <button class="btn btn-success">Éxito</button>
+    <button class="btn btn-warning">Advertencia</button>
+    <button class="btn btn-danger">Peligro</button>
+    <button class="btn btn-info">Info</button>
+    <button class="btn btn-ghost">Ghost</button>
+  </div>
+
+  <h2>Badges (incluye NO CONFORME)</h2>
+  <div class="mt-2">
+    <span class="badge badge-success">CONFORME</span>
+    <span class="badge badge-warning">EN REVISIÓN</span>
+    <span class="badge badge-danger">NO CONFORME</span>
+    <span class="badge badge-info">INFO</span>
+    <span class="badge badge-muted">MUTED</span>
+  </div>
+
+  <h2>Tabla</h2>
+  <div class="card mt-2">
+    <table class="table">
+      <thead>
+        <tr><th>OI</th><th>Técnico</th><th>Estado</th><th>Observación</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>OI-1001</td><td>Juan</td><td><span class="badge badge-success">CONFORME</span></td><td>—</td></tr>
+        <tr class="row-danger"><td>OI-1002</td><td>María</td><td><span class="badge badge-danger">NO CONFORME</span></td><td>Fórmula inválida</td></tr>
+        <tr><td>OI-1003</td><td>Lisa</td><td><span class="badge badge-warning">EN REVISIÓN</span></td><td>Observación</td></tr>
+        <tr><td>OI-1004</td><td>Diego</td><td><span class="badge badge-info">INFO</span></td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Toasts</h2>
+  <div class="mt-2 grid-2">
+    <div class="toast toast-success">✔ Consolidado finalizado</div>
+    <div class="toast toast-warning">⚠ Archivos con celdas vacías</div>
+    <div class="toast toast-danger">⨯ Error en contraseña</div>
+    <div class="toast toast-info">ℹ Proceso en cola</div>
+  </div>
+
+  <h2>Estados de carga</h2>
+  <p class="loading-dots">Cargando</p>
+</body>
+</html>

@@ -1,0 +1,91 @@
+project_formato_web
+├── app
+│   ├── routers
+│   │   ├── excel.py
+│   │   ├── files.py
+│   │   ├── integrations.py
+│   │   └── ui.py
+│   ├── services
+│   │   ├── integrations
+│   │   │   └── vima_to_lista.py
+│   │   ├── __init__.py
+│   │   ├── excel_io.py
+│   │   ├── excel_password.py
+│   │   ├── excel_styles.py
+│   │   ├── progress_manager.py
+│   │   └── validate.py
+│   ├── static
+│   │   ├── css
+│   │   │   └── vima.css
+│   │   └── js
+│   │       └── vima.js
+│   ├── templates
+│   │   └── vima_form.html
+│   ├── utils
+│   │   ├── __init__.py
+│   │   └── refs.py
+│   ├── __init__.py
+│   ├── config.py
+│   └── main.py
+├── data
+│   ├── uploads
+│   │   ├── 12d6c66c__prueba.xlsx
+│   │   ├── 15dd15bc__prueba.xlsx
+│   │   ├── 1f2f044f__prueba.xlsx
+│   │   ├── 2a432fa5__prueba.xlsx
+│   │   ├── 33ba5dbf__prueba.xlsx
+│   │   ├── 3693f738__prueba.xlsx
+│   │   ├── 3b1b08e3__prueba.xlsx
+│   │   ├── 3f46cb43__prueba.xlsx
+│   │   ├── 3fbcfe2a__prueba.xlsx
+│   │   ├── 4fc2bd03__prueba.xlsx
+│   │   ├── 5e28ed59__prueba.xlsx
+│   │   ├── 6b4f71d4__prueba.xlsx
+│   │   ├── 7a533fdf__prueba.xlsx
+│   │   ├── 875528c6__prueba.xlsx
+│   │   ├── 883ede79__prueba.xlsx
+│   │   ├── 986cbe0d__prueba.xlsx
+│   │   ├── a8d7b0eb__prueba.xlsx
+│   │   ├── cefcb3f7__prueba.xlsx
+│   │   ├── cfdc21f1__prueba.xlsx
+│   │   ├── e0ccc89d__prueba.xlsx
+│   │   └── e5ee250f__prueba.xlsx
+│   ├── sample.xlsx
+│   └── sample_selfcheck.xlsx
+├── docs
+│   ├── INTEGRACION_VIMA_LISTA.md
+│   ├── README_servidor_base.md
+│   ├── repo_tree-20251015-092551.txt
+│   ├── repo_tree-20251017-081847.txt
+│   └── repo_tree-20251020-093709.txt
+├── scripts
+│   ├── __init__.py
+│   ├── demo_vima_to_lista.py
+│   ├── make_sample_excel.py
+│   ├── print_repo_tree.py
+│   ├── run_server.py
+│   └── self_check.py
+├── tests
+│   ├── tests
+│   ├── test_change_password.py
+│   ├── test_excel_inspect.py
+│   ├── test_server.py
+│   ├── test_update_validate_cell.py
+│   ├── test_upload.py
+│   ├── test_validate.py
+│   ├── test_version.py
+│   ├── test_vima_to_list.py
+│   ├── test_vima_to_lista_api.py
+│   └── test_vima_to_lista_incremental.py
+├── __tmp_test.py
+├── FormatoAC-Server.spec
+├── payload.json
+├── payload_incremental.json
+├── payload_incremental_fast.json
+├── pytest.ini
+├── README.md
+├── requirements.txt
+├── run_server.bat
+├── run_vima_to_lista_dry_run.bat
+├── run_vima_to_lista_full.bat
+└── run_vima_to_lista_incremental.bat

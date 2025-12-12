@@ -1,0 +1,43 @@
+{
+  "areas": [
+    { "key": "oi", "label": "Organismo de Inspección", "order": 10, "enabled": true },
+    { "key": "account", "label": "Cuenta", "order": 90, "enabled": true },
+    { "key": "admin", "label": "Administración", "order": 100, "enabled": true }
+  ],
+  "features": [
+    { "key": "oi.vi.formulario", "area_key": "oi", "label": "Formulario OI", "route": "/oi", "icon": "ti-layout-grid2", "order": 10, "enabled": true },
+    { "key": "oi.vi.listado", "area_key": "oi", "label": "Listado OI", "route": "/oi/list", "icon": "ti-view-list-alt", "order": 20, "enabled": true },
+
+    { "key": "oi.tools.vima_to_lista", "area_key": "oi", "label": "VIMA → LISTA", "route": "/oi/tools/vima-to-lista", "icon": "ti-exchange-vertical", "order": 50, "enabled": false },
+    { "key": "oi.tools.actualizacion_base", "area_key": "oi", "label": "Actualización Base", "route": "/oi/tools/actualizacion-base", "icon": "ti-reload", "order": 60, "enabled": false },
+    { "key": "oi.tools.consolidacion_ois", "area_key": "oi", "label": "Consolidación OIs", "route": "/oi/tools/consolidacion", "icon": "ti-layers", "order": 70, "enabled": false },
+    { "key": "oi.tools.excel_tools", "area_key": "oi", "label": "Herramientas Excel", "route": "/oi/tools/excel", "icon": "ti-file", "order": 80, "enabled": false },
+
+    { "key": "account.change_password", "area_key": "account", "label": "Cambiar contraseña", "route": "/password", "icon": "ti-key", "order": 10, "enabled": true },
+
+    { "key": "admin.users", "area_key": "admin", "label": "Usuarios", "route": "/users", "icon": "ti-user", "order": 10, "enabled": true },
+    { "key": "admin.permissions", "area_key": "admin", "label": "Permisos", "route": "/admin/permisos", "icon": "ti-lock", "order": 20, "enabled": true }
+  ],
+  "roles": [
+    { "key": "admin", "label": "Admin (superusuario)" },
+    { "key": "user", "label": "Usuario" }
+  ],
+  "role_features": {
+    "admin": [
+      "oi.vi.formulario",
+      "oi.vi.listado",
+      "oi.tools.vima_to_lista",
+      "oi.tools.actualizacion_base",
+      "oi.tools.consolidacion_ois",
+      "oi.tools.excel_tools",
+      "account.change_password",
+      "admin.users",
+      "admin.permissions"
+    ],
+    "user": [
+      "oi.vi.formulario",
+      "oi.vi.listado",
+      "account.change_password"
+    ]
+  }
+}

@@ -1,0 +1,147 @@
+OI_PROJECT
+├── .vscode
+│   ├── extensions.json
+│   ├── launch.json
+│   └── tasks.json
+├── app
+│   ├── data
+│   │   ├── BASE_TEMPLATE.xlsx
+│   │   └── FORMULAS_BASE.txt
+│   ├── modules
+│   │   └── oi_merge_b
+│   │       ├── routers
+│   │       │   └── __init__.py
+│   │       ├── services
+│   │       │   └── __init__.py
+│   │       ├── static
+│   │       │   ├── favicon.ico
+│   │       │   └── Thumbs.db
+│   │       ├── __init__.py
+│   │       ├── main.py
+│   │       ├── merge.py
+│   │       ├── merge_b.py
+│   │       └── templates_inline.py
+│   ├── routers
+│   │   ├── excel.py
+│   │   ├── files.py
+│   │   ├── integrations.py
+│   │   ├── ui.py
+│   │   └── updates.py
+│   ├── services
+│   │   ├── integrations
+│   │   │   └── vima_to_lista.py
+│   │   ├── updates
+│   │   │   ├── __init__.py
+│   │   │   ├── cf_dump.py
+│   │   │   ├── style_dump.py
+│   │   │   └── update_base_by_model.py
+│   │   ├── __init__.py
+│   │   ├── excel_io.py
+│   │   ├── excel_password.py
+│   │   ├── excel_styles.py
+│   │   ├── progress_manager.py
+│   │   └── validate.py
+│   ├── static
+│   │   ├── css
+│   │   │   ├── tokens.css
+│   │   │   └── vima.css
+│   │   ├── js
+│   │   │   ├── actualiza_base.js
+│   │   │   ├── multi_ois.js
+│   │   │   └── vima.js
+│   │   ├── vendor
+│   │   │   └── adminator
+│   │   └── favicon.ico
+│   ├── templates
+│   │   ├── _base_admin.html
+│   │   ├── actualizacion_base_form.html
+│   │   ├── base.html
+│   │   ├── dashboard.html
+│   │   ├── index_correlativo.html
+│   │   ├── index_no_correlativo.html
+│   │   ├── vima.css
+│   │   └── vima_form.html
+│   ├── utils
+│   │   ├── __init__.py
+│   │   └── refs.py
+│   ├── __init__.py
+│   ├── config.py
+│   └── main.py
+├── data
+│   ├── uploads
+│   │   ├── 12d6c66c__prueba.xlsx
+│   │   ├── 15dd15bc__prueba.xlsx
+│   │   ├── 1f2f044f__prueba.xlsx
+│   │   ├── 2a432fa5__prueba.xlsx
+│   │   ├── 33ba5dbf__prueba.xlsx
+│   │   ├── 3693f738__prueba.xlsx
+│   │   ├── 3b1b08e3__prueba.xlsx
+│   │   ├── 3f46cb43__prueba.xlsx
+│   │   ├── 3fbcfe2a__prueba.xlsx
+│   │   ├── 4fc2bd03__prueba.xlsx
+│   │   ├── 5e28ed59__prueba.xlsx
+│   │   ├── 6b4f71d4__prueba.xlsx
+│   │   ├── 7a533fdf__prueba.xlsx
+│   │   ├── 875528c6__prueba.xlsx
+│   │   ├── 883ede79__prueba.xlsx
+│   │   ├── 986cbe0d__prueba.xlsx
+│   │   ├── a8d7b0eb__prueba.xlsx
+│   │   ├── cefcb3f7__prueba.xlsx
+│   │   ├── cfdc21f1__prueba.xlsx
+│   │   ├── e0ccc89d__prueba.xlsx
+│   │   └── e5ee250f__prueba.xlsx
+│   ├── sample.xlsx
+│   └── sample_selfcheck.xlsx
+├── docs
+│   ├── INTEGRACION_VIMA_LISTA.md
+│   ├── README_servidor_base.md
+│   ├── README_UI.md
+│   ├── repo_tree-20251015-092551.txt
+│   ├── repo_tree-20251017-081847.txt
+│   ├── repo_tree-20251020-093709.txt
+│   ├── repo_tree-20251020-145340.txt
+│   ├── repo_tree-20251027-114847.txt
+│   ├── repo_tree-20251028-071413.txt
+│   ├── repo_tree-20251030-142159.txt
+│   └── styleguide.html
+├── logs
+│   └── server.log
+├── scripts
+│   ├── __init__.py
+│   ├── build_exe.bat
+│   ├── contrast_check.py
+│   ├── demo_vima_to_lista.py
+│   ├── launcher.py
+│   ├── make_sample_excel.py
+│   ├── print_repo_tree.py
+│   └── self_check.py
+├── tests
+│   ├── tests
+│   │   └── test_cf_apply.py
+│   ├── test_change_password.py
+│   ├── test_excel_inspect.py
+│   ├── test_server.py
+│   ├── test_update_validate_cell.py
+│   ├── test_upload.py
+│   ├── test_validate.py
+│   ├── test_version.py
+│   ├── test_vima_to_list.py
+│   ├── test_vima_to_lista_api.py
+│   └── test_vima_to_lista_incremental.py
+├── __tmp_test.py
+├── app.zip
+├── FormatoAC-Server.spec
+├── FormatoAC.spec
+├── payload.json
+├── payload_incremental.json
+├── payload_incremental_fast.json
+├── pytest.ini
+├── README.md
+├── requirements.txt
+├── run_server.bat
+├── run_server.py
+├── run_vima_to_lista_dry_run.bat
+├── run_vima_to_lista_full.bat
+├── run_vima_to_lista_incremental.bat
+├── temp_update_cf.py
+└── tmp_test.py

@@ -1,0 +1,301 @@
+:root {
+  --vi-sidebar-width: 240px;
+  --vi-sidebar-width-collapsed: 64px;
+  --vi-topbar-height: 56px;
+  --vi-content-max: 1440px; /* pensado para laptop 16" */
+  --vi-shell-bg: #f4f6f9;
+}
+
+/* Layout general tipo ChatGPT/Gemini */
+.vi-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--vi-shell-bg);
+}
+.vi-layout--collapsed .vi-sidebar {
+  width: var(--vi-sidebar-width-collapsed);
+}
+.vi-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 100vh;
+  background: var(--vi-shell-bg);
+}
+.vi-content {
+  flex: 1 1 auto;
+  overflow: auto;
+  width: 100%;
+  max-width: var(--vi-content-max);
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 2.5rem;
+}
+
+/* Sidebar fijo a la izquierda, colapsable */
+.vi-sidebar {
+  flex-shrink: 0;
+  width: var(--vi-sidebar-width);
+  transition: width 200ms ease;
+  border-right: 1px solid #e5e7eb;
+  background: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.vi-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+}
+.vi-sidebar__brand {
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.03em;
+}
+.vi-sidebar-toggle {
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: #6c757d;
+  line-height: 1;
+}
+.vi-sidebar-toggle:focus { outline: none; }
+.vi-sidebar-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem 0.5rem 1rem;
+}
+.vi-sidebar-item + .vi-sidebar-item {
+  margin-top: 2px;
+}
+.vi-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  color: #334155;
+  text-decoration: none;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.vi-sidebar-link:hover {
+  background-color: #f1f5f9;
+  color: #0d6efd;
+}
+.vi-sidebar-link.active {
+  background-color: #e7f1ff;
+  color: #0d6efd;
+  font-weight: 600;
+}
+.vi-sidebar-icon {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+}
+.vi-sidebar-text {
+  white-space: nowrap;
+}
+.vi-sidebar--collapsed .vi-sidebar-text {
+  display: none;
+}
+.vi-sidebar--collapsed .vi-sidebar-link {
+  justify-content: center;
+  gap: 0;
+}
+.vi-sidebar--collapsed .vi-sidebar__header {
+  justify-content: center;
+}
+.vi-sidebar--collapsed .vi-sidebar__brand {
+  display: none;
+}
+.vi-sidebar--collapsed .vi-sidebar-toggle {
+  padding-inline: 6px;
+}
+
+/* Responsive paddings */
+@media (max-width: 1200px) {
+  .vi-content {
+    padding: 1rem 1.25rem 2rem;
+  }
+}
+@media (max-width: 991.98px) {
+  .vi-content {
+    padding: 1rem;
+  }
+}
+
+.vi-topbar {
+  z-index: 1030; /* sobre el sidebar/borders */
+  box-shadow: 0 1px 0 rgba(0,0,0,.06);
+}
+.vi-sidebar-toggle {
+  line-height: 1;
+}
+
+.vi-oi-light {
+  background-color: #f8f9fa;
+  color: #212529;
+}
+.vi-oi-light .card,
+.vi-oi-light .modal-content,
+.vi-oi-light form {
+  background-color: #ffffff;
+  color: #212529;
+  border-color: #e5e7eb;
+}
+.vi-oi-light .form-control,
+.vi-oi-light .form-select {
+  background-color: #ffffff;
+  color: #212529;
+  border-color: #ced4da;
+}
+.vi-oi-light hr {
+  border-color: #dee2e6;
+}
+
+.vi-form-readonly .form-control:disabled,
+.vi-form-readonly .form-select:disabled {
+  background-color: #f1f3f5;
+  border-color: #d0d5dd;
+  color: #6c757d;
+  box-shadow: inset 0 0 0 1px #e2e6ea;
+  cursor: not-allowed;
+}
+
+.vi-form-editing .form-control:not(:disabled),
+.vi-form-editing .form-select:not(:disabled) {
+  border-color: #4dabf7;
+  box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.08);
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.vi-locked,
+.vi-locked:disabled {
+  background-color: #f1f3f5 !important;
+  border-color: #d0d5dd !important;
+  color: #6c757d !important;
+  cursor: not-allowed;
+  box-shadow: inset 0 0 0 1px #e2e6ea;
+}
+
+/* ---- Bancadas / Adminator table vibes ---- */
+.vi-card-table .table {
+  margin-bottom: 0; /* el body del card ya tiene padding */
+}
+.vi-card-table thead th {
+  text-transform: uppercase;
+  font-size: .75rem;
+  letter-spacing: .02em;
+  color: #6c757d;
+  background: #f8f9fa;
+  border-bottom-color: #e9ecef;
+}
+.vi-badge-estado {
+  font-weight: 600;
+  min-width: 2rem;
+  display: inline-block;
+  text-align: center;
+}
+
+/* Anchuras de columnas para la tabla de Bancadas (sin inline styles) */
+.table .vi-col-60  th,
+.table .vi-col-60  td { width: 60px; }
+.table .vi-col-140 th,
+.table .vi-col-140 td { width: 140px; }
+.table .vi-col-160 th,
+.table .vi-col-160 td { width: 160px; }
+
+/* ---- UI helpers: Toast + Spinner overlay ---- */
+.vi-toast-container{ z-index:1080; } /* por encima de modales */
+.vi-spinner-overlay{
+  position:fixed;
+  inset:0;
+  display:grid;
+  place-items:center;
+  background:rgba(255,255,255,.6);
+  z-index:1075;
+}
+
+/* === Login split layout (sin estilos inline) ========================= */
+.vi-login {
+  min-height: 100vh;
+}
+.vi-login__split {
+  display: flex;
+  min-height: inherit;
+}
+.vi-login__left {
+  flex: 1 1 45%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #fff;
+  background: linear-gradient(135deg, #2e7dff 0%, #00c2ff 100%);
+}
+.vi-login__left .vi-badge {
+  font-size: .875rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .85;
+}
+.vi-login__left .vi-title {
+  font-weight: 700;
+  line-height: 1.15;
+}
+.vi-login__right {
+  flex: 1 1 55%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+.vi-login__card {
+  width: 100%;
+  max-width: 520px;
+}
+
+/* ====== VI Login (layout dividido) ====== */
+.vi-login { padding: 0; }
+.vi-login__split {
+  display: flex;
+  min-height: calc(100vh - 56px); /* altura aproximada del topbar */
+}
+.vi-login__left {
+  flex: 1;
+  background: linear-gradient(135deg, #0d6efd 0%, #0bb7f4 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+}
+.vi-badge {
+  width: 56px; height: 56px; border-radius: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.35);
+  font-weight: 700; letter-spacing: .5px;
+}
+.vi-title { color: #fff; }
+.vi-login__right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+.vi-login__card {
+  width: 100%;
+  max-width: 560px;
+  border-radius: 1rem;
+}
+@media (max-width: 992px) {
+  .vi-login__split { flex-direction: column; min-height: 100vh; }
+  .vi-login__left { min-height: 220px; }
+}
+

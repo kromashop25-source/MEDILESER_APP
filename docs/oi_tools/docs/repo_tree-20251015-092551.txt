@@ -1,0 +1,48 @@
+project_formato_web
+├── app
+│   ├── routers
+│   │   ├── excel.py
+│   │   └── files.py
+│   ├── services
+│   │   ├── __init__.py
+│   │   ├── excel_io.py
+│   │   └── validate.py
+│   ├── utils
+│   │   ├── __init__.py
+│   │   └── refs.py
+│   ├── __init__.py
+│   ├── config.py
+│   └── main.py
+├── data
+│   ├── uploads
+│   │   ├── 1f2f044f__prueba.xlsx
+│   │   ├── 3693f738__prueba.xlsx
+│   │   ├── 3f46cb43__prueba.xlsx
+│   │   ├── 5e28ed59__prueba.xlsx
+│   │   ├── 7a533fdf__prueba.xlsx
+│   │   ├── 883ede79__prueba.xlsx
+│   │   ├── a8d7b0eb__prueba.xlsx
+│   │   └── e0ccc89d__prueba.xlsx
+│   ├── sample.xlsx
+│   └── sample_selfcheck.xlsx
+├── docs
+│   └── README_servidor_base.md
+├── scripts
+│   ├── __init__.py
+│   ├── make_sample_excel.py
+│   ├── print_repo_tree.py
+│   ├── run_server.py
+│   └── self_check.py
+├── tests
+│   ├── test_change_password.py
+│   ├── test_excel_inspect.py
+│   ├── test_server.py
+│   ├── test_update_validate_cell.py
+│   ├── test_upload.py
+│   ├── test_validate.py
+│   └── test_version.py
+├── FormatoAC-Server.spec
+├── pytest.ini
+├── README.md
+├── requirements.txt
+└── run_server.bat
