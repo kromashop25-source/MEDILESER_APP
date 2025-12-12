@@ -37,6 +37,19 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
             </NavLink>
           </li>
         )}
+        {isAuth && (
+          <li className="vi-sidebar-item">
+            <NavLink
+              to="/oi/tools/vima-to-lista"
+              className={linkCls}
+              title="VIMA → LISTA"
+              aria-label="VIMA → LISTA"
+            >
+              <i className="ti ti-exchange-vertical vi-sidebar-icon" />
+              <span className="vi-sidebar-text">VIMA → LISTA</span>
+            </NavLink>
+          </li>
+        )}
         <li className="vi-sidebar-item">
           <NavLink to="/oi" className={linkCls} title="Formulario OI" aria-label="Formulario OI">
             <i className="ti ti-layout-grid2 vi-sidebar-icon" />
