@@ -6,6 +6,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 from xml.etree import ElementTree as ET
 
 from openpyxl import load_workbook, Workbook
+from openpyxl.formula.translate import Translator
 from openpyxl.utils.cell import column_index_from_string
 from openpyxl.utils.cell import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -186,7 +187,7 @@ def _copy_formulas(ws: Worksheet, src_row: int, dst_row: int, start_col_letter: 
             continue
         if src_cell.data_type == "f" or (isinstance(src_cell.value, str) and str(src_cell.value).startswith("=")):
             formula = str(src_cell.value)
-            dst_cell.value = formula.replace(str(src_row), str(dst_row))
+            dst_cell.value = Translator(formula, origin=src_cell.coordinate).translate_formula(dst_cell.coordinate)
         else:
             try:
                 dst_cell.value = src_cell.value
