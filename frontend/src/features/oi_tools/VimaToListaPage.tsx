@@ -9,6 +9,11 @@ import {
 } from "../../api/integrations";
 import SingleFilePicker from "./components/SingleFilePicker";
 import PasswordModal from "../oi/PasswordModal";
+import {
+  translateProgressMessage,
+  translateProgressStage,
+  translateProgressType,
+} from "./progressTranslations";
 
 
 function parseFilename(contentDisposition?: string) {
@@ -416,11 +421,15 @@ export default function VimaToListaPage() {
                   {events.map((ev, i) => (
                     <li key={i} className="mB-10">
                       <div>
-                        <b>{ev.type}</b>{" "}
-                        {ev.stage ? <span className="text-muted">[{ev.stage}]</span> : null}
+                        <b>{translateProgressType(ev.type)}</b>{" "}
+                        {ev.stage ? (
+                          <span className="text-muted">[{translateProgressStage(ev.stage)}]</span>
+                        ) : null}
                         {typeof ev.percent === "number" ? <span className="text-muted"> — {ev.percent.toFixed(1)}%</span> : null}
                       </div>
-                      <div className="text-muted">{ev.message ?? ev.detail ?? ""}</div>
+                      <div className="text-muted">
+                        {translateProgressMessage(ev.message ?? ev.detail ?? "")}
+                      </div>
                       {ev.code ? <div className="text-muted">Código: {ev.code}</div> : null}
                     </li>
                   ))}

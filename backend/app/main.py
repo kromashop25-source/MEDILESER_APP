@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.core.settings import get_settings
-from app.api import catalogs, auth, oi
+from app.api import admin, catalogs, auth, oi
 from app.core.db import init_db
 from app.core.logging_config import configure_logging
 from app.oi_tools.routers import integrations as oi_integrations
@@ -49,6 +49,7 @@ def health():
 app.include_router(catalogs.router, prefix="/catalogs", tags=["catalogs"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(oi.router, prefix="/oi", tags=["oi"])
+app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
 # --- OI TOOLS (integración OI_PROJECT) ---
 # Nota: algunos routers ya traen prefix interno (integrations, bases/actualizar, merge).
@@ -171,7 +172,7 @@ async def spa_for_react_routes(request: Request, call_next):
     path = request.url.path.rstrip("/")
     
     # Agregué "/login" y "/" por seguridad para la navegación directa
-    spa_paths = {"/oi", "/oi/list", "/login", "/password", "/users", "/admin/permisos"}
+    spa_paths = {"/home", "/oi", "/oi/list", "/login", "/password", "/users", "/admin/permisos"}
 
     if (
         request.method == "GET"

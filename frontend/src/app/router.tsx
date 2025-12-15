@@ -26,13 +26,14 @@ export default function AppRouter() {
       <Routes>
         <Route
           path="/login"
-          element={auth?.token ? <Navigate to="/" replace /> : <LoginPage />}
+          element={auth?.token ? <Navigate to="/home" replace /> : <LoginPage />}
         />
 
         {/* Rutas protegidas: el Topbar y el Sidebar están dentro de AdminatorLayout */}
         <Route element={<RequireAuth />}>
           <Route element={<AdminatorLayout />}>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="/home" element={<HomePage />} />
             <Route path="/oi" element={<OiPage />} />
             <Route path="/oi/list" element={<OiListPage />} />
             <Route path="/users" element={<UsersPage />} />
@@ -49,7 +50,7 @@ export default function AppRouter() {
            </Route>
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to={auth?.token ? "/home" : "/login"} replace />} />
       </Routes>
     </>
   );

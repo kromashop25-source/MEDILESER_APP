@@ -58,7 +58,7 @@ def parse_overrides(raw: Optional[str]) -> Dict[str, str]:
     return out
 
 @router.post("/dry-run-upload")
-async def dry_run_upload(
+def dry_run_upload(
     base_file: UploadFile = File(...),
     oi_files: List[UploadFile] = File(...),
     default_password: Optional[str] = Form(None),
@@ -68,14 +68,16 @@ async def dry_run_upload(
     base_sheet: Optional[str] = Form(None),
 ):
     # Leer binarios
-    base_bytes = await base_file.read()
+    base_file.file.seek(0)
+    base_bytes = base_file.file.read()
     oi_payload: List[OIFile] = []
     for f in oi_files:
         # filename puede ser Optional[str]; validamos y normalizamos
         if not f.filename:
             raise HTTPException(status_code=400, detail="Cada OI debe tener nombre de archivo.")
         safe_name = os.path.basename(f.filename)
-        oi_payload.append({"name": safe_name, "bytes": await f.read()})
+        f.file.seek(0)
+        oi_payload.append({"name": safe_name, "bytes": f.file.read()})
 
     # Overrides (JSON o líneas "Nombre.xlsx: clave")
     overrides: Dict[str, str] = parse_overrides(per_file_passwords_json)
@@ -105,7 +107,7 @@ async def dry_run_upload(
     return ndjson_stream(events)
 
 @router.post("/upload")
-async def run_upload(
+def run_upload(
     base_file: UploadFile = File(...),
     oi_files: List[UploadFile] = File(...),
     default_password: Optional[str] = Form(None),
@@ -121,13 +123,15 @@ async def run_upload(
     # Helpers: usamos el to_bool definido a nivel de módulo
     
     # Leer binarios
-    base_bytes = await base_file.read()
+    base_file.file.seek(0)
+    base_bytes = base_file.file.read()
     oi_payload: List[OIFile] = []
     for f in oi_files:
         if not f.filename:
             raise HTTPException(status_code=400, detail="Cada OI debe tener nombre de archivo.")
         safe_name = os.path.basename(f.filename)
-        oi_payload.append({"name": safe_name, "bytes": await f.read()})
+        f.file.seek(0)
+        oi_payload.append({"name": safe_name, "bytes": f.file.read()})
     
     # Overrides (JSON o líneas "Nombre.xlsx: clave")
     overrides: Dict[str, str] = parse_overrides(per_file_passwords_json)

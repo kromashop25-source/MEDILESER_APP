@@ -120,7 +120,7 @@ export default function UsersPage() {
                   <td>{u.tech_number}</td>
                   <td className="text-end">
                     <button
-                      className="btn btn-sm btn-outline-secondary me-2"
+                      className="btn btn-sm btn-outline-primary me-2"
                       title="Cambiar contraseña"
                       aria-label={`Cambiar contraseña de ${u.username}`}
                       onClick={() => setPwdUser(u)}

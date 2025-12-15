@@ -227,12 +227,14 @@ export default function OiPage() {
       setBusy(true);
       const auth = getAuth();
       if (!auth) throw new Error("Sesión no válida");
+      const bancoId = auth.bancoId;
+      if (bancoId == null) throw new Error("Debe seleccionar un banco para crear una OI.");
       const payload = {
         code: v.oi,
         q3: Number(v.q3),
         alcance: Number(v.alcance),
         pma: Number(v.pma),
-        banco_id: auth.bancoId,
+        banco_id: bancoId,
         tech_number: auth.techNumber,
         numeration_type: v.numeration_type ?? "correlativo",
       };
@@ -615,7 +617,7 @@ export default function OiPage() {
 
         <div className="col-12 d-flex align-items-center gap-2">
           <button
-            className="btn btn-success"
+            className="btn btn-primary"
             disabled={busy || (!!oiId && (!isEditingOI || readOnly))}
           >
             {!oiId
@@ -628,7 +630,7 @@ export default function OiPage() {
           {oiId && !isEditingOI && (
             <button
               type="button"
-              className="btn btn-outline-primary"
+              className="btn btn-outline-warning"
               onClick={handleStartEditOI}
               disabled={busy || readOnly}
             >
@@ -636,12 +638,12 @@ export default function OiPage() {
             </button>
           )}
           {oiId && isEditingOI && (
-            <button type="button" className="btn btn-outline-secondary" onClick={handleCancelEditOI} disabled={busy}>
+            <button type="button" className="btn btn-outline-warning" onClick={handleCancelEditOI} disabled={busy}>
               Cancelar edicion
             </button>
           )}
 
-          <button type="button" className="btn btn-outline-secondary" onClick={handleExcelClick} disabled={!oiId || busy || isEditingOI}>
+          <button type="button" className="btn btn-outline-success" onClick={handleExcelClick} disabled={!oiId || busy || isEditingOI}>
             Generar Excel
           </button>
           <button type="button" className="btn btn-outline-danger" onClick={handleCloseOI} disabled={!oiId || isEditingOI || busy}>
@@ -745,7 +747,5 @@ export default function OiPage() {
     </div>
   );
 }
-
-
 
 

@@ -171,6 +171,19 @@ def _ensure_user_is_active_column() -> None:
             conn.exec_driver_sql("UPDATE [user] SET is_active = 1 WHERE is_active IS NULL")
 
 
+def _ensure_user_allowed_modules_column() -> None:
+    """
+    Agrega la columna allowed_modules a la tabla user si falta.
+    Se almacena como JSON en SQLite (TEXT subyacente).
+    """
+    with engine.begin() as conn:
+        cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info([user])").all()}
+        if not cols:
+            return
+        if "allowed_modules" not in cols:
+            conn.exec_driver_sql("ALTER TABLE [user] ADD COLUMN allowed_modules TEXT")
+
+
 DEFAULT_USERS = [
     # id, username, first_name, last_name, password_hash, tech_number, role, is_active
     (1, "admin", "Admin", "Sistema", "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", 101, "admin", 1),
@@ -232,4 +245,5 @@ def init_db() -> None:
     _ensure_oi_constraints()
     _ensure_user_role_column()
     _ensure_user_is_active_column()
+    _ensure_user_allowed_modules_column()
     _seed_default_users()

@@ -281,7 +281,7 @@ def vima_to_lista_dry_run(payload: VimaToListaPayload):
 
 
 @router.post("/vima-to-lista/dry-run-upload")
-async def vima_to_lista_dry_run_upload(
+def vima_to_lista_dry_run_upload(
     vima_file: UploadFile = File(...),
     lista_file: UploadFile = File(...),
     vima_password: Optional[str] = Form(None),
@@ -329,8 +329,10 @@ async def vima_to_lista_dry_run_upload(
         if vima_name.endswith(".xls") or lista_name.endswith(".xls"):
             raise HTTPException(status_code=400, detail="Formato .xls no soportado. Convierte a .xlsx/.xlsm.")
 
-        vima_bytes = await vima_file.read()
-        lista_bytes = await lista_file.read()
+        vima_file.file.seek(0)
+        lista_file.file.seek(0)
+        vima_bytes = vima_file.file.read()
+        lista_bytes = lista_file.file.read()
 
         vfd, vima_tmp = tempfile.mkstemp(suffix=os.path.splitext(vima_name)[1] or ".xlsm")
         os.close(vfd)
@@ -558,7 +560,7 @@ async def vima_to_lista_dry_run_upload(
 
 
 @router.post("/vima-to-lista/upload")
-async def vima_to_lista_upload(
+def vima_to_lista_upload(
     vima_file: UploadFile = File(...),
     lista_file: UploadFile = File(...),
     vima_password: Optional[str] = Form(None),
@@ -607,8 +609,10 @@ async def vima_to_lista_upload(
         if vima_name.endswith(".xls") or lista_name.endswith(".xls"):
             raise HTTPException(status_code=400, detail="Formato .xls no soportado. Convierte a .xlsx/.xlsm.")
 
-        vima_bytes = await vima_file.read()
-        lista_bytes = await lista_file.read()
+        vima_file.file.seek(0)
+        lista_file.file.seek(0)
+        vima_bytes = vima_file.file.read()
+        lista_bytes = lista_file.file.read()
 
         vfd, vima_tmp = tempfile.mkstemp(suffix=os.path.splitext(vima_name)[1] or ".xlsm")
         os.close(vfd)
@@ -794,4 +798,3 @@ async def vima_to_lista_upload(
 
         if operation_id:
             progress_manager.finish(operation_id)
-

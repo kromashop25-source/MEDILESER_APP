@@ -55,6 +55,22 @@
   font-weight: 700;
   font-size: 1rem;
   letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.vi-brand-logo {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+.vi-brand-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .vi-sidebar-toggle {
   padding: 4px 8px;

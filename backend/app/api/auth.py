@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Body
 from sqlmodel import Session, select
 
 from ..core.db import engine
+from ..core.permissions import get_effective_allowed_modules
 from ..core.security import get_password_hash, verify_password
 from ..models import User, OI
 from ..schemas import UserRead, UserCreate, UserUpdatePassword
@@ -28,7 +29,7 @@ def get_full_name_by_tech_number(tech_number: int) -> Optional[str]:
 class LoginRequest(BaseModel):
     username: str
     password: str
-    bancoId: int
+    bancoId: Optional[int] = None
 
 class LoginOut(BaseModel):
     user: str
@@ -37,10 +38,15 @@ class LoginOut(BaseModel):
     firstName: str
     lastName: str
     fullName: str
-    bancoId: int
+    bancoId: Optional[int] = None
     techNumber: int
     role: str
     token: str
+    allowedModules: List[str] = []
+
+
+class SetBancoRequest(BaseModel):
+    bancoId: int
 
 def get_session():
     with Session(engine) as session:
@@ -102,16 +108,24 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
     
     full_name = f"{user.first_name} {user.last_name}".strip()
     
+    banco_id: Optional[int] = payload.bancoId if payload.bancoId and payload.bancoId > 0 else None
+    if (user.role or "").lower() == "admin":
+        # Para admins el banco no es obligatorio; mantenemos 0 por compatibilidad.
+        banco_id = banco_id or 0
+
+    allowed_modules = get_effective_allowed_modules(user.role, getattr(user, "allowed_modules", None))
+
     sess_data = {
         "userId": user.id,
         "username": user.username,
         "firstName": user.first_name,
         "lastName": user.last_name,
         "fullName": full_name,
-        "bancoId": payload.bancoId,
+        "bancoId": banco_id,
         "techNumber": user.tech_number,
         "role": user.role,
         "token": token,
+        "allowedModules": allowed_modules,
         "createdAt": now,
         "expiresAt": expires_at,
         "user": user.username # compatibilidad
@@ -131,6 +145,22 @@ def logout(authorization: str | None = Header(default=None)):
         token = authorization.split(" ", 1)[1]
         _SESSIONS.pop(token, None)
     return {"ok": True}
+
+
+@router.put("/banco", response_model=LoginOut)
+def set_banco(
+    payload: SetBancoRequest,
+    sess: dict = Depends(get_current_user_session),
+):
+    """
+    Permite seleccionar/actualizar el banco de trabajo luego del login.
+    Se guarda en la sesiÇün (in-memory) y aplica a filtros/ownership en /oi.
+    """
+    if payload.bancoId <= 0:
+        raise HTTPException(status_code=422, detail="Banco invÇ­lido")
+
+    sess["bancoId"] = int(payload.bancoId)
+    return sess
 
 
 # --- GESTIÓN DE USUARIOS (CRUD) ---

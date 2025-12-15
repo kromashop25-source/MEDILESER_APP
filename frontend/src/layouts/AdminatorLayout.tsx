@@ -5,11 +5,14 @@ import Topbar from "../components/Topbar";
 
 export default function AdminatorLayout() {
   const location = useLocation();
-  const isHome = location.pathname === "/";
+  const isHome = location.pathname === "/home";
 
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
-      return localStorage.getItem("vi.sidebar.collapsed") === "true";
+      const raw =
+        localStorage.getItem("medileser.sidebar.collapsed") ??
+        localStorage.getItem("vi.sidebar.collapsed");
+      return raw === "true";
     } catch {
       return false;
     }
@@ -18,7 +21,7 @@ export default function AdminatorLayout() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("vi.sidebar.collapsed", String(collapsed));
+      localStorage.setItem("medileser.sidebar.collapsed", String(collapsed));
     } catch {
       // ignore
     }

@@ -1,5 +1,11 @@
-import { NavLink, Link } from "react-router-dom";
-import { getAuth, logout } from "../api/auth";
+import { useEffect, useState } from "react";
+import {
+  getAuth,
+  getSelectedBank,
+  isTechnicianRole,
+  logout,
+  subscribeSelectedBank,
+} from "../api/auth";
 
 type Props = {
   sidebarCollapsed?: boolean;
@@ -8,12 +14,17 @@ type Props = {
 
 export default function Topbar({ sidebarCollapsed, onToggleSidebar }: Props) {
   const auth = getAuth();
-  const displayUser = (auth as any)?.user ?? (auth as any)?.username ?? "";
+  const username = auth?.username ?? auth?.user ?? "";
+  const isTech = auth ? isTechnicianRole(auth.role) : false;
+
+  const [selectedBank, setSelectedBank] = useState<number | null>(() => getSelectedBank());
+  useEffect(() => subscribeSelectedBank(() => setSelectedBank(getSelectedBank())), []);
+
+  const bankLabel = selectedBank && selectedBank > 0 ? `Banco ${selectedBank}` : "Banco sin seleccionar";
 
   const handleLogout = () => {
     logout();
-    // Recarga total para limpiar estado (auth, react-query, banner)
-    location.assign("/");
+    location.assign("/login");
   };
 
   return (
@@ -29,27 +40,29 @@ export default function Topbar({ sidebarCollapsed, onToggleSidebar }: Props) {
         </button>
       )}
 
-      <Link to={auth ? "/oi" : "/"} className="navbar-brand fw-semibold">VI</Link>
-
-      <ul className="navbar-nav me-auto">
-        {!auth && (
-          <li className="nav-item">
-            <NavLink className="nav-link" to="/">Login</NavLink>
-          </li>
-        )}
-        <li className="nav-item"><NavLink className="nav-link" to="/oi">Formulario OI</NavLink></li>
-        <li className="nav-item"><NavLink className="nav-link" to="/oi/list">Listado OI</NavLink></li>
-      </ul>
+      <div className="me-auto" />
 
       <div className="d-flex align-items-center gap-3">
         {auth && (
           <span className="text-muted small text-truncate" style={{ maxWidth: "360px" }}>
-            Usuario: <strong>{displayUser || "?"}</strong> · Banco {auth.bancoId} · Técnico {auth.techNumber}
+            Usuario: <strong>{username || "?"}</strong>
+            {isTech && (
+              <>
+                {" · "}
+                {bankLabel}
+                {auth.techNumber ? (
+                  <>
+                    {" · "}Técnico {auth.techNumber}
+                  </>
+                ) : null}
+              </>
+            )}
           </span>
         )}
+
         {auth && (
           <button className="btn btn-sm btn-outline-secondary" onClick={handleLogout}>
-            CERRAR SESIÓN
+            Cerrar sesión
           </button>
         )}
       </div>

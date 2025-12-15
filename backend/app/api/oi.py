@@ -48,6 +48,19 @@ def _get_session_from_header(authorization: str | None) -> dict:
     if "user" not in sess and "username" in sess:
         sess["user"] = sess["username"]
 
+    # Para usuarios no-admin, exigimos banco seleccionado para evitar operar sin contexto.
+    role = (sess.get("role") or "").lower()
+    username = (sess.get("username") or sess.get("user") or "").lower()
+    is_admin = role == "admin" or username == "admin"
+    if not is_admin:
+        banco_id = sess.get("bancoId")
+        try:
+            banco_id_int = int(banco_id) if banco_id is not None else None
+        except Exception:
+            banco_id_int = None
+        if banco_id_int is None or banco_id_int <= 0:
+            raise HTTPException(status_code=403, detail="Debe seleccionar un banco para continuar")
+
     return sess
 
 OI_CODE_RE = re.compile(r"^OI-\d{4}-\d{4}$")

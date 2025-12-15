@@ -309,7 +309,7 @@ export default function OiListPage() {
                         Abrir
                       </button>
                       <button
-                        className="btn btn-sm btn-outline-secondary"
+                        className="btn btn-sm btn-outline-success"
                         onClick={() => handleExcelClick(r.id)}
                         disabled={busy}
                         title="Descargar Excel"

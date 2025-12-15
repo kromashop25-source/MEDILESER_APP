@@ -144,6 +144,22 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const auth = getAuth();
   const isAuth = !!auth;
   const isAdmin = auth?.role === "admin";
+  const allowedModules = auth?.allowedModules;
+
+  const isAllowed = (moduleId: string) =>
+    isAdmin || !Array.isArray(allowedModules) || allowedModules.includes(moduleId);
+
+  const canVimaToLista = isAuth && isAllowed("tools_vima_lista");
+  const canActualizacionBases = isAuth && isAllowed("tools_actualizacion_bases");
+  const canConsolCorrelativo = isAuth && isAllowed("tools_consol_correlativo");
+  const canConsolNoCorrelativo = isAuth && isAllowed("tools_consol_no_correlativo");
+  const canRegistroOi = isAuth && isAllowed("oi_formulario");
+  const canListadoOi = isAuth && isAllowed("oi_listado");
+
+  const showConsolidacionGroup = canConsolCorrelativo || canConsolNoCorrelativo;
+  const showFormatoAcGroup = canVimaToLista || canActualizacionBases || showConsolidacionGroup;
+  const showVerificacionGroup = canRegistroOi || canListadoOi;
+  const showOiGroup = showFormatoAcGroup || showVerificacionGroup;
 
   const DEFAULT_OPEN: Record<GroupKey, boolean> = useMemo(
     () => ({
@@ -158,7 +174,9 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   );
 
   const [open, setOpen] = useState<Record<GroupKey, boolean>>(() => {
-    const raw = localStorage.getItem("vi.sidebar.openGroups");
+    const raw =
+      localStorage.getItem("medileser.sidebar.openGroups") ??
+      localStorage.getItem("vi.sidebar.openGroups");
     if (!raw) return DEFAULT_OPEN;
     try {
       const parsed = JSON.parse(raw) as Partial<Record<GroupKey, unknown>>;
@@ -175,7 +193,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const pathname = location.pathname;
 
   useEffect(() => {
-    localStorage.setItem("vi.sidebar.openGroups", JSON.stringify(open));
+    localStorage.setItem("medileser.sidebar.openGroups", JSON.stringify(open));
   }, [open]);
 
   const activeLeaves = useMemo(() => {
@@ -225,7 +243,15 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   return (
     <aside className={`vi-sidebar ${collapsed ? "vi-sidebar--collapsed" : ""}`}>
       <div className="vi-sidebar__header">
-        <span className="vi-sidebar__brand">VI</span>
+        <div className="vi-sidebar__brand">
+          <img
+            className="vi-brand-logo"
+            src="/medileser/logo-vertical.jpg"
+            alt="Medileser"
+            draggable={false}
+          />
+          <span className="vi-brand-text">MEDILESER APP</span>
+        </div>
         {onToggleSidebar && (
           <button
             type="button"
@@ -243,6 +269,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           <SidebarNavItem to="/login" icon="ti-login" label="Login" depth={0} collapsed={collapsed} />
         )}
 
+        {showOiGroup && (
         <SidebarGroup
           groupKey="oi"
           icon="ti-panel"
@@ -253,6 +280,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           active={activeGroups.oi}
           onToggle={toggleGroup}
         >
+          {showFormatoAcGroup && (
           <SidebarGroup
             groupKey="oi_formato_ac"
             icon="ti-folder"
@@ -263,7 +291,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
             active={activeGroups.oi_formato_ac}
             onToggle={toggleGroup}
           >
-            {isAuth && (
+            {canVimaToLista && (
               <SidebarNavItem
                 to="/oi/tools/vima-to-lista"
                 icon="ti-exchange-vertical"
@@ -272,7 +300,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
                 collapsed={collapsed}
               />
             )}
-            {isAuth && (
+            {canActualizacionBases && (
               <SidebarNavItem
                 to="/oi/tools/actualizacion-base"
                 icon="ti-reload"
@@ -282,6 +310,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
               />
             )}
 
+            {showConsolidacionGroup && (
             <SidebarGroup
               groupKey="oi_consolidacion"
               icon="ti-layers"
@@ -292,7 +321,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
               active={activeGroups.oi_consolidacion}
               onToggle={toggleGroup}
             >
-              {isAuth && (
+              {canConsolCorrelativo && (
                 <SidebarNavItem
                   to="/oi/tools/consolidacion/correlativo"
                   icon="ti-list"
@@ -301,7 +330,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
                   collapsed={collapsed}
                 />
               )}
-              {isAuth && (
+              {canConsolNoCorrelativo && (
                 <SidebarNavItem
                   to="/oi/tools/consolidacion/no-correlativo"
                   icon="ti-layout-list-thumb"
@@ -311,8 +340,11 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
                 />
               )}
             </SidebarGroup>
+            )}
           </SidebarGroup>
+          )}
 
+          {showVerificacionGroup && (
           <SidebarGroup
             groupKey="oi_verificacion"
             icon="ti-clipboard"
@@ -329,14 +361,16 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
               depth={2}
               collapsed={collapsed}
             />
-            <SidebarNavItem
-              to="/oi"
-              icon="ti-layout-grid2"
-              label="REGISTRO OI"
-              depth={2}
-              collapsed={collapsed}
-            />
-            {isAuth && (
+            {canRegistroOi && (
+              <SidebarNavItem
+                to="/oi"
+                icon="ti-layout-grid2"
+                label="REGISTRO OI"
+                depth={2}
+                collapsed={collapsed}
+              />
+            )}
+            {canListadoOi && (
               <SidebarNavItem
                 to="/oi/list"
                 icon="ti-view-list-alt"
@@ -346,7 +380,9 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
               />
             )}
           </SidebarGroup>
+          )}
         </SidebarGroup>
+        )}
 
         <SidebarDisabledItem icon="ti-package" label="LOGÍSTICA (FUTURO)" depth={0} collapsed={collapsed} />
         <SidebarDisabledItem icon="ti-bar-chart" label="SMART (FUTURO)" depth={0} collapsed={collapsed} />

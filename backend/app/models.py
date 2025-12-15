@@ -19,6 +19,7 @@ class User(SQLModel, table=True):
     tech_number: int
     role: str = Field(default="user")  # "admin" | "user"
     is_active: bool = Field(default=True)
+    allowed_modules: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
 
 class OI(SQLModel, table=True):
     __table_args__ = (

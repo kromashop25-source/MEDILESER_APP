@@ -212,7 +212,7 @@ export default function FilePickerModal({
               <div className="d-flex gap-10">
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline-secondary"
+                  className="btn btn-sm btn-outline-primary"
                   onClick={pickMore}
                   disabled={disabled}
                 >
@@ -220,7 +220,7 @@ export default function FilePickerModal({
                 </button>
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline-danger"
+                  className="btn btn-sm btn-danger"
                   onClick={removeAll}
                   disabled={disabled || files.length === 0}
                 >

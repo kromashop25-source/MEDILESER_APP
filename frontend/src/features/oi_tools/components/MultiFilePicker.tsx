@@ -99,7 +99,7 @@ export default function MultiFilePicker({
         <div className="input-group">
           <button
             type="button"
-            className="btn btn-outline-secondary"
+            className="btn btn-outline-primary"
             onClick={() => setShowModal(true)}
             disabled={disabled}
           >
