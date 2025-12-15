@@ -4,6 +4,8 @@ import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
 import type { MergeUploadLimits } from "../../api/oiTools";
 import { getMergeUploadLimits, mergeOisUpload } from "../../api/oiTools";
+import MultiFilePicker from "./components/MultiFilePicker";
+import SingleFilePicker from "./components/SingleFilePicker";
 
 function parseFilename(contentDisposition?: string) {
   if (!contentDisposition) return null;
@@ -126,31 +128,24 @@ export default function ConsolidacionCorrelativoPage() {
 
             <div className="row">
               <div className="col-12 mB-15">
-                <label className="form-label">Archivo maestro (xlsx)</label>
-                <input
-                  className="form-control"
-                  type="file"
+                <SingleFilePicker
+                  label="Archivo maestro (xlsx)"
                   accept=".xlsx"
+                  file={masterFile}
+                  onChange={setMasterFile}
                   disabled={running}
-                  onChange={(e) => setMasterFile(e.target.files?.[0] ?? null)}
                 />
               </div>
 
               <div className="col-12 mB-15">
-                <label className="form-label">Archivos de técnicos (xlsx)</label>
-                <input
-                  className="form-control"
-                  type="file"
+                <MultiFilePicker
+                  label="Archivos de técnicos (xlsx)"
+                  title="Archivos de técnicos"
                   accept=".xlsx"
-                  multiple
+                  files={technicianFiles}
+                  setFiles={setTechnicianFiles}
                   disabled={running}
-                  onChange={(e) =>
-                    setTechnicianFiles(e.target.files ? Array.from(e.target.files) : [])
-                  }
                 />
-                <div className="form-text">
-                  Seleccionados: <b>{technicianFiles.length}</b>
-                </div>
               </div>
             </div>
 
@@ -201,7 +196,7 @@ export default function ConsolidacionCorrelativoPage() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }
-

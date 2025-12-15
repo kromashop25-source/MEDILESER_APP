@@ -7,6 +7,8 @@ import {
   actualizacionBaseUpload,
   subscribeOiToolsProgress,
 } from "../../api/oiTools";
+import MultiFilePicker from "./components/MultiFilePicker";
+import SingleFilePicker from "./components/SingleFilePicker";
 
 function parseFilename(contentDisposition?: string) {
   if (!contentDisposition) return null;
@@ -186,27 +188,24 @@ export default function ActualizacionBasePage() {
 
             <div className="row">
               <div className="col-12 mB-15">
-                <label className="form-label">Base (xlsx)</label>
-                <input
-                  className="form-control"
-                  type="file"
+                <SingleFilePicker
+                  label="Base (xlsx)"
                   accept=".xlsx"
-                  onChange={(e) => setBaseFile(e.target.files?.[0] ?? null)}
+                  file={baseFile}
+                  onChange={setBaseFile}
                   disabled={!!running}
                 />
               </div>
 
               <div className="col-12 mB-15">
-                <label className="form-label">Archivos OI (xlsx/xlsm)</label>
-                <input
-                  className="form-control"
-                  type="file"
+                <MultiFilePicker
+                  label="Archivos OI (xlsx/xlsm)"
+                  title="Archivos OI"
                   accept=".xlsx,.xlsm"
-                  multiple
-                  onChange={(e) => setOiFiles(e.target.files ? Array.from(e.target.files) : [])}
+                  files={oiFiles}
+                  setFiles={setOiFiles}
                   disabled={!!running}
                 />
-                <div className="form-text">Selecciona uno o más OIs.</div>
               </div>
 
               <div className="col-md-6 mB-15">
@@ -371,7 +370,7 @@ export default function ActualizacionBasePage() {
           </div>
         </div>
       </div>
+
     </div>
   );
 }
-

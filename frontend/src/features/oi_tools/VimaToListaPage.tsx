@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState } from "react";
-import axios, { AxiosError } from "axios";
+import axios from "axios";
+import type { AxiosError } from "axios";
 import type { ProgressEvent, VimaToListaSummary } from "../../api/integrations";
 import {
   subscribeVimaToListaProgress,
   vimaToListaDryRunUpload,
   vimaToListaUpload,
 } from "../../api/integrations";
+import SingleFilePicker from "./components/SingleFilePicker";
 
 
 function parseFilename(contentDisposition?: string) {
@@ -173,22 +175,22 @@ export default function VimaToListaPage() {
             <h4 className="c-grey-900 mB-20">Integración VIMA → LISTA</h4>
 
             <div className="mB-15">
-              <label className="form-label">Archivo VIMA (.xlsm)</label>
-              <input
-                className="form-control"
-                type="file"
+              <SingleFilePicker
+                label="Archivo VIMA (.xlsm)"
                 accept=".xlsm,.xlsx"
-                onChange={(e) => setVimaFile(e.target.files?.[0] ?? null)}
+                file={vimaFile}
+                onChange={setVimaFile}
+                disabled={!!running}
               />
             </div>
 
             <div className="mB-15">
-              <label className="form-label">Archivo LISTA (.xlsx)</label>
-              <input
-                className="form-control"
-                type="file"
+              <SingleFilePicker
+                label="Archivo LISTA (.xlsx)"
                 accept=".xlsx,.xlsm"
-                onChange={(e) => setListaFile(e.target.files?.[0] ?? null)}
+                file={listaFile}
+                onChange={setListaFile}
+                disabled={!!running}
               />
             </div>
 

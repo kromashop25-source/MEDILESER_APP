@@ -636,7 +636,7 @@ def _load_formulas_map_or_raise() -> Dict[str, str]:
 
     """
 
-    Lee app/data/FORMULAS_BASE.txt y valida:
+    Lee app/data/templates/oi_tools/FORMULAS_BASE.txt y valida:
 
     - Formato COL:=FÓRMULA (semilla en fila 9)
 
@@ -644,11 +644,13 @@ def _load_formulas_map_or_raise() -> Dict[str, str]:
 
     """
 
-    fp = Path(__file__).resolve().parents[2] / "data" / "FORMULAS_BASE.txt"
+    # Este archivo vive en: app/oi_tools/services/updates/update_base_by_model.py
+    # parents[3] apunta a .../backend/app
+    fp = Path(__file__).resolve().parents[3] / "data" / "templates" / "oi_tools" / "FORMULAS_BASE.txt"
 
     if not fp.exists():
 
-        raise ValueError("No se encontró app/data/FORMULAS_BASE.txt.")
+        raise ValueError("No se encontró app/data/templates/oi_tools/FORMULAS_BASE.txt.")
 
     try:
 
