@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, matchPath, useLocation } from "react-router-dom";
 import { getAuth } from "../api/auth";
 
 type Props = { collapsed?: boolean; onToggleSidebar?: () => void };
@@ -23,10 +23,6 @@ function indentStyle(depth: number, collapsed?: boolean) {
   return { paddingLeft: `calc(0.75rem + ${depth * INDENT_STEP_REM}rem)` } as const;
 }
 
-function isPathIn(pathname: string, prefixes: string[]) {
-  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
 function SidebarNavItem({
   to,
   icon,
@@ -44,6 +40,7 @@ function SidebarNavItem({
     <li className="vi-sidebar-item">
       <NavLink
         to={to}
+        end
         className={linkCls}
         style={indentStyle(depth, collapsed)}
         title={label}
@@ -148,51 +145,78 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const isAuth = !!auth;
   const isAdmin = auth?.role === "admin";
 
-  const [open, setOpen] = useState<Record<GroupKey, boolean>>({
-    oi: true,
-    oi_formato_ac: true,
-    oi_consolidacion: false,
-    oi_verificacion: true,
-    usuarios: false,
-    administrar: false,
+  const DEFAULT_OPEN: Record<GroupKey, boolean> = useMemo(
+    () => ({
+      oi: true,
+      oi_formato_ac: true,
+      oi_consolidacion: false,
+      oi_verificacion: true,
+      usuarios: false,
+      administrar: false,
+    }),
+    []
+  );
+
+  const [open, setOpen] = useState<Record<GroupKey, boolean>>(() => {
+    const raw = localStorage.getItem("vi.sidebar.openGroups");
+    if (!raw) return DEFAULT_OPEN;
+    try {
+      const parsed = JSON.parse(raw) as Partial<Record<GroupKey, unknown>>;
+      const next: Record<GroupKey, boolean> = { ...DEFAULT_OPEN };
+      (Object.keys(next) as GroupKey[]).forEach((k) => {
+        if (typeof parsed[k] === "boolean") next[k] = parsed[k] as boolean;
+      });
+      return next;
+    } catch {
+      return DEFAULT_OPEN;
+    }
   });
 
   const pathname = location.pathname;
 
-  const activeGroups = useMemo(() => {
+  useEffect(() => {
+    localStorage.setItem("vi.sidebar.openGroups", JSON.stringify(open));
+  }, [open]);
+
+  const activeLeaves = useMemo(() => {
+    const exact = (path: string) => !!matchPath({ path, end: true }, pathname);
+
     return {
-      oi: isPathIn(pathname, ["/oi"]),
-      oi_formato_ac: isPathIn(pathname, ["/oi/tools"]),
-      oi_consolidacion: isPathIn(pathname, ["/oi/tools/consolidacion"]),
-      oi_verificacion: isPathIn(pathname, ["/oi", "/oi/list"]),
-      usuarios: isPathIn(pathname, ["/users", "/password"]),
-      administrar: isPathIn(pathname, ["/admin"]),
-    } satisfies Record<GroupKey, boolean>;
+      vimaToLista: exact("/oi/tools/vima-to-lista"),
+      actualizacionBases: exact("/oi/tools/actualizacion-base"),
+      consolidacionCorrelativo: exact("/oi/tools/consolidacion/correlativo"),
+      consolidacionNoCorrelativo: exact("/oi/tools/consolidacion/no-correlativo"),
+      registroOi: exact("/oi"),
+      listadoOi: exact("/oi/list"),
+      users: exact("/users"),
+      password: exact("/password"),
+      permisos: exact("/admin/permisos"),
+    };
   }, [pathname]);
 
-  useEffect(() => {
-    if (collapsed) return;
-    setOpen((prev) => {
-      const next = { ...prev };
-      if (activeGroups.oi) next.oi = true;
-      if (activeGroups.oi_formato_ac) {
-        next.oi = true;
-        next.oi_formato_ac = true;
-      }
-      if (activeGroups.oi_consolidacion) {
-        next.oi = true;
-        next.oi_formato_ac = true;
-        next.oi_consolidacion = true;
-      }
-      if (activeGroups.oi_verificacion) {
-        next.oi = true;
-        next.oi_verificacion = true;
-      }
-      if (activeGroups.usuarios) next.usuarios = true;
-      if (activeGroups.administrar) next.administrar = true;
-      return next;
-    });
-  }, [activeGroups, collapsed]);
+  const activeGroups = useMemo(
+    () =>
+      ({
+        oi_consolidacion:
+          activeLeaves.consolidacionCorrelativo || activeLeaves.consolidacionNoCorrelativo,
+        oi_formato_ac:
+          activeLeaves.vimaToLista ||
+          activeLeaves.actualizacionBases ||
+          activeLeaves.consolidacionCorrelativo ||
+          activeLeaves.consolidacionNoCorrelativo,
+        oi_verificacion: activeLeaves.registroOi || activeLeaves.listadoOi,
+        oi:
+          activeLeaves.vimaToLista ||
+          activeLeaves.actualizacionBases ||
+          activeLeaves.consolidacionCorrelativo ||
+          activeLeaves.consolidacionNoCorrelativo ||
+          activeLeaves.registroOi ||
+          activeLeaves.listadoOi,
+        usuarios: activeLeaves.users || activeLeaves.password,
+        administrar: activeLeaves.permisos,
+      }) satisfies Record<GroupKey, boolean>,
+    [activeLeaves]
+  );
 
   function toggleGroup(key: GroupKey) {
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -216,7 +240,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
 
       <ul className="vi-sidebar-menu list-unstyled mb-0">
         {!isAuth && (
-          <SidebarNavItem to="/" icon="ti-login" label="Login" depth={0} collapsed={collapsed} />
+          <SidebarNavItem to="/login" icon="ti-login" label="Login" depth={0} collapsed={collapsed} />
         )}
 
         <SidebarGroup

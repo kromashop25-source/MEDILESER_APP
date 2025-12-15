@@ -355,3 +355,42 @@
   outline-offset: 2px;
   background: rgba(13, 110, 253, 0.03);
 }
+
+/* ====== VI Home ====== */
+.vi-content--home {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  overflow: hidden;
+}
+
+.vi-home {
+  height: 100%;
+  min-height: calc(100vh - var(--vi-topbar-height));
+  display: flex;
+  flex-direction: column;
+}
+
+.vi-home__brandbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  background: #fff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.vi-home__brandlogo {
+  height: 44px;
+  width: auto;
+  object-fit: contain;
+}
+
+.vi-home__banner {
+  flex: 1 1 auto;
+  min-height: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}

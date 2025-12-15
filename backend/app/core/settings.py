@@ -43,7 +43,8 @@ class Settings(BaseSettings):
     cors_origins: List[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     # Ruta relativa (desde app/) a la plantilla Excel
-    data_template_path: str = "data/PLANTILLA_VI.xlsx"
+    # Nota: el template vive en app/data/templates/vi/
+    data_template_path: str = "data/templates/vi/PLANTILLA_VI.xlsx"
 
     # Nombre del archivo de base de datos
     database_filename: str = "vi.db"
@@ -73,7 +74,22 @@ class Settings(BaseSettings):
             # Si es None, estamos EN DESARROLLO (tu PC)
             base = Path(__file__).resolve().parents[1]  # .../backend/app
 
-        return str((base / self.data_template_path).resolve())
+        # Prioridad:
+        # 1) VI_DATA_TEMPLATE_PATH (si existe)
+        # 2) ruta estándar en repo (data/templates/vi/PLANTILLA_VI.xlsx)
+        # 3) ruta legacy (data/PLANTILLA_VI.xlsx)
+        candidates = [
+            (base / self.data_template_path),
+            (base / "data" / "templates" / "vi" / "PLANTILLA_VI.xlsx"),
+            (base / "data" / "PLANTILLA_VI.xlsx"),
+        ]
+        for cand in candidates:
+            if cand.exists():
+                return str(cand.resolve())
+
+        # Si no existe ninguna, devolvemos la primera para mantener el fallback actual
+        # (el servicio de Excel creará un workbook vacío).
+        return str(candidates[0].resolve())
 
     # ----------------------------
     # Rutas para BD y otros datos

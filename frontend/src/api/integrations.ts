@@ -30,13 +30,17 @@ function buildUrl(path: string) {
 }
 
 export async function vimaToListaDryRunUpload(
-  form: FormData
+  form: FormData,
+  signal?: AbortSignal
 ): Promise<AxiosResponse<VimaToListaSummary>> {
-  return api.post("/integrations/vima-to-lista/dry-run-upload", form);
+  return api.post("/integrations/vima-to-lista/dry-run-upload", form, { signal });
 }
 
-export async function vimaToListaUpload(form: FormData): Promise<AxiosResponse<Blob>> {
-  return api.post("/integrations/vima-to-lista/upload", form, { responseType: "blob" });
+export async function vimaToListaUpload(
+  form: FormData,
+  signal?: AbortSignal
+): Promise<AxiosResponse<Blob>> {
+  return api.post("/integrations/vima-to-lista/upload", form, { responseType: "blob", signal });
 }
 
 /**

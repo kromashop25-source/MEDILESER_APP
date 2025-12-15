@@ -3,5 +3,5 @@ import { getAuth } from "../../api/auth";
 
 export default function RequireAuth() {
     const auth = getAuth();
-    return auth?.token ? <Outlet /> : <Navigate to="/" replace />;
+    return auth?.token ? <Outlet /> : <Navigate to="/login" replace />;
 }

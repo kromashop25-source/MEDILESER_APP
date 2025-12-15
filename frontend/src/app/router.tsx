@@ -13,18 +13,26 @@ import ConsolidacionOisPage from "../features/oi_tools/ConsolidacionOisPage";
 import ConsolidacionCorrelativoPage from "../features/oi_tools/ConsolidacionCorrelativoPage";
 import ConsolidacionNoCorrelativoPage from "../features/oi_tools/ConsolidacionNoCorrelativoPage";
 import ExcelToolsPage from "../features/oi_tools/ExcelToolsPage";
+import HomePage from "../features/home/HomePage";
+import { getAuth } from "../api/auth";
 
 
 export default function AppRouter() {
+  const auth = getAuth();
+
   return (
   <>
       {/* Login sin sidebar ni topbar */}
       <Routes>
-        <Route path="/" element={<LoginPage />} />
+        <Route
+          path="/login"
+          element={auth?.token ? <Navigate to="/" replace /> : <LoginPage />}
+        />
 
         {/* Rutas protegidas: el Topbar y el Sidebar están dentro de AdminatorLayout */}
         <Route element={<RequireAuth />}>
           <Route element={<AdminatorLayout />}>
+            <Route path="/" element={<HomePage />} />
             <Route path="/oi" element={<OiPage />} />
             <Route path="/oi/list" element={<OiListPage />} />
             <Route path="/users" element={<UsersPage />} />

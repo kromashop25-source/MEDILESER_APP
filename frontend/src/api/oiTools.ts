@@ -147,8 +147,11 @@ export async function actualizacionBaseDryRunUpload(
   await readNdjsonStream(res, onEvent);
 }
 
-export async function actualizacionBaseUpload(form: FormData): Promise<AxiosResponse<Blob>> {
-  return api.post("/bases/actualizar/upload", form, { responseType: "blob" });
+export async function actualizacionBaseUpload(
+  form: FormData,
+  signal?: AbortSignal
+): Promise<AxiosResponse<Blob>> {
+  return api.post("/bases/actualizar/upload", form, { responseType: "blob", signal });
 }
 
 export async function getMergeUploadLimits(): Promise<MergeUploadLimits> {
@@ -187,4 +190,3 @@ export async function excelValidate(payload: ExcelValidateRequest): Promise<unkn
   const { data } = await api.post("/tools/excel/validate", payload);
   return data as unknown;
 }
-

@@ -38,7 +38,7 @@ export default function LoginPage() {
       await login({ ...v, bancoId: Number(v.bancoId) });
       // Redirección segura: evita tener que refrescar manualmente
       // (si prefieres SPA puro, deja navigate("/oi"); pero esto garantiza la carga del banner)
-      window.location.replace("/oi");
+      window.location.replace("/");
     } catch (e: any) {
       const msg =
         e?.message ??
@@ -61,7 +61,7 @@ export default function LoginPage() {
         <section className="vi-login__left">
           <div className="text-center text-md-start">
             <h1 className="vi-title display-6 mb-0">
-              REGISTRO DE DATOS DEL FORMATO VI
+              ACCESO AL SISTEMA MEDILESER APP
             </h1>
           </div>
         </section>

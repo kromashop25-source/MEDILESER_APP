@@ -9,6 +9,7 @@ import {
 } from "../../api/oiTools";
 import MultiFilePicker from "./components/MultiFilePicker";
 import SingleFilePicker from "./components/SingleFilePicker";
+import PasswordModal from "../oi/PasswordModal";
 
 function parseFilename(contentDisposition?: string) {
   if (!contentDisposition) return null;
@@ -68,6 +69,13 @@ export default function ActualizacionBasePage() {
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   const abortRef = useRef<AbortController | null>(null);
+  const pendingPasswordActionRef = useRef<"dry" | "upload" | null>(null);
+
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordHelpText, setPasswordHelpText] = useState(
+    "Ingresa la contraseña de apertura del archivo y vuelve a intentar."
+  );
 
   const canRun = useMemo(
     () => !!baseFile && oiFiles.length > 0 && !running,
@@ -91,7 +99,12 @@ export default function ActualizacionBasePage() {
     abortRef.current = null;
   }
 
-  function buildForm(operationId?: string) {
+  function cancelOperation() {
+    if (!running) return;
+    stopStream();
+  }
+
+  function buildForm(operationId?: string, defaultPasswordOverride?: string) {
     if (!baseFile) throw new Error("Falta el archivo Base");
     if (oiFiles.length === 0) throw new Error("Faltan archivos OI");
 
@@ -99,7 +112,8 @@ export default function ActualizacionBasePage() {
     form.append("base_file", baseFile);
     for (const f of oiFiles) form.append("oi_files", f);
 
-    if (defaultPassword.trim()) form.append("default_password", defaultPassword.trim());
+    const effectivePassword = (defaultPasswordOverride ?? defaultPassword).trim();
+    if (effectivePassword) form.append("default_password", effectivePassword);
     if (perFilePasswords.trim()) form.append("per_file_passwords_json", perFilePasswords.trim());
 
     if (oiPattern.trim()) form.append("oi_pattern", oiPattern.trim());
@@ -110,7 +124,18 @@ export default function ActualizacionBasePage() {
     return form;
   }
 
-  async function runDry() {
+  function closePasswordModal() {
+    pendingPasswordActionRef.current = null;
+    setShowPasswordModal(false);
+  }
+
+  function requestPassword(action: "dry" | "upload", helpText: string) {
+    pendingPasswordActionRef.current = action;
+    setPasswordHelpText(helpText);
+    setShowPasswordModal(true);
+  }
+
+  async function runDry(opts?: { passwordOverride?: string }) {
     setErrorMsg("");
     setEvents([]);
     setProgressPct(0);
@@ -118,14 +143,33 @@ export default function ActualizacionBasePage() {
     abortRef.current = new AbortController();
     setRunning("dry");
     try {
-      const form = buildForm();
+      const form = buildForm(undefined, opts?.passwordOverride);
       await actualizacionBaseDryRunUpload(form, pushEvent, abortRef.current.signal);
     } catch (e: any) {
+      if (e?.name === "AbortError") return;
       const code = e?.code as string | undefined;
       const detail = String(e?.message ?? e);
       if (code === "PASSWORD_REQUIRED") {
+        setErrorMsg("");
+        requestPassword(
+          "upload",
+          "Algún archivo está protegido. Ingresa la contraseña de apertura para continuar."
+        );
+        return;
+        setErrorMsg("");
+        requestPassword(
+          "dry",
+          "Algún archivo está protegido. Ingresa la contraseña de apertura para continuar."
+        );
+        return;
         setErrorMsg("Alguna OI está protegida. Ingresa contraseñas y vuelve a intentar.");
       } else if (code === "WRONG_PASSWORD") {
+        setErrorMsg("");
+        requestPassword("upload", "Contraseña incorrecta. Intenta nuevamente.");
+        return;
+        setErrorMsg("");
+        requestPassword("dry", "Contraseña incorrecta. Intenta nuevamente.");
+        return;
         setErrorMsg("Contraseña incorrecta para una OI. Verifica e intenta nuevamente.");
       } else {
         setErrorMsg(detail);
@@ -136,7 +180,7 @@ export default function ActualizacionBasePage() {
     }
   }
 
-  async function runUpload() {
+  async function runUpload(opts?: { passwordOverride?: string }) {
     setErrorMsg("");
     setEvents([]);
     setProgressPct(0);
@@ -151,17 +195,18 @@ export default function ActualizacionBasePage() {
 
     setRunning("upload");
     try {
-      const form = buildForm(operationId);
+      const form = buildForm(operationId, opts?.passwordOverride);
       form.append("replicate_merges", replicateMerges ? "true" : "false");
       form.append("replicate_row_heights", replicateRowHeights ? "true" : "false");
       form.append("replicate_col_widths", replicateColWidths ? "true" : "false");
 
-      const res = await actualizacionBaseUpload(form);
+      const res = await actualizacionBaseUpload(form, abortRef.current.signal);
       const cd = res.headers["content-disposition"] as string | undefined;
       const xf = res.headers["x-file-name"] as string | undefined;
       const filename = parseFilename(cd) ?? xf ?? "base_actualizada.xlsx";
       downloadBlob(res.data, filename);
     } catch (e) {
+      if (axios.isAxiosError(e) && e.code === "ERR_CANCELED") return;
       const { detail, code } = await extractAxiosError(e);
       if (code === "PASSWORD_REQUIRED") {
         setErrorMsg("Alguna OI está protegida. Ingresa contraseñas y vuelve a intentar.");
@@ -229,15 +274,17 @@ export default function ActualizacionBasePage() {
                 />
               </div>
 
-              <div className="col-md-6 mB-15">
-                <label className="form-label">Regex OI (opcional)</label>
-                <input
-                  className="form-control"
-                  value={oiPattern}
-                  onChange={(e) => setOiPattern(e.target.value)}
-                  disabled={!!running}
-                />
-              </div>
+              {showMoreOptions ? (
+                <div className="col-md-6 mB-15">
+                  <label className="form-label">Regex OI (opcional)</label>
+                  <input
+                    className="form-control"
+                    value={oiPattern}
+                    onChange={(e) => setOiPattern(e.target.value)}
+                    disabled={!!running}
+                  />
+                </div>
+              ) : null}
 
               <div className="col-md-6 mB-15">
                 <label className="form-label">Fila inicio OI</label>
@@ -265,53 +312,57 @@ export default function ActualizacionBasePage() {
                 />
               </div>
 
-              <div className="col-md-4 mB-15">
-                <div className="form-check form-switch">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="replicateMerges"
-                    checked={replicateMerges}
-                    onChange={(e) => setReplicateMerges(e.target.checked)}
-                    disabled={!!running}
-                  />
-                  <label className="form-check-label" htmlFor="replicateMerges">
-                    Replicar merges
-                  </label>
-                </div>
-              </div>
+              {showMoreOptions ? (
+                <>
+                  <div className="col-md-4 mB-15">
+                    <div className="form-check form-switch">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="replicateMerges"
+                        checked={replicateMerges}
+                        onChange={(e) => setReplicateMerges(e.target.checked)}
+                        disabled={!!running}
+                      />
+                      <label className="form-check-label" htmlFor="replicateMerges">
+                        Replicar merges
+                      </label>
+                    </div>
+                  </div>
 
-              <div className="col-md-4 mB-15">
-                <div className="form-check form-switch">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="replicateRowHeights"
-                    checked={replicateRowHeights}
-                    onChange={(e) => setReplicateRowHeights(e.target.checked)}
-                    disabled={!!running}
-                  />
-                  <label className="form-check-label" htmlFor="replicateRowHeights">
-                    Replicar alto filas
-                  </label>
-                </div>
-              </div>
+                  <div className="col-md-4 mB-15">
+                    <div className="form-check form-switch">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="replicateRowHeights"
+                        checked={replicateRowHeights}
+                        onChange={(e) => setReplicateRowHeights(e.target.checked)}
+                        disabled={!!running}
+                      />
+                      <label className="form-check-label" htmlFor="replicateRowHeights">
+                        Replicar alto filas
+                      </label>
+                    </div>
+                  </div>
 
-              <div className="col-md-4 mB-15">
-                <div className="form-check form-switch">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="replicateColWidths"
-                    checked={replicateColWidths}
-                    onChange={(e) => setReplicateColWidths(e.target.checked)}
-                    disabled={!!running}
-                  />
-                  <label className="form-check-label" htmlFor="replicateColWidths">
-                    Replicar ancho cols
-                  </label>
-                </div>
-              </div>
+                  <div className="col-md-4 mB-15">
+                    <div className="form-check form-switch">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="replicateColWidths"
+                        checked={replicateColWidths}
+                        onChange={(e) => setReplicateColWidths(e.target.checked)}
+                        disabled={!!running}
+                      />
+                      <label className="form-check-label" htmlFor="replicateColWidths">
+                        Replicar ancho cols
+                      </label>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
 
             {errorMsg && (
@@ -320,12 +371,34 @@ export default function ActualizacionBasePage() {
               </div>
             )}
 
-            <div className="d-flex gap-10 mT-15">
-              <button className="btn btn-outline-primary" disabled={!canRun} onClick={runDry}>
-                {running === "dry" ? "Analizando..." : "Dry-run (Analizar)"}
+            <div className="d-flex justify-content-end mT-10">
+              <button
+                type="button"
+                className="btn btn-link p-0"
+                onClick={() => setShowMoreOptions((prev) => !prev)}
+                disabled={!!running}
+              >
+                {showMoreOptions ? "Menos Opciones" : "Más Opciones"}
               </button>
-              <button className="btn btn-primary" disabled={!canRun} onClick={runUpload}>
+            </div>
+
+            <div className="d-flex gap-10 mT-15">
+              <button className="btn btn-primary" disabled={!canRun} onClick={() => void runUpload()}>
                 {running === "upload" ? "Procesando..." : "Procesar y Descargar"}
+              </button>
+              <button
+                className="btn btn-outline-danger"
+                disabled={!running}
+                onClick={cancelOperation}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn btn-outline-primary"
+                disabled={!canRun}
+                onClick={() => void runDry()}
+              >
+                {running === "dry" ? "Analizando..." : "Analizar"}
               </button>
             </div>
           </div>
@@ -370,6 +443,23 @@ export default function ActualizacionBasePage() {
           </div>
         </div>
       </div>
+
+      <PasswordModal
+        show={showPasswordModal}
+        title="Archivo protegido"
+        confirmLabel="Continuar"
+        helpText={passwordHelpText}
+        onClose={closePasswordModal}
+        onConfirm={(pwd) => {
+          setDefaultPassword(pwd);
+          setShowPasswordModal(false);
+          const action = pendingPasswordActionRef.current;
+          pendingPasswordActionRef.current = null;
+          if (!action) return;
+          if (action === "dry") void runDry({ passwordOverride: pwd });
+          else void runUpload({ passwordOverride: pwd });
+        }}
+      />
 
     </div>
   );

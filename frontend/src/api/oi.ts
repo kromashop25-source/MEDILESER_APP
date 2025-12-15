@@ -156,11 +156,41 @@ export async function deleteBancada(bancadaId: number): Promise<void> {
 }
 
 export async function generateExcel(oiId: number, password: string): Promise<void> {
-  const res = await api.post(`/oi/${oiId}/excel`, { password }, { responseType: "blob" })
-    .catch((e: any) => {
-      const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo generar el Excel";
-      throw new Error(msg);
-    });
+  let res: any;
+  try {
+    res = await api.post(`/oi/${oiId}/excel`, { password }, { responseType: "blob" });
+  } catch (e: any) {
+    let msg = e?.message ?? "No se pudo generar el Excel";
+
+    const data = e?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const text = await data.text();
+        try {
+          const parsed = JSON.parse(text) as any;
+          const detail = parsed?.detail;
+          if (typeof detail === "string") msg = detail;
+          else if (Array.isArray(detail) && detail.length > 0) {
+            msg = detail
+              .map((d: any) => String(d?.msg ?? ""))
+              .filter(Boolean)
+              .join(", ");
+          } else if (text) {
+            msg = text;
+          }
+        } catch {
+          if (text) msg = text;
+        }
+      } catch {
+        // ignore
+      }
+    } else {
+      msg = e?.response?.data?.detail ?? msg;
+    }
+
+    throw new Error(msg);
+  }
+
   const blob = res.data as Blob;
   // nombre desde Content-Disposition
   const cd = res.headers["content-disposition"] as string | undefined;
@@ -266,5 +296,4 @@ export function loadCurrentOI(): CurrentOI | null {
 export function clearCurrentOI() {
   sessionStorage.removeItem(KEY);
 }
-
 

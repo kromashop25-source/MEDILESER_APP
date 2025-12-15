@@ -8,6 +8,7 @@ import {
   vimaToListaUpload,
 } from "../../api/integrations";
 import SingleFilePicker from "./components/SingleFilePicker";
+import PasswordModal from "../oi/PasswordModal";
 
 
 function parseFilename(contentDisposition?: string) {
@@ -48,6 +49,13 @@ export default function VimaToListaPage() {
   const [errorMsg, setErrorMsg] = useState<string>("");
 
   const abortRef = useRef<AbortController | null>(null);
+  const pendingPasswordActionRef = useRef<"dry" | "upload" | null>(null);
+
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordHelpText, setPasswordHelpText] = useState(
+    "Ingresa la contraseña de apertura del archivo y vuelve a intentar."
+  );
 
   const canRun = useMemo(() => !!vimaFile && !!listaFile && !running, [vimaFile, listaFile, running]);
 
@@ -72,14 +80,20 @@ export default function VimaToListaPage() {
     abortRef.current = null;
   }
 
-  function buildForm(operationId: string) {
+  function cancelOperation() {
+    if (!running) return;
+    stopStream();
+  }
+
+  function buildForm(operationId: string, passwordOverride?: string) {
     if (!vimaFile || !listaFile) throw new Error("Faltan archivos");
 
     const form = new FormData();
     form.append("vima_file", vimaFile);
     form.append("lista_file", listaFile);
 
-    if (vimaPassword.trim()) form.append("vima_password", vimaPassword.trim());
+    const effectivePassword = (passwordOverride ?? vimaPassword).trim();
+    if (effectivePassword) form.append("vima_password", effectivePassword);
     form.append("vima_start_row", String(vimaStartRow));
     form.append("lista_start_row", String(listaStartRow));
     form.append("require_all_g_to_n", requireAll ? "true" : "false");
@@ -92,27 +106,48 @@ export default function VimaToListaPage() {
     return form;
   }
 
-  function handleAxiosError(e: unknown) {
+  function closePasswordModal() {
+    pendingPasswordActionRef.current = null;
+    setShowPasswordModal(false);
+  }
+
+  function requestPassword(action: "dry" | "upload", helpText: string) {
+    pendingPasswordActionRef.current = action;
+    setPasswordHelpText(helpText);
+    setShowPasswordModal(true);
+  }
+
+  function handleAxiosError(e: unknown, action: "dry" | "upload") {
     if (!axios.isAxiosError(e)) {
       setErrorMsg(String(e));
       return;
     }
     const ax = e as AxiosError<any>;
+    if (ax.code === "ERR_CANCELED") return;
     const code = ax.response?.headers?.["x-code"] as string | undefined;
     const detail = ax.response?.data?.detail ?? ax.message;
 
     if (code === "PASSWORD_REQUIRED") {
+      setErrorMsg("");
+      requestPassword(
+        action,
+        "El archivo VIMA está protegido. Ingresa la contraseña de apertura para continuar."
+      );
+      return;
       setErrorMsg("El VIMA está protegido. Ingresa la contraseña y vuelve a intentar.");
       return;
     }
     if (code === "WRONG_PASSWORD") {
+      setErrorMsg("");
+      requestPassword(action, "Contraseña incorrecta. Intenta nuevamente.");
+      return;
       setErrorMsg("Contraseña incorrecta. Verifica e intenta nuevamente.");
       return;
     }
     setErrorMsg(String(detail));
   }
 
-  async function runDry() {
+  async function runDry(opts?: { passwordOverride?: string }) {
     setErrorMsg("");
     setSummary(null);
     setEvents([]);
@@ -128,18 +163,18 @@ export default function VimaToListaPage() {
 
     setRunning("dry");
     try {
-      const form = buildForm(operationId);
-      const res = await vimaToListaDryRunUpload(form);
+      const form = buildForm(operationId, opts?.passwordOverride);
+      const res = await vimaToListaDryRunUpload(form, abortRef.current.signal);
       setSummary(res.data);
     } catch (e) {
-      handleAxiosError(e);
+      handleAxiosError(e, "dry");
     } finally {
       stopStream();
       setRunning(null);
     }
   }
 
-  async function runUpload() {
+  async function runUpload(opts?: { passwordOverride?: string }) {
     setErrorMsg("");
     setEvents([]);
     setProgressPct(0);
@@ -153,14 +188,14 @@ export default function VimaToListaPage() {
 
     setRunning("upload");
     try {
-      const form = buildForm(operationId);
-      const res = await vimaToListaUpload(form);
+      const form = buildForm(operationId, opts?.passwordOverride);
+      const res = await vimaToListaUpload(form, abortRef.current.signal);
 
       const cd = res.headers?.["content-disposition"] as string | undefined;
       const filename = parseFilename(cd) ?? "LISTA_SALIDA.xlsx";
       downloadBlob(res.data, filename);
     } catch (e) {
-      handleAxiosError(e);
+      handleAxiosError(e, "upload");
     } finally {
       stopStream();
       setRunning(null);
@@ -205,7 +240,9 @@ export default function VimaToListaPage() {
               />
             </div>
 
-            <div className="row">
+            {showMoreOptions ? (
+              <>
+                <div className="row">
               <div className="col-md-6 mB-15">
                 <label className="form-label">Fila inicio VIMA</label>
                 <input
@@ -301,6 +338,8 @@ export default function VimaToListaPage() {
                     </div>
                 </div>
                 </div>
+              </>
+            ) : null}
 
             {errorMsg && (
               <div className="alert alert-danger mT-15" role="alert">
@@ -308,12 +347,34 @@ export default function VimaToListaPage() {
               </div>
             )}
 
-            <div className="d-flex gap-10 mT-20">
-              <button className="btn btn-outline-primary" disabled={!canRun} onClick={runDry}>
-                {running === "dry" ? "Analizando..." : "Dry-run (Analizar)"}
+            <div className="d-flex justify-content-end mT-10">
+              <button
+                type="button"
+                className="btn btn-link p-0"
+                onClick={() => setShowMoreOptions((prev) => !prev)}
+                disabled={!!running}
+              >
+                {showMoreOptions ? "Menos Opciones" : "Más Opciones"}
               </button>
-              <button className="btn btn-primary" disabled={!canRun} onClick={runUpload}>
-                {running === "upload" ? "Generando..." : "Generar y Descargar"}
+            </div>
+
+            <div className="d-flex gap-10 mT-20">
+              <button className="btn btn-primary" disabled={!canRun} onClick={() => void runUpload()}>
+                {running === "upload" ? "Procesando..." : "Procesar y Descargar"}
+              </button>
+              <button
+                className="btn btn-outline-danger"
+                disabled={!running}
+                onClick={cancelOperation}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn btn-outline-primary"
+                disabled={!canRun}
+                onClick={() => void runDry()}
+              >
+                {running === "dry" ? "Analizando..." : "Analizar"}
               </button>
             </div>
 
@@ -370,6 +431,23 @@ export default function VimaToListaPage() {
           </div>
         </div>
       </div>
+
+      <PasswordModal
+        show={showPasswordModal}
+        title="Archivo protegido"
+        confirmLabel="Continuar"
+        helpText={passwordHelpText}
+        onClose={closePasswordModal}
+        onConfirm={(pwd) => {
+          setVimaPassword(pwd);
+          setShowPasswordModal(false);
+          const action = pendingPasswordActionRef.current;
+          pendingPasswordActionRef.current = null;
+          if (!action) return;
+          if (action === "dry") void runDry({ passwordOverride: pwd });
+          else void runUpload({ passwordOverride: pwd });
+        }}
+      />
     </div>
   );
 }
