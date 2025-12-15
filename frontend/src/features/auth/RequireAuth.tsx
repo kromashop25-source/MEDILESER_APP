@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { getAuth, getSelectedBank, isTechnicianRole } from "../../api/auth";
+import { getAuth, getSelectedBank, isSuperuser, isTechnicianRole, normalizeRole } from "../../api/auth";
 
 function getModuleIdForPath(pathname: string): string | null {
   if (pathname === "/home") return null;
@@ -20,8 +20,9 @@ export default function RequireAuth() {
 
   if (!auth?.token) return <Navigate to="/login" replace />;
 
-  const isAdmin = auth.role === "admin";
-  const isTech = isTechnicianRole(auth.role);
+  const role = normalizeRole(auth.role, auth.username);
+  const superuser = isSuperuser(auth);
+  const isTech = isTechnicianRole(role);
 
   const selectedBank = getSelectedBank();
   const needsBank = isTech && !(selectedBank && selectedBank > 0);
@@ -37,7 +38,41 @@ export default function RequireAuth() {
     );
   }
 
-  if (!isAdmin) {
+  // /admin/permisos: solo superusuario (username=admin), incluso si allowedModules lo incluye.
+  if (location.pathname === "/admin/permisos" && !superuser) {
+    return (
+      <Navigate
+        to="/home"
+        replace
+        state={{
+          toast: {
+            kind: "warning",
+            title: "Permisos",
+            message: "Solo el superusuario puede acceder a este módulo.",
+          },
+        }}
+      />
+    );
+  }
+
+  // /users: solo admin/superusuario
+  if (location.pathname === "/users" && !(role === "admin" || role === "administrator")) {
+    return (
+      <Navigate
+        to="/home"
+        replace
+        state={{
+          toast: {
+            kind: "warning",
+            title: "Usuarios",
+            message: "No tiene permiso para acceder a este módulo.",
+          },
+        }}
+      />
+    );
+  }
+
+  if (!superuser) {
     const moduleId = getModuleIdForPath(location.pathname);
     const allowed = auth.allowedModules;
     if (moduleId && Array.isArray(allowed) && !allowed.includes(moduleId)) {

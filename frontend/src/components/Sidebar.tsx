@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink, matchPath, useLocation } from "react-router-dom";
-import { getAuth } from "../api/auth";
+import { getAuth, isSuperuser, normalizeRole } from "../api/auth";
 
 type Props = { collapsed?: boolean; onToggleSidebar?: () => void };
 
@@ -143,11 +143,13 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const location = useLocation();
   const auth = getAuth();
   const isAuth = !!auth;
-  const isAdmin = auth?.role === "admin";
+  const role = normalizeRole(auth?.role, auth?.username);
+  const superuser = isSuperuser(auth);
+  const canManageUsers = role === "admin" || role === "administrator";
   const allowedModules = auth?.allowedModules;
 
   const isAllowed = (moduleId: string) =>
-    isAdmin || !Array.isArray(allowedModules) || allowedModules.includes(moduleId);
+    superuser || !Array.isArray(allowedModules) || allowedModules.includes(moduleId);
 
   const canVimaToLista = isAuth && isAllowed("tools_vima_lista");
   const canActualizacionBases = isAuth && isAllowed("tools_actualizacion_bases");
@@ -155,10 +157,14 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const canConsolNoCorrelativo = isAuth && isAllowed("tools_consol_no_correlativo");
   const canRegistroOi = isAuth && isAllowed("oi_formulario");
   const canListadoOi = isAuth && isAllowed("oi_listado");
+  const canUsersAdmin = isAuth && canManageUsers && isAllowed("users_admin");
+  const canFutureOt = isAuth && isAllowed("future_ot");
+  const canFutureLogistica = isAuth && isAllowed("future_logistica");
+  const canFutureSmart = isAuth && isAllowed("future_smart");
 
   const showConsolidacionGroup = canConsolCorrelativo || canConsolNoCorrelativo;
   const showFormatoAcGroup = canVimaToLista || canActualizacionBases || showConsolidacionGroup;
-  const showVerificacionGroup = canRegistroOi || canListadoOi;
+  const showVerificacionGroup = canRegistroOi || canListadoOi || canFutureOt;
   const showOiGroup = showFormatoAcGroup || showVerificacionGroup;
 
   const DEFAULT_OPEN: Record<GroupKey, boolean> = useMemo(
@@ -355,12 +361,14 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
             active={activeGroups.oi_verificacion}
             onToggle={toggleGroup}
           >
-            <SidebarDisabledItem
-              icon="ti-briefcase"
-              label="ORDEN DE TRABAJO (FUTURO)"
-              depth={2}
-              collapsed={collapsed}
-            />
+            {canFutureOt && (
+              <SidebarDisabledItem
+                icon="ti-briefcase"
+                label="ORDEN DE TRABAJO (FUTURO)"
+                depth={2}
+                collapsed={collapsed}
+              />
+            )}
             {canRegistroOi && (
               <SidebarNavItem
                 to="/oi"
@@ -384,8 +392,12 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
         </SidebarGroup>
         )}
 
-        <SidebarDisabledItem icon="ti-package" label="LOGÍSTICA (FUTURO)" depth={0} collapsed={collapsed} />
-        <SidebarDisabledItem icon="ti-bar-chart" label="SMART (FUTURO)" depth={0} collapsed={collapsed} />
+        {canFutureLogistica && (
+          <SidebarDisabledItem icon="ti-package" label="LOGÍSTICA (FUTURO)" depth={0} collapsed={collapsed} />
+        )}
+        {canFutureSmart && (
+          <SidebarDisabledItem icon="ti-bar-chart" label="SMART (FUTURO)" depth={0} collapsed={collapsed} />
+        )}
 
         <SidebarGroup
           groupKey="usuarios"
@@ -397,7 +409,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           active={activeGroups.usuarios}
           onToggle={toggleGroup}
         >
-          {isAdmin && (
+          {canUsersAdmin && (
             <SidebarNavItem
               to="/users"
               icon="ti-user"
@@ -417,7 +429,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           )}
         </SidebarGroup>
 
-        {isAdmin && (
+        {superuser && (
           <SidebarGroup
             groupKey="administrar"
             icon="ti-settings"

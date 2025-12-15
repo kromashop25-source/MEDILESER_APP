@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 
 from ..core.db import engine
 from ..core.permissions import get_effective_allowed_modules
+from ..core.rbac import can_manage_users, is_superuser, normalize_role
 from ..core.security import get_password_hash, verify_password
 from ..models import User, OI
 from ..schemas import UserRead, UserCreate, UserUpdatePassword
@@ -102,6 +103,8 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
         raise HTTPException(status_code=403, detail="Usuario inactivo")
 
     # 3. Crear Sesión
+    role = normalize_role(user.role, user.username)
+
     token = secrets.token_hex(32)
     now = datetime.utcnow()
     expires_at = now + timedelta(hours=12)
@@ -109,11 +112,15 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
     full_name = f"{user.first_name} {user.last_name}".strip()
     
     banco_id: Optional[int] = payload.bancoId if payload.bancoId and payload.bancoId > 0 else None
-    if (user.role or "").lower() == "admin":
-        # Para admins el banco no es obligatorio; mantenemos 0 por compatibilidad.
+    if is_superuser(user.username):
+        # Para el superusuario el banco no es obligatorio; mantenemos 0 por compatibilidad.
         banco_id = banco_id or 0
 
-    allowed_modules = get_effective_allowed_modules(user.role, getattr(user, "allowed_modules", None))
+    allowed_modules = get_effective_allowed_modules(
+        role,
+        getattr(user, "allowed_modules", None),
+        username=user.username,
+    )
 
     sess_data = {
         "userId": user.id,
@@ -123,7 +130,7 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
         "fullName": full_name,
         "bancoId": banco_id,
         "techNumber": user.tech_number,
-        "role": user.role,
+        "role": role,
         "token": token,
         "allowedModules": allowed_modules,
         "createdAt": now,
@@ -170,7 +177,8 @@ def list_users(
     sess: dict = Depends(get_current_user_session),
     session: Session = Depends(get_session)
 ):
-    if sess["role"] != "admin":
+    requester_username = (sess.get("username") or sess.get("user") or "").lower()
+    if not can_manage_users(sess.get("role"), requester_username):
         raise HTTPException(status_code=403, detail="Requiere privilegios de administrador")
     
     users = session.exec(select(User)).all()
@@ -182,11 +190,20 @@ def create_user(
     sess: dict = Depends(get_current_user_session),
     session: Session = Depends(get_session)
 ):
-    if sess["role"] != "admin":
+    requester_username = (sess.get("username") or sess.get("user") or "").lower()
+    if not can_manage_users(sess.get("role"), requester_username):
         raise HTTPException(status_code=403, detail="Requiere privilegios de administrador")
 
+    username = payload.username.lower()
+    if username == "admin":
+        raise HTTPException(status_code=400, detail="El usuario 'admin' estÇ­ reservado para el superusuario")
+
+    requested_role = normalize_role(payload.role, username)
+    if not is_superuser(requester_username) and requested_role == "administrator":
+        raise HTTPException(status_code=403, detail="Solo el superusuario puede crear usuarios administradores")
+
     # Verificar duplicados
-    existing = session.exec(select(User).where(User.username == payload.username.lower())).first()
+    existing = session.exec(select(User).where(User.username == username)).first()
     if existing:
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
     
@@ -196,11 +213,11 @@ def create_user(
         raise HTTPException(status_code=400, detail=f"El número de técnico {payload.tech_number} ya está asignado a {existing_tech.username}")
 
     new_user = User(
-        username=payload.username.lower(),
+        username=username,
         first_name=payload.first_name,
         last_name=payload.last_name,
         tech_number=payload.tech_number,
-        role=payload.role,
+        role=requested_role,
         password_hash=get_password_hash(payload.password),
         is_active=True
     )
@@ -215,7 +232,8 @@ def delete_user(
     sess: dict = Depends(get_current_user_session),
     session: Session = Depends(get_session)
 ):
-    if sess["role"] != "admin":
+    requester_username = (sess.get("username") or sess.get("user") or "").lower()
+    if not can_manage_users(sess.get("role"), requester_username):
         raise HTTPException(status_code=403, detail="Requiere privilegios de administrador")
 
     target_user = session.get(User, user_id)
@@ -223,8 +241,9 @@ def delete_user(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     # Regla: Solo el usuario 'admin' puede tocar a otros admins (opcional, pero buena práctica)
-    if target_user.role == "admin" and sess["username"] != "admin":
-         raise HTTPException(status_code=403, detail="Solo el superusuario 'admin' puede eliminar a otros administradores")
+    target_norm_role = normalize_role(target_user.role, target_user.username)
+    if target_norm_role in ("admin", "administrator") and not is_superuser(requester_username):
+        raise HTTPException(status_code=403, detail="Solo el superusuario puede eliminar usuarios administradores")
 
     if target_user.username == "admin":
         raise HTTPException(status_code=400, detail="No se puede eliminar al usuario admin principal")
@@ -254,16 +273,17 @@ def admin_change_password(
     - El superadmin 'admin' puede cambiar cualquier usuario.
     - Otros admin solo pueden cambiar a técnicos (role='user'); no pueden tocar a otros admin.
     """
-    if sess["role"] != "admin":
+    requester_username = (sess.get("username") or sess.get("user") or "").lower()
+    if not can_manage_users(sess.get("role"), requester_username):
         raise HTTPException(status_code=403, detail="Acceso denegado")
 
     target_user = session.get(User, user_id)
     if not target_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    # Solo el superadmin 'admin' puede modificar a usuarios admin
-    if target_user.role == "admin" and sess["username"] != "admin":
-        raise HTTPException(status_code=403, detail="Solo el usuario principal 'admin' puede cambiar contraseñas de administradores")
+    target_norm_role = normalize_role(target_user.role, target_user.username)
+    if target_norm_role in ("admin", "administrator") and not is_superuser(requester_username):
+        raise HTTPException(status_code=403, detail="Solo el superusuario puede cambiar contraseñas de administradores")
 
     target_user.password_hash = get_password_hash(payload.new_password)
     session.add(target_user)

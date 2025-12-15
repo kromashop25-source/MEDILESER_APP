@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 
 from ..core.db import engine
 from ..core.permissions import get_effective_allowed_modules, validate_known_modules
+from ..core.rbac import is_superuser
 from ..models import User
 from .auth import _SESSIONS, get_current_user_session
 
@@ -33,8 +34,9 @@ def list_user_permissions(
     sess: dict = Depends(get_current_user_session),
     session: Session = Depends(get_session),
 ):
-    if (sess.get("role") or "").lower() != "admin":
-        raise HTTPException(status_code=403, detail="Requiere privilegios de administrador")
+    requester_username = (sess.get("username") or sess.get("user") or "").lower()
+    if not is_superuser(requester_username):
+        raise HTTPException(status_code=403, detail="Requiere privilegios de superusuario")
 
     users = session.exec(select(User)).all()
     return [
@@ -42,7 +44,11 @@ def list_user_permissions(
             id=u.id or 0,
             username=u.username,
             role=u.role,
-            allowedModules=get_effective_allowed_modules(u.role, getattr(u, "allowed_modules", None)),
+            allowedModules=get_effective_allowed_modules(
+                u.role,
+                getattr(u, "allowed_modules", None),
+                username=u.username,
+            ),
         )
         for u in users
     ]
@@ -55,12 +61,15 @@ def update_user_permissions(
     sess: dict = Depends(get_current_user_session),
     session: Session = Depends(get_session),
 ):
-    if (sess.get("role") or "").lower() != "admin":
-        raise HTTPException(status_code=403, detail="Requiere privilegios de administrador")
+    requester_username = (sess.get("username") or sess.get("user") or "").lower()
+    if not is_superuser(requester_username):
+        raise HTTPException(status_code=403, detail="Requiere privilegios de superusuario")
 
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if is_superuser(user.username):
+        raise HTTPException(status_code=400, detail="No se pueden modificar los permisos del superusuario")
 
     try:
         normalized = validate_known_modules(payload.allowedModules)
@@ -72,7 +81,7 @@ def update_user_permissions(
     session.commit()
     session.refresh(user)
 
-    effective = get_effective_allowed_modules(user.role, user.allowed_modules)
+    effective = get_effective_allowed_modules(user.role, user.allowed_modules, username=user.username)
 
     for s in _SESSIONS.values():
         if s.get("userId") == user_id:
@@ -84,4 +93,3 @@ def update_user_permissions(
         role=user.role,
         allowedModules=effective,
     )
-

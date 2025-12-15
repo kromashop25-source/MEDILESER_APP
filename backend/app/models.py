@@ -17,7 +17,7 @@ class User(SQLModel, table=True):
     last_name: str
     password_hash: str
     tech_number: int
-    role: str = Field(default="user")  # "admin" | "user"
+    role: str = Field(default="technician")  # admin | administrator | technician | standard (legacy: user)
     is_active: bool = Field(default=True)
     allowed_modules: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
 

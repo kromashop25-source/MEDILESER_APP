@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { api } from "../../api/client";
-import { getAuth } from "../../api/auth";
+import { getAuth, isSuperuser, normalizeRole } from "../../api/auth";
 import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
 import PasswordModal from "../oi/PasswordModal";
@@ -14,13 +14,15 @@ type User = {
   first_name: string;
   last_name: string;
   tech_number: number;
-  role: "admin" | "user";
+  role: "admin" | "administrator" | "technician" | "standard" | "user";
 };
 
 export default function UsersPage() {
   const { toast } = useToast();
   const auth = getAuth();
-  const isAdmin = auth?.role === "admin";
+  const role = normalizeRole(auth?.role, auth?.username);
+  const canManageUsers = role === "admin" || role === "administrator";
+  const superuser = isSuperuser(auth);
 
   // Estado
   const [showCreate, setShowCreate] = useState(false);
@@ -31,7 +33,7 @@ export default function UsersPage() {
   const { data: users, refetch, isLoading } = useQuery<User[]>({
     queryKey: ["users"],
     queryFn: async () => (await api.get("/auth/users")).data,
-    enabled: isAdmin,
+    enabled: canManageUsers,
   });
 
   const { register, handleSubmit, reset } = useForm<any>();
@@ -82,7 +84,7 @@ export default function UsersPage() {
     }
   };
 
-  if (!isAdmin) return <div className="p-4 text-danger">Acceso no autorizado</div>;
+  if (!canManageUsers) return <div className="p-4 text-danger">Acceso no autorizado</div>;
 
   return (
     <div className="container-fluid p-4 vi-oi-light">
@@ -113,9 +115,20 @@ export default function UsersPage() {
                   <td className="fw-bold">{u.username}</td>
                   <td>{u.first_name} {u.last_name}</td>
                   <td>
-                    <span className={`badge ${u.role === "admin" ? "bg-danger" : "bg-info text-dark"}`}>
-                      {u.role === "admin" ? "Admin" : "Técnico"}
-                    </span>
+                    {(() => {
+                      const uRole = normalizeRole(u.role, u.username);
+                      const label =
+                        u.username.toLowerCase() === "admin" ? "Superusuario" :
+                        uRole === "administrator" ? "Administrador" :
+                        uRole === "technician" ? "Técnico" :
+                        "Estándar";
+                      const badgeCls =
+                        u.username.toLowerCase() === "admin" ? "bg-danger" :
+                        uRole === "administrator" ? "bg-warning text-dark" :
+                        uRole === "technician" ? "bg-info text-dark" :
+                        "bg-secondary";
+                      return <span className={`badge ${badgeCls}`}>{label}</span>;
+                    })()}
                   </td>
                   <td>{u.tech_number}</td>
                   <td className="text-end">
@@ -123,6 +136,7 @@ export default function UsersPage() {
                       className="btn btn-sm btn-outline-primary me-2"
                       title="Cambiar contraseña"
                       aria-label={`Cambiar contraseña de ${u.username}`}
+                      disabled={u.username === "admin" || (!superuser && normalizeRole(u.role, u.username) === "administrator")}
                       onClick={() => setPwdUser(u)}
                     >
                       <i className="ti ti-key" />
@@ -132,7 +146,7 @@ export default function UsersPage() {
                       title="Eliminar usuario"
                       aria-label={`Eliminar ${u.username}`}
                       // Bloqueo visual simple, validación real en backend
-                      disabled={u.username === "admin"}
+                      disabled={u.username === "admin" || (!superuser && normalizeRole(u.role, u.username) === "administrator")}
                       onClick={() => onDelete(u)}
                     >
                       <i className="ti ti-trash" />
@@ -180,14 +194,15 @@ export default function UsersPage() {
                 <div className="col-6">
                   <label className="form-label">Rol</label>
                   <select className="form-select" {...register("role")}>
-                    <option value="user">Técnico</option>
-                    <option value="admin">Administrador</option>
+                    <option value="technician">Técnico</option>
+                    <option value="standard">Estándar</option>
+                    {superuser ? <option value="administrator">Administrador</option> : null}
                   </select>
                 </div>
                 <div className="col-6">
                   <label className="form-label">N° Técnico</label>
                   <input type="number" className="form-control" {...register("tech_number", { required: true })} />
-                  <div className="form-text small">Use 0 si es admin sin técnico</div>
+                  <div className="form-text small">Use 0 si no aplica (admin/estándar)</div>
                 </div>
               </div>
               <div className="modal-footer">

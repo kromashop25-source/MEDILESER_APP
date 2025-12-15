@@ -10,6 +10,7 @@ from sqlalchemy import func, desc
 from sqlalchemy.sql.elements import ColumnElement
 
 from ..core.db import engine
+from ..core.rbac import is_admin_like_for_oi, is_technician_role
 from ..models import OI, Bancada, User
 from ..schemas import (
     OICreate,
@@ -48,11 +49,10 @@ def _get_session_from_header(authorization: str | None) -> dict:
     if "user" not in sess and "username" in sess:
         sess["user"] = sess["username"]
 
-    # Para usuarios no-admin, exigimos banco seleccionado para evitar operar sin contexto.
+    # Banco obligatorio solo para usuarios técnicos.
     role = (sess.get("role") or "").lower()
     username = (sess.get("username") or sess.get("user") or "").lower()
-    is_admin = role == "admin" or username == "admin"
-    if not is_admin:
+    if is_technician_role(role, username):
         banco_id = sess.get("bancoId")
         try:
             banco_id_int = int(banco_id) if banco_id is not None else None
@@ -69,7 +69,7 @@ def _is_admin(sess: dict) -> bool:
     """Determina si la sesión corresponde a un usuario administrador."""
     username = (sess.get("username") or sess.get("user") or "").lower()
     role = (sess.get("role") or "").lower()
-    return role == "admin" or username == "admin"
+    return is_admin_like_for_oi(role, username)
 
 def _normalize_numeration_type(raw: str | NumerationType | None) -> str:
     """
@@ -172,7 +172,7 @@ def _get_lock_state(
         active
         and current_sess
         and _is_admin(current_sess)
-        and owner_role == "user"
+        and is_technician_role(owner_role, owner.username if owner else None)
         and locked_by_user_id != current_sess.get("userId")
     ):
         read_only = True
@@ -203,7 +203,10 @@ def _ensure_lock_allows_write(oi: OI, sess: dict, session: Session) -> dict:
     current_user_id = sess.get("userId")
 
     if _is_admin(sess):
-        if owner_id is not None and owner_id != current_user_id and lock_state["owner_role"] == "user":
+        if owner_id is not None and owner_id != current_user_id and is_technician_role(
+            lock_state.get("owner_role"),
+            getattr(lock_state.get("owner"), "username", None),
+        ):
             name = lock_state["locked_by_full_name"] or "otro usuario"
             raise HTTPException(
                 status_code=423,

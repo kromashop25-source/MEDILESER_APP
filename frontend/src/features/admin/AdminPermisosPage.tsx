@@ -14,6 +14,9 @@ const MODULES: ModuleDef[] = [
   { id: "tools_actualizacion_bases", label: "Actualización de Bases", path: "/oi/tools/actualizacion-base" },
   { id: "tools_consol_correlativo", label: "Consolidación (Correlativo)", path: "/oi/tools/consolidacion/correlativo" },
   { id: "tools_consol_no_correlativo", label: "Consolidación (No Correlativo)", path: "/oi/tools/consolidacion/no-correlativo" },
+  { id: "future_ot", label: "Orden de Trabajo (FUTURO)", path: "FUTURO" },
+  { id: "future_logistica", label: "Logística (FUTURO)", path: "FUTURO" },
+  { id: "future_smart", label: "Smart (FUTURO)", path: "FUTURO" },
   { id: "users_admin", label: "Gestión de usuarios", path: "/users" },
   { id: "admin_permisos", label: "Permisos", path: "/admin/permisos" },
 ];
@@ -41,6 +44,7 @@ export default function AdminPermisosPage() {
 
   const [editing, setEditing] = useState<UserPermissions | null>(null);
   const [draft, setDraft] = useState<string[]>([]);
+  const editingIsSuperuser = (editing?.username ?? "").toLowerCase() === "admin";
 
   const openEdit = (u: UserPermissions) => {
     setEditing(u);
@@ -116,7 +120,12 @@ export default function AdminPermisosPage() {
                         <td>{u.username}</td>
                         <td>{u.role}</td>
                         <td className="text-end">
-                          <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openEdit(u)}>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => openEdit(u)}
+                            disabled={(u.username ?? "").toLowerCase() === "admin"}
+                          >
                             Editar
                           </button>
                         </td>
@@ -158,6 +167,11 @@ export default function AdminPermisosPage() {
               </div>
 
               <div className="modal-body">
+                {editingIsSuperuser ? (
+                  <div className="alert alert-info" role="alert">
+                    El superusuario <b>admin</b> siempre tiene acceso total y no se puede limitar por permisos.
+                  </div>
+                ) : null}
                 <div className="row">
                   {MODULES.map((m) => (
                     <div key={m.id} className="col-md-6 mb-2">
@@ -168,7 +182,7 @@ export default function AdminPermisosPage() {
                           id={`perm-${editing.id}-${m.id}`}
                           checked={draft.includes(m.id)}
                           onChange={() => toggle(m.id)}
-                          disabled={mutation.isPending}
+                          disabled={mutation.isPending || editingIsSuperuser}
                         />
                         <label className="form-check-label" htmlFor={`perm-${editing.id}-${m.id}`}>
                           {m.label} <span className="text-muted">({m.path})</span>
@@ -187,7 +201,12 @@ export default function AdminPermisosPage() {
                 <button type="button" className="btn btn-outline-secondary" onClick={closeEdit} disabled={mutation.isPending}>
                   Cancelar
                 </button>
-                <button type="button" className="btn btn-primary" onClick={save} disabled={mutation.isPending}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={save}
+                  disabled={mutation.isPending || editingIsSuperuser}
+                >
                   Guardar
                 </button>
               </div>
@@ -198,4 +217,3 @@ export default function AdminPermisosPage() {
     </div>
   );
 }
-

@@ -11,7 +11,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
 import PasswordModal from "./PasswordModal";
-import { getAuth } from "../../api/auth";
+import { getAuth, normalizeRole } from "../../api/auth";
 
 export default function OiListPage() {
   const { toast } = useToast();
@@ -59,7 +59,7 @@ export default function OiListPage() {
 
   // Usuario autenticado y rol (admin vs técnico)
   const auth = getAuth();
-  const isAdmin = auth?.username?.toLowerCase() === "admin";
+  const isAdmin = normalizeRole(auth?.role, auth?.username) !== "technician";
 
   const formatDateTime = (iso: string | null | undefined) => {
     if (!iso) return "-";

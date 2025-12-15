@@ -101,7 +101,9 @@ class UserBase(BaseModel):
     first_name: str
     last_name: str
     tech_number: int
-    role: Literal["admin", "user"] = "user"
+    # Roles: admin (superusuario), administrator, technician, standard
+    # Legacy soportado: user (equivale a technician)
+    role: Literal["admin", "administrator", "technician", "standard", "user"] = "technician"
 
 class UserCreate(UserBase):
     password: str

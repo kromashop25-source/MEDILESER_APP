@@ -2,6 +2,9 @@ import { api } from "./client";
 
 export type LoginInput = { username: string; password: string; bancoId?: number | null };
 
+export type NormalizedRole = "admin" | "administrator" | "technician" | "standard";
+export type UserRole = NormalizedRole | "user";
+
 export type AuthPayload = {
   user?: string; // compatibilidad hacia atrás
   userId: number;
@@ -12,7 +15,7 @@ export type AuthPayload = {
   bancoId: number | null;
   techNumber: number;
   token: string;
-  role?: "admin" | "user";
+  role?: UserRole;
   allowedModules?: string[];
 };
 
@@ -21,9 +24,24 @@ export type LoginOut = AuthPayload;
 const SELECTED_BANK_KEY = "medileser.selectedBank";
 const SELECTED_BANK_EVENT = "medileser:selectedBank";
 
-export function isTechnicianRole(role?: string): boolean {
+export function normalizeRole(role?: string, username?: string): NormalizedRole {
+  const u = (username ?? "").toLowerCase();
+  if (u === "admin") return "admin";
+
   const r = (role ?? "").toLowerCase();
-  return r === "user" || r === "tecnico" || r === "técnico" || r === "technician";
+  if (r === "admin" || r === "administrator" || r === "administrador") return "administrator";
+  if (r === "technician" || r === "user" || r === "tecnico" || r === "técnico") return "technician";
+
+  return "standard";
+}
+
+export function isTechnicianRole(role?: string): boolean {
+  return normalizeRole(role) === "technician";
+}
+
+export function isSuperuser(auth?: Pick<AuthPayload, "username" | "user" | "role"> | null): boolean {
+  const username = (auth?.username ?? auth?.user ?? "").toLowerCase();
+  return username === "admin";
 }
 
 export function getSelectedBank(): number | null {
@@ -100,6 +118,7 @@ export function getAuth(): LoginOut | null {
 
   try {
     const obj = JSON.parse(raw) as any;
+    const username = obj.username ?? obj.user ?? "";
 
     const fullNameFromParts =
       [obj.firstName, obj.lastName].filter(Boolean).join(" ") || undefined;
@@ -107,14 +126,14 @@ export function getAuth(): LoginOut | null {
     const auth: LoginOut = {
       user: obj.user ?? obj.username ?? "",
       userId: obj.userId ?? obj.id ?? 0,
-      username: obj.username ?? obj.user ?? "",
+      username,
       firstName: obj.firstName ?? "",
       lastName: obj.lastName ?? "",
-      fullName: obj.fullName ?? fullNameFromParts ?? obj.username ?? obj.user ?? "",
+      fullName: obj.fullName ?? fullNameFromParts ?? username,
       bancoId: obj.bancoId ?? null,
       token: obj.token,
       techNumber: obj.techNumber,
-      role: obj.role ?? (obj.username?.toLowerCase() === "admin" ? "admin" : "user"),
+      role: normalizeRole(obj.role, username),
       allowedModules: Array.isArray(obj.allowedModules) ? obj.allowedModules : undefined,
     };
 

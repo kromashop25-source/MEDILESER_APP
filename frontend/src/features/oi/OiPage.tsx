@@ -6,7 +6,7 @@ import { OISchema, pressureFromPMA, type OIForm, type OIFormInput, type BancadaR
 import { useMemo, useEffect, useState } from "react";
 import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
-import { getAuth } from "../../api/auth";
+import { getAuth, normalizeRole } from "../../api/auth";
 import BancadaModal, { type BancadaForm } from "./BancadaModal";
 import PasswordModal from "./PasswordModal";
 import {
@@ -95,8 +95,7 @@ export default function OiPage() {
   });
   const auth = useMemo(() => getAuth(), []);
   const authUserId = auth?.userId ?? null;
-  const authUsernameLower = (auth?.username ?? "").toLowerCase();
-  const isAdmin = (auth?.role ?? "").toLowerCase() === "admin" || authUsernameLower === "admin";
+  const isAdmin = normalizeRole(auth?.role, auth?.username) !== "technician";
   const [busy, setBusy] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [lockedByName, setLockedByName] = useState<string | null>(null);
@@ -747,5 +746,4 @@ export default function OiPage() {
     </div>
   );
 }
-
 
