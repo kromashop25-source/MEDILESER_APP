@@ -163,7 +163,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const canFutureSmart = isAuth && isAllowed("future_smart");
 
   const showConsolidacionGroup = canConsolCorrelativo || canConsolNoCorrelativo;
-  const showFormatoAcGroup = canVimaToLista || canActualizacionBases || showConsolidacionGroup;
+  const showFormatoAcGroup = canVimaToLista || canActualizacionBases;
   const showVerificacionGroup = canRegistroOi || canListadoOi || canFutureOt;
   const showOiGroup = showFormatoAcGroup || showVerificacionGroup || showConsolidacionGroup;
 
@@ -171,7 +171,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
     () => ({
       oi: true,
       oi_formato_ac: true,
-      oi_consolidacion: false,
+      oi_consolidacion: true,
       oi_verificacion: true,
       usuarios: false,
       administrar: false,
@@ -225,9 +225,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           activeLeaves.consolidacionCorrelativo || activeLeaves.consolidacionNoCorrelativo,
         oi_formato_ac:
           activeLeaves.vimaToLista ||
-          activeLeaves.actualizacionBases ||
-          activeLeaves.consolidacionCorrelativo ||
-          activeLeaves.consolidacionNoCorrelativo,
+          activeLeaves.actualizacionBases,
         oi_verificacion: activeLeaves.registroOi || activeLeaves.listadoOi,
         oi:
           activeLeaves.vimaToLista ||
@@ -320,13 +318,13 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           )}
           {showConsolidacionGroup && (
           <SidebarGroup
-            groupKey="oi_formato_ac"
-            icon="ti-folder"
+            groupKey="oi_consolidacion"
+            icon="ti-layers"
             label="CONSOLIDACIÓN DE BASES ORIGINALES"
             depth={1}
             collapsed={collapsed}
-            open={open.oi_formato_ac}
-            active={activeGroups.oi_formato_ac}
+            open={open.oi_consolidacion}
+            active={activeGroups.oi_consolidacion}
             onToggle={toggleGroup}
           >
             {canConsolCorrelativo && (
