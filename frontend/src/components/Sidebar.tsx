@@ -165,7 +165,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const showConsolidacionGroup = canConsolCorrelativo || canConsolNoCorrelativo;
   const showFormatoAcGroup = canVimaToLista || canActualizacionBases || showConsolidacionGroup;
   const showVerificacionGroup = canRegistroOi || canListadoOi || canFutureOt;
-  const showOiGroup = showFormatoAcGroup || showVerificacionGroup;
+  const showOiGroup = showFormatoAcGroup || showVerificacionGroup || showConsolidacionGroup;
 
   const DEFAULT_OPEN: Record<GroupKey, boolean> = useMemo(
     () => ({
@@ -316,36 +316,36 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
               />
             )}
 
-            {showConsolidacionGroup && (
-            <SidebarGroup
-              groupKey="oi_consolidacion"
-              icon="ti-layers"
-              label="CONSOLIDACIÓN DE BASES ORIGINALES"
-              depth={2}
-              collapsed={collapsed}
-              open={open.oi_consolidacion}
-              active={activeGroups.oi_consolidacion}
-              onToggle={toggleGroup}
-            >
-              {canConsolCorrelativo && (
-                <SidebarNavItem
-                  to="/oi/tools/consolidacion/correlativo"
-                  icon="ti-list"
-                  label="CORRELATIVO"
-                  depth={3}
-                  collapsed={collapsed}
-                />
-              )}
-              {canConsolNoCorrelativo && (
-                <SidebarNavItem
-                  to="/oi/tools/consolidacion/no-correlativo"
-                  icon="ti-layout-list-thumb"
-                  label="NO CORRELATIVO"
-                  depth={3}
-                  collapsed={collapsed}
-                />
-              )}
-            </SidebarGroup>
+          </SidebarGroup>
+          )}
+          {showConsolidacionGroup && (
+          <SidebarGroup
+            groupKey="oi_formato_ac"
+            icon="ti-folder"
+            label="CONSOLIDACIÓN DE BASES ORIGINALES"
+            depth={1}
+            collapsed={collapsed}
+            open={open.oi_formato_ac}
+            active={activeGroups.oi_formato_ac}
+            onToggle={toggleGroup}
+          >
+            {canConsolCorrelativo && (
+              <SidebarNavItem
+                to="/oi/tools/consolidacion/correlativo"
+                icon="ti-list"
+                label="CORRELATIVO"
+                depth={3}
+                collapsed={collapsed}
+              />
+            )}
+            {canConsolNoCorrelativo && (
+              <SidebarNavItem
+                to="/oi/tools/consolidacion/no-correlativo"
+                icon="ti-layout-list-thumb"
+                label="NO CORRELATIVO"
+                depth={3}
+                collapsed={collapsed}
+              />
             )}
           </SidebarGroup>
           )}
