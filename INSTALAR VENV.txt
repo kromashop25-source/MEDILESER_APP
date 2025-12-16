@@ -1,0 +1,57 @@
+OPCION CON CMD (RECOMENDADA)
+- Instala Python 3.11
+winget install -e --id Python.Python.3.11
+- Luego cierra y abre CMD y verifica:
+py --list
+py -3.11 --version
+
+REM 1) Ir a la carpeta del proyecto (ajusta la ruta)
+EJEM: cd /d Z:\PROYECTO\FORMATO_A_C\project_formato_web
+REM 2) Crear el entorno virtual
+py -3.11 -m venv .venv
+REM 3) Activar el entorno
+.\.venv\Scripts\actívate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+REM 4) Actualizar instaladores base
+python -m pip install --upgrade pip setuptools Wheel
+REM 5) Instalar dependencias del proyecto
+pip install -r requirements.txt
+Punto clave: después de activar, comprueba:
+
+python --version
+where python
+pip --version
+REM 6) Verificar librerías clave (opcional)
+python -c "import fastapi,pandas,openpyxl,uvicorn; print('OK')"
+
+(Opcional) Arrancar el server para validar que todo respira
+# desde el venv activo
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8013
+# Navega a: http://127.0.0.1:8013/ui/dashboard
+
+1) Crear el entorno virtual .venv
+py -3.13 -m venv .venv
+
+2). Activar el .venv
+.\.venv\Scripts\activate.bat
+
+3). Verás el prefijo (.venv) al inicio de la línea: significa que está activo.
+python -m pip install --upgrade pip setuptools wheel
+
+4). Instalar dependencias del proyecto
+Si ya tienes requirements.txt en la raíz:
+python -m pip install -r requirements.txt
+
+5). Seleccionar el intérprete en VS Code
+En VS Code: Ctrl+Shift+P → Python: Select Interpreter → elige .\.venv\Scripts\python.exe.
+
+6) Verificar importaciones clave
+python -c "import fastapi, uvicorn, pandas, openpyxl, jinja2; print('OK imports')"
+
+7) Probar el servidor local
+Con el .venv aún activo:
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+
+
+
