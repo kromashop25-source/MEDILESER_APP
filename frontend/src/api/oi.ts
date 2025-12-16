@@ -30,6 +30,7 @@ export type OIListQuery = {
   dateTo?: string;
   limit?: number;
   offset?: number;
+  responsableTechNumber?: number;
 };
 
 export type OIListResponse = {
@@ -255,6 +256,7 @@ export async function listOI(params: OIListQuery): Promise<OIListResponse> {
         date_to: params.dateTo || undefined,
         limit: params.limit,
         offset: params.offset,
+        responsable_tech_number: params.responsableTechNumber || undefined,
       },
       headers: {
         "Cache-Control": "no-cache",
@@ -268,6 +270,21 @@ export async function listOI(params: OIListQuery): Promise<OIListResponse> {
       e?.response?.data?.detail ??
       e?.message ??
       "No se pudo obtener el listado de OI";
+    throw new Error(msg);
+  }
+}
+
+export type ResponsableOption = {
+  tech_number: number;
+  full_name: string;
+};
+
+export async function listResponsables(): Promise<ResponsableOption[]> {
+  try {
+    const { data } = await api.get<ResponsableOption[]>("/oi/responsables");
+    return data;
+  } catch (e: any) {
+    const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo obtener responsables";
     throw new Error(msg);
   }
 }

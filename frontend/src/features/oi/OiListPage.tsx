@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   listOI,
+  listResponsables,
   generateExcel,
   saveCurrentOI,
   deleteOI,
 } from "../../api/oi";
+
 import type { OIListResponse, OIRead } from "../../api/oi";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
@@ -12,6 +14,7 @@ import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
 import PasswordModal from "./PasswordModal";
 import { getAuth, normalizeRole } from "../../api/auth";
+
 
 export default function OiListPage() {
   const { toast } = useToast();
@@ -24,6 +27,7 @@ export default function OiListPage() {
   const [dateTo, setDateTo] = useState("");
   const [pageSize, setPageSize] = useState(20); // por defecto 20
   const [page, setPage] = useState(1); // página 1-based
+  const [responsableTech, setResponsableTech] = useState<string>(""); // "" = todos
 
   const offset = (page - 1) * pageSize;
 
@@ -44,23 +48,30 @@ export default function OiListPage() {
     refetch,
     isFetching,
   } = useQuery<OIListResponse>({
-    queryKey: ["oi", "list", { search, dateFrom, dateTo, pageSize, offset }],
+    queryKey: ["oi", "list", { search, dateFrom, dateTo, responsableTech, pageSize, offset }],
     queryFn: () =>
       listOI({
         q: search || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
+        responsableTechNumber: responsableTech ? Number(responsableTech) : undefined,
         limit: pageSize,
         offset,
       }),
-    // Conserva los datos anteriores mientras se trae la nueva página/búsqueda
-    placeholderData: (prev) => prev,
-  });
+
+        // Conserva los datos anteriores mientras se trae la nueva página/búsqueda
+        placeholderData: (prev) => prev,
+      });
 
   // Usuario autenticado y rol (admin vs técnico)
   const auth = getAuth();
   const isAdmin = normalizeRole(auth?.role, auth?.username) !== "technician";
-
+  const { data: responsables = [], isFetching: loadingResponsables } = useQuery({
+  queryKey: ["oi", "responsables"],
+  queryFn: listResponsables,
+  enabled: isAdmin,
+  staleTime: 60_000,
+});
   const formatDateTime = (iso: string | null | undefined) => {
     if (!iso) return "-";
 
@@ -171,7 +182,12 @@ export default function OiListPage() {
     setDateFrom("");
     setDateTo("");
     setPage(1);
+    setResponsableTech("");
   };
+  const from = total === 0 ? 0 : offset + 1;
+  const to = total === 0 ? 0 : Math.min(offset + rows.length, total);
+  const legend =
+    total === 0 ? "0 registros" : `Mostrando ${from}-${to} de ${total} registros`;
 
   return (
     <div>
@@ -237,6 +253,27 @@ export default function OiListPage() {
               }}
               aria-label="Filtrar hasta fecha"
             />
+            {isAdmin && (
+              <select
+                className="form-select form-select-sm"
+                value={responsableTech}
+                onChange={(e) => {
+                  setResponsableTech(e.target.value);
+                  setPage(1);
+                }}
+                disabled={busy || loadingResponsables}
+                aria-label="Filtrar por responsable"
+                title="Responsable"
+              >
+                <option value="">Responsable: Todos</option>
+                {responsables.map((u) => (
+                  <option key={u.tech_number} value={String(u.tech_number)}>
+                    {u.full_name}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <div className="d-flex align-items-center">
               <span className="me-1 small">Mostrar</span>
               <select
@@ -327,6 +364,7 @@ export default function OiListPage() {
                           🗑️
                         </button>
                       )}
+                      
                     </td>
                   </tr>
                 ))}
@@ -382,6 +420,10 @@ export default function OiListPage() {
           )}
         </div>
       </div>
+      <div className="px-3 py-2 d-flex justify-content-end">
+        <small className="text-muted">{legend}</small>
+      </div>
+
 
       <PasswordModal
         show={showPwd}

@@ -71,13 +71,13 @@ def _is_admin(sess: dict) -> bool:
     role = (sess.get("role") or "").lower()
     return is_admin_like_for_oi(role, username)
 
-def _normalize_numeration_type(raw: str | NumerationType | None) -> str:
+def _normalize_numeration_type(raw: str | NumerationType | None) -> NumerationType:
     """
     Normaliza el tipo de numeración aceptando variantes con guión bajo
-    (no_correlativo) y devolviendo siempre el valor oficial con espacio.
+    (no_correlativo) y devolviendo siempre el enum oficial.
     """
     if raw is None:
-        return NumerationType.correlativo.value
+        return NumerationType.correlativo
     try:
         enum_val = raw if isinstance(raw, NumerationType) else NumerationType(raw)
     except Exception:
@@ -88,7 +88,7 @@ def _normalize_numeration_type(raw: str | NumerationType | None) -> str:
                 detail="Tipo de numeración inválido; use 'correlativo' o 'no correlativo'.",
             )
         enum_val = candidate
-    return enum_val.value
+    return enum_val
 
 def _ensure_oi_access(oi: OI, sess: dict) ->  None:
     """
@@ -263,10 +263,8 @@ def _build_oi_read(
 ) -> OIRead:
     full_name = get_full_name_by_tech_number(oi.tech_number) or ""
     oi_id_int = cast(int, oi.id)
-    numeration_type = (
-        oi.numeration_type.value
-        if isinstance(oi.numeration_type, NumerationType)
-        else str(oi.numeration_type)
+    numeration_type = _normalize_numeration_type(
+        oi.numeration_type.value if isinstance(oi.numeration_type, NumerationType) else str(oi.numeration_type)
     )
     lock_state = lock_state or (_get_lock_state(oi, session, current_sess) if session else None)
     locked_by_user_id = lock_state["locked_by_user_id"] if lock_state else None
@@ -334,7 +332,7 @@ def create_oi(
     session.refresh(oi)
     return _build_oi_read(oi, session, sess)
 
-@router.put("/{oi_id}", response_model=OIRead)
+@router.put("/{oi_id:int}", response_model=OIRead)
 def update_oi(
     oi_id: int,
     payload: OIUpdate,
@@ -384,7 +382,7 @@ def update_oi(
     return _build_oi_read(oi, session, sess)
 
 
-@router.get("/{oi_id}", response_model=OIRead)
+@router.get("/{oi_id:int}", response_model=OIRead)
 def get_oi(
     oi_id: int,
     session: Session = Depends(get_session),
@@ -399,7 +397,7 @@ def get_oi(
     return _build_oi_read(oi, session, sess)
 
 
-@router.post("/{oi_id}/lock", response_model=OIRead)
+@router.post("/{oi_id:int}/lock", response_model=OIRead)
 def acquire_lock(
     oi_id: int,
     session: Session = Depends(get_session),
@@ -448,7 +446,7 @@ def acquire_lock(
     return _build_oi_read(oi, session, sess, lock_state)
 
 
-@router.delete("/{oi_id}/lock")
+@router.delete("/{oi_id:int}/lock")
 def release_lock(
     oi_id: int,
     session: Session = Depends(get_session),
@@ -473,6 +471,48 @@ def release_lock(
     session.commit()
     return {"ok": True}
 
+class ResponsableOut(BaseModel):
+    tech_number: int
+    full_name: str
+
+
+@router.get("/responsables", response_model=List[ResponsableOut])
+def list_responsables(
+    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+):
+    """
+    Devuelve lista de técnicos para poblar el filtro 'Responsable'.
+    - Admin: ve todos los técnicos activos.
+    - Técnico/otros: devuelve solo su propio usuario (si aplica).
+    """
+    sess = _get_session_from_header(authorization)
+    is_admin = _is_admin(sess)
+
+    if not is_admin:
+        tech_number = sess.get("techNumber")
+        if not tech_number:
+            return []
+        name = get_full_name_by_tech_number(int(tech_number)) or ""
+        return [ResponsableOut(tech_number=int(tech_number), full_name=name)]
+
+    role_col = func.lower(User.role)
+    stmt = (
+        select(User)
+        .where(User.is_active == True)  # noqa: E712
+        .where(User.tech_number > 0)
+        .where(role_col.in_(["technician", "user", "tecnico", "técnico"]))
+        .order_by(User.first_name, User.last_name)
+    )
+
+    users = session.exec(stmt).all()
+    out: list[ResponsableOut] = []
+    for u in users:
+        full_name = f"{u.first_name} {u.last_name}".strip()
+        out.append(ResponsableOut(tech_number=u.tech_number, full_name=full_name))
+    return out
+
+
 @router.get("", response_model=OIListResponse)
 def list_oi(
     q: str | None = None,
@@ -480,6 +520,7 @@ def list_oi(
     date_to: str | None = None,
     limit: int = 20,
     offset: int = 0,
+    responsable_tech_number: int | None = None,
     session: Session = Depends(get_session),
     authorization: str | None = Header(default=None),
 ):
@@ -529,6 +570,15 @@ def list_oi(
         end_dt_plus = end_dt + timedelta(days=1)
         conditions.append(OI.created_at < end_dt_plus)  # type: ignore[arg-type]
 
+    # Filtro por Responsable (tech_number)
+    if responsable_tech_number is not None:
+        try:
+            resp_tech = int(responsable_tech_number)
+        except Exception:
+            raise HTTPException(status_code=400, detail="responsable_tech_number inválido")
+        if resp_tech > 0:
+            conditions.append(OI.tech_number == resp_tech)
+
     # --- Consulta base con filtros ---
     base_stmt = select(OI)
     if conditions:
@@ -562,7 +612,8 @@ def list_oi(
     )
 
 
-@router.delete("/{oi_id}")
+
+@router.delete("/{oi_id:int}")
 def delete_oi(
     oi_id: int,
     session: Session = Depends(get_session),
@@ -599,7 +650,7 @@ def _dump_rows_data(rows):
     return dumped
 
 
-@router.post("/{oi_id}/bancadas", response_model=BancadaRead)
+@router.post("/{oi_id:int}/bancadas", response_model=BancadaRead)
 def add_bancada(
     oi_id: int,
     payload: BancadaCreate,
@@ -641,7 +692,7 @@ def add_bancada(
     session.refresh(b)
     return BancadaRead.model_validate(b)
 
-@router.get("/{oi_id}/with-bancadas", response_model=OiWithBancadasRead)
+@router.get("/{oi_id:int}/with-bancadas", response_model=OiWithBancadasRead)
 def get_oi_with_bancadas(
     oi_id: int,
     session: Session = Depends(get_session),
@@ -663,7 +714,7 @@ def get_oi_with_bancadas(
     )
 
 # Alias para el frontend: /oi/{id}/full → mismo payload que /with-bancadas
-@router.get("/{oi_id}/full", response_model=OiWithBancadasRead)
+@router.get("/{oi_id:int}/full", response_model=OiWithBancadasRead)
 def get_oi_full(
     oi_id: int,
     session: Session = Depends(get_session),
@@ -742,7 +793,7 @@ def delete_bancada(
     session.commit()
     return {"ok": True}
 
-@router.post("/{oi_id}/excel")
+@router.post("/{oi_id:int}/excel")
 def export_excel(
     oi_id: int,
     req: ExcelRequest,
@@ -783,7 +834,7 @@ def export_excel(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
-@router.get("/{oi_id}/bancadas-list", response_model=List[BancadaRead])
+@router.get("/{oi_id:int}/bancadas-list", response_model=List[BancadaRead])
 def list_bancadas(
     oi_id: int,
     session: Session = Depends(get_session),
