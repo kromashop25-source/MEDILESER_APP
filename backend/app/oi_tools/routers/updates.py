@@ -91,8 +91,12 @@ def dry_run_upload(
     try:
         probe_open_all_ois(oi_payload, pw, oi_pattern)
     except PasswordRequiredError as e:
+        if operation_id:
+            progress_manager.finish(operation_id)
         raise HTTPException(status_code=401, detail=str(e), headers={"X-Code": "PASSWORD_REQUIRED"})
     except WrongPasswordError as e:
+        if operation_id:
+            progress_manager.finish(operation_id)
         raise HTTPException(status_code=403, detail=str(e), headers={"X-Code": "WRONG_PASSWORD"})
 
     # Opciones y stream real
@@ -189,6 +193,8 @@ def run_upload(
     )
     except ValueError as e:
         # p.ej. overflow de filas de Excel
+        if operation_id:
+            progress_manager.finish(operation_id)
         raise HTTPException(status_code=400, detail=str(e))
 
     # Completar y responder

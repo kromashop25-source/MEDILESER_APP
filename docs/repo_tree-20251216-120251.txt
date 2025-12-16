@@ -1,0 +1,396 @@
+MEDILESER_APP
+├── .vscode
+│   └── settings.json
+├── app
+│   └── __init__.py
+├── backend
+│   ├── app
+│   │   ├── api
+│   │   │   ├── __init__.py
+│   │   │   ├── admin.py
+│   │   │   ├── auth.py
+│   │   │   ├── catalogs.py
+│   │   │   └── oi.py
+│   │   ├── core
+│   │   │   ├── db.py
+│   │   │   ├── logging_config.py
+│   │   │   ├── permissions.py
+│   │   │   ├── rbac.py
+│   │   │   ├── security.py
+│   │   │   └── settings.py
+│   │   ├── data
+│   │   │   ├── seed
+│   │   │   │   └── initial_rbac.json
+│   │   │   └── templates
+│   │   │       ├── oi_tools
+│   │   │       │   ├── BASE_TEMPLATE.xlsx
+│   │   │       │   └── FORMULAS_BASE.txt
+│   │   │       └── vi
+│   │   │           └── PLANTILLA_VI.xlsx
+│   │   ├── oi_tools
+│   │   │   ├── data
+│   │   │   ├── modules
+│   │   │   │   └── oi_merge_b
+│   │   │   │       ├── routers
+│   │   │   │       │   └── __init__.py
+│   │   │   │       ├── services
+│   │   │   │       │   └── __init__.py
+│   │   │   │       ├── static
+│   │   │   │       │   ├── favicon.ico
+│   │   │   │       │   └── Thumbs.db
+│   │   │   │       ├── uploads
+│   │   │   │       │   ├── master_9zvzvm9m.xlsx
+│   │   │   │       │   ├── master_9zvzvm9m_R.xlsx
+│   │   │   │       │   ├── master_aj2rquc4.xlsx
+│   │   │   │       │   ├── master_aj2rquc4_R.xlsx
+│   │   │   │       │   ├── master_fjfimmbx.xlsx
+│   │   │   │       │   ├── master_fjfimmbx_R.xlsx
+│   │   │   │       │   ├── master_ho3udx_q.xlsx
+│   │   │   │       │   ├── master_ho3udx_q_R.xlsx
+│   │   │   │       │   ├── master_kv6c3qn3.xlsx
+│   │   │   │       │   ├── master_kv6c3qn3_R.xlsx
+│   │   │   │       │   ├── master_ow157jkz.xlsx
+│   │   │   │       │   ├── master_ow157jkz_R.xlsx
+│   │   │   │       │   ├── tecnico_1_02ws_sgu.xlsx
+│   │   │   │       │   ├── tecnico_1_1i8ejph0.xlsx
+│   │   │   │       │   ├── tecnico_1__lrzp8j8.xlsx
+│   │   │   │       │   ├── tecnico_1_gwlan5_r.xlsx
+│   │   │   │       │   ├── tecnico_1_ldbbbsc5.xlsx
+│   │   │   │       │   ├── tecnico_1_zbfk7ka_.xlsx
+│   │   │   │       │   ├── tecnico_2_dqf2tm_g.xlsx
+│   │   │   │       │   ├── tecnico_2_f1i5nrp1.xlsx
+│   │   │   │       │   ├── tecnico_2_j856zppn.xlsx
+│   │   │   │       │   ├── tecnico_2_nrmm24q_.xlsx
+│   │   │   │       │   ├── tecnico_2_rk_cqy_5.xlsx
+│   │   │   │       │   ├── tecnico_2_rqxy8jf6.xlsx
+│   │   │   │       │   ├── tecnico_3_06ht3m_c.xlsx
+│   │   │   │       │   ├── tecnico_3_mqllqalw.xlsx
+│   │   │   │       │   ├── tecnico_3_xur4_xgv.xlsx
+│   │   │   │       │   ├── tecnico_4_7bcow8h9.xlsx
+│   │   │   │       │   ├── tecnico_4_mwl1pc7h.xlsx
+│   │   │   │       │   ├── tecnico_4_w8hbdai1.xlsx
+│   │   │   │       │   ├── tecnico_5_6y6wcmt3.xlsx
+│   │   │   │       │   ├── tecnico_5_anmoichi.xlsx
+│   │   │   │       │   ├── tecnico_6_7uzqwxhu.xlsx
+│   │   │   │       │   └── tecnico_6_eu6l_8rc.xlsx
+│   │   │   │       ├── __init__.py
+│   │   │   │       ├── main.py
+│   │   │   │       ├── merge.py
+│   │   │   │       ├── merge_b.py
+│   │   │   │       └── templates_inline.py
+│   │   │   ├── routers
+│   │   │   │   ├── excel.py
+│   │   │   │   ├── files.py
+│   │   │   │   ├── integrations.py
+│   │   │   │   ├── oi_merge.py
+│   │   │   │   └── updates.py
+│   │   │   ├── services
+│   │   │   │   ├── integrations
+│   │   │   │   │   └── vima_to_lista.py
+│   │   │   │   ├── updates
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── cf_dump.py
+│   │   │   │   │   ├── style_dump.py
+│   │   │   │   │   └── update_base_by_model.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── excel_io.py
+│   │   │   │   ├── excel_password.py
+│   │   │   │   ├── excel_styles.py
+│   │   │   │   ├── progress_manager.py
+│   │   │   │   └── validate.py
+│   │   │   ├── tests
+│   │   │   │   ├── test_cf_apply.py
+│   │   │   │   ├── test_change_password.py
+│   │   │   │   ├── test_excel_inspect.py
+│   │   │   │   ├── test_server.py
+│   │   │   │   ├── test_update_validate_cell.py
+│   │   │   │   ├── test_upload.py
+│   │   │   │   ├── test_validate.py
+│   │   │   │   ├── test_version.py
+│   │   │   │   ├── test_vima_to_list.py
+│   │   │   │   ├── test_vima_to_lista_api.py
+│   │   │   │   └── test_vima_to_lista_incremental.py
+│   │   │   └── utils
+│   │   │       ├── __init__.py
+│   │   │       └── refs.py
+│   │   ├── services
+│   │   │   ├── excel_service.py
+│   │   │   └── rules_service.py
+│   │   ├── static
+│   │   │   └── vi_frontend
+│   │   │       ├── adminator
+│   │   │       │   ├── assets
+│   │   │       │   │   ├── static
+│   │   │       │   │   │   ├── fonts
+│   │   │       │   │   │   │   └── icons
+│   │   │       │   │   │   │       ├── fontawesome
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.eot
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.svg
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.ttf
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.woff
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.woff2
+│   │   │       │   │   │   │       │   └── FontAwesome.otf
+│   │   │       │   │   │   │       └── themify
+│   │   │       │   │   │   │           ├── themify.eot
+│   │   │       │   │   │   │           ├── themify.svg
+│   │   │       │   │   │   │           ├── themify.ttf
+│   │   │       │   │   │   │           └── themify.woff
+│   │   │       │   │   │   └── images
+│   │   │       │   │   │       ├── datatables
+│   │   │       │   │   │       │   ├── sort_asc.png
+│   │   │       │   │   │       │   ├── sort_asc_disabled.png
+│   │   │       │   │   │       │   ├── sort_both.png
+│   │   │       │   │   │       │   ├── sort_desc.png
+│   │   │       │   │   │       │   └── sort_desc_disabled.png
+│   │   │       │   │   │       ├── 404.png
+│   │   │       │   │   │       ├── 500.png
+│   │   │       │   │   │       ├── bg.jpg
+│   │   │       │   │   │       ├── logo-circle.svg
+│   │   │       │   │   │       ├── logo-gradient.svg
+│   │   │       │   │   │       ├── logo-outline.svg
+│   │   │       │   │   │       ├── logo.png
+│   │   │       │   │   │       └── logo.svg
+│   │   │       │   │   ├── fontawesome-webfont.svg
+│   │   │       │   │   └── themify.svg
+│   │   │       │   ├── 1e59d2330b4c6deb84b3.ttf
+│   │   │       │   ├── 20fd1704ea223900efa9.woff2
+│   │   │       │   ├── 29b39089170885ae2967.woff
+│   │   │       │   ├── 404.html
+│   │   │       │   ├── 500.html
+│   │   │       │   ├── 8b43027f47b20503057d.eot
+│   │   │       │   ├── 9bad94440d49256265a5.eot
+│   │   │       │   ├── basic-table.html
+│   │   │       │   ├── blank.html
+│   │   │       │   ├── buttons.html
+│   │   │       │   ├── calendar.html
+│   │   │       │   ├── charts.html
+│   │   │       │   ├── chat.html
+│   │   │       │   ├── compose.html
+│   │   │       │   ├── datatable.html
+│   │   │       │   ├── eda8b94308c6f538f04a.ttf
+│   │   │       │   ├── email.html
+│   │   │       │   ├── f691f37e57f04c152e23.woff
+│   │   │       │   ├── forms.html
+│   │   │       │   ├── google-maps.html
+│   │   │       │   ├── index.html
+│   │   │       │   ├── main.js
+│   │   │       │   ├── main.js.LICENSE.txt
+│   │   │       │   ├── signin.html
+│   │   │       │   ├── signup.html
+│   │   │       │   ├── style.css
+│   │   │       │   ├── ui.html
+│   │   │       │   └── vector-maps.html
+│   │   │       ├── assets
+│   │   │       │   ├── index-BCP387gn.js
+│   │   │       │   ├── index-BLRCt_oi.js
+│   │   │       │   ├── index-BNc-XvsZ.js
+│   │   │       │   ├── index-BPeCech7.css
+│   │   │       │   ├── index-C4gKNLJq.js
+│   │   │       │   ├── index-CB0XZPVo.css
+│   │   │       │   ├── index-DbHxg0KB.js
+│   │   │       │   ├── index-DyKIO_Ko.js
+│   │   │       │   └── index-iMTL4krU.js
+│   │   │       ├── medileser
+│   │   │       │   ├── banner.jpg
+│   │   │       │   ├── logo-vertical.jpg
+│   │   │       │   └── Thumbs.db
+│   │   │       ├── favicon.ico
+│   │   │       ├── index.html
+│   │   │       └── vite.svg
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── models.py
+│   │   └── schemas.py
+│   ├── data
+│   │   ├── vi.db
+│   │   ├── vi.db-shm
+│   │   └── vi.db-wal
+│   ├── .env.example
+│   ├── check_db_integrity.py
+│   ├── icon_vi.ico
+│   ├── make_exe.bat
+│   ├── Registro_VI.spec
+│   ├── requirements.txt
+│   ├── single_instance.py
+│   └── vi_tray_app.py
+├── deploy
+├── docs
+│   ├── oi_tools
+│   │   └── docs
+│   │       ├── INTEGRACION_VIMA_LISTA.md
+│   │       ├── README_servidor_base.md
+│   │       ├── README_UI.md
+│   │       ├── repo_tree-20251015-092551.txt
+│   │       ├── repo_tree-20251017-081847.txt
+│   │       ├── repo_tree-20251020-093709.txt
+│   │       ├── repo_tree-20251020-145340.txt
+│   │       ├── repo_tree-20251027-114847.txt
+│   │       ├── repo_tree-20251028-071413.txt
+│   │       ├── repo_tree-20251030-142159.txt
+│   │       ├── repo_tree-20251031-124032.txt
+│   │       └── styleguide.html
+│   ├── Acuerdos_de_Afinamiento_VI.md
+│   ├── API_Contracts.md
+│   ├── Bitácora de Requerimientos.xlsx
+│   ├── Diccionario_Form_Excel.md
+│   ├── Manual_Usuario_Formato_VI.md
+│   ├── Pruebas_Desempeño_Excel.md
+│   ├── Pruebas_E2E_Excel.md
+│   └── repo_tree-20251216-084204.txt
+├── frontend
+│   ├── public
+│   │   ├── adminator
+│   │   │   ├── assets
+│   │   │   │   ├── static
+│   │   │   │   │   ├── fonts
+│   │   │   │   │   │   └── icons
+│   │   │   │   │   │       ├── fontawesome
+│   │   │   │   │   │       │   ├── fontawesome-webfont.eot
+│   │   │   │   │   │       │   ├── fontawesome-webfont.svg
+│   │   │   │   │   │       │   ├── fontawesome-webfont.ttf
+│   │   │   │   │   │       │   ├── fontawesome-webfont.woff
+│   │   │   │   │   │       │   ├── fontawesome-webfont.woff2
+│   │   │   │   │   │       │   └── FontAwesome.otf
+│   │   │   │   │   │       └── themify
+│   │   │   │   │   │           ├── themify.eot
+│   │   │   │   │   │           ├── themify.svg
+│   │   │   │   │   │           ├── themify.ttf
+│   │   │   │   │   │           └── themify.woff
+│   │   │   │   │   └── images
+│   │   │   │   │       ├── datatables
+│   │   │   │   │       │   ├── sort_asc.png
+│   │   │   │   │       │   ├── sort_asc_disabled.png
+│   │   │   │   │       │   ├── sort_both.png
+│   │   │   │   │       │   ├── sort_desc.png
+│   │   │   │   │       │   └── sort_desc_disabled.png
+│   │   │   │   │       ├── 404.png
+│   │   │   │   │       ├── 500.png
+│   │   │   │   │       ├── bg.jpg
+│   │   │   │   │       ├── logo-circle.svg
+│   │   │   │   │       ├── logo-gradient.svg
+│   │   │   │   │       ├── logo-outline.svg
+│   │   │   │   │       ├── logo.png
+│   │   │   │   │       └── logo.svg
+│   │   │   │   ├── fontawesome-webfont.svg
+│   │   │   │   └── themify.svg
+│   │   │   ├── 1e59d2330b4c6deb84b3.ttf
+│   │   │   ├── 20fd1704ea223900efa9.woff2
+│   │   │   ├── 29b39089170885ae2967.woff
+│   │   │   ├── 404.html
+│   │   │   ├── 500.html
+│   │   │   ├── 8b43027f47b20503057d.eot
+│   │   │   ├── 9bad94440d49256265a5.eot
+│   │   │   ├── basic-table.html
+│   │   │   ├── blank.html
+│   │   │   ├── buttons.html
+│   │   │   ├── calendar.html
+│   │   │   ├── charts.html
+│   │   │   ├── chat.html
+│   │   │   ├── compose.html
+│   │   │   ├── datatable.html
+│   │   │   ├── eda8b94308c6f538f04a.ttf
+│   │   │   ├── email.html
+│   │   │   ├── f691f37e57f04c152e23.woff
+│   │   │   ├── forms.html
+│   │   │   ├── google-maps.html
+│   │   │   ├── index.html
+│   │   │   ├── main.js
+│   │   │   ├── main.js.LICENSE.txt
+│   │   │   ├── signin.html
+│   │   │   ├── signup.html
+│   │   │   ├── style.css
+│   │   │   ├── ui.html
+│   │   │   └── vector-maps.html
+│   │   ├── medileser
+│   │   │   ├── banner.jpg
+│   │   │   └── logo-vertical.jpg
+│   │   ├── favicon.ico
+│   │   └── vite.svg
+│   ├── src
+│   │   ├── api
+│   │   │   ├── admin.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── catalogs.ts
+│   │   │   ├── client.ts
+│   │   │   ├── integrations.ts
+│   │   │   ├── oi.ts
+│   │   │   └── oiTools.ts
+│   │   ├── app
+│   │   │   └── router.tsx
+│   │   ├── assets
+│   │   │   └── react.svg
+│   │   ├── components
+│   │   │   ├── PasswordInput.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── Spinner.tsx
+│   │   │   ├── Toast.tsx
+│   │   │   └── Topbar.tsx
+│   │   ├── features
+│   │   │   ├── admin
+│   │   │   │   └── AdminPermisosPage.tsx
+│   │   │   ├── auth
+│   │   │   │   ├── ChangePasswordPage.tsx
+│   │   │   │   ├── LoginPage.tsx
+│   │   │   │   └── RequireAuth.tsx
+│   │   │   ├── home
+│   │   │   │   └── HomePage.tsx
+│   │   │   ├── oi
+│   │   │   │   ├── BancadaModal.tsx
+│   │   │   │   ├── OiListPage.tsx
+│   │   │   │   ├── OiPage.tsx
+│   │   │   │   ├── PasswordModal.tsx
+│   │   │   │   └── schema.ts
+│   │   │   ├── oi_tools
+│   │   │   │   ├── components
+│   │   │   │   │   ├── FilePickerModal.tsx
+│   │   │   │   │   ├── filePickerUtils.ts
+│   │   │   │   │   ├── MultiFilePicker.tsx
+│   │   │   │   │   └── SingleFilePicker.tsx
+│   │   │   │   ├── ActualizacionBasePage.tsx
+│   │   │   │   ├── ConsolidacionCorrelativoPage.tsx
+│   │   │   │   ├── ConsolidacionNoCorrelativoPage.tsx
+│   │   │   │   ├── ConsolidacionOisPage.tsx
+│   │   │   │   ├── ExcelToolsPage.tsx
+│   │   │   │   ├── OiFilesModal.tsx
+│   │   │   │   ├── progressTranslations.ts
+│   │   │   │   └── VimaToListaPage.tsx
+│   │   │   └── users
+│   │   │       └── UsersPage.tsx
+│   │   ├── layouts
+│   │   │   └── AdminatorLayout.tsx
+│   │   ├── styles
+│   │   │   └── adminator.css
+│   │   ├── App.css
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   └── main.tsx
+│   ├── .gitignore
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── README.md
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── reports
+│   └── trazabilidad
+│       ├── reporte_1_3_4_20251215_1952.md
+│       ├── reporte_1_3_4_20251215_2034.md
+│       ├── reporte_1_3_4_20251215_2035.md
+│       ├── reporte_1_3_4_20251216_1315.md
+│       ├── reporte_1_3_4_20251216_1317.md
+│       ├── reporte_1_3_4_20251216_1651.md
+│       ├── traza_1_3_4_20251215_1952.jsonl
+│       ├── traza_1_3_4_20251215_2034.jsonl
+│       ├── traza_1_3_4_20251215_2035.jsonl
+│       ├── traza_1_3_4_20251216_1315.jsonl
+│       ├── traza_1_3_4_20251216_1317.jsonl
+│       └── traza_1_3_4_20251216_1651.jsonl
+├── scripts
+│   └── print_repo_tree.py
+├── .gitignore
+├── build_frontend_and_copy.bat
+├── README.md
+└── requirements.txt

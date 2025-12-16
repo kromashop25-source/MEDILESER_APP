@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo,useRef, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
@@ -6,6 +6,11 @@ import type { MergeUploadLimits } from "../../api/oiTools";
 import { getMergeUploadLimits, mergeOisUpload } from "../../api/oiTools";
 import MultiFilePicker from "./components/MultiFilePicker";
 import SingleFilePicker from "./components/SingleFilePicker";
+import {
+  translateProgressMessage,
+  translateProgressStage,
+  translateProgressType,
+} from "./progressTranslations";
 
 function parseFilename(contentDisposition?: string) {
   if (!contentDisposition) return null;
@@ -49,6 +54,7 @@ export default function ConsolidacionNoCorrelativoPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [progressPct, setProgressPct] = useState<number | null>(null);
   const [events, setEvents] = useState<ProgressEvent[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   const canRun = useMemo(
     () => !!masterFile && technicianFiles.length > 0 && !running,
@@ -63,6 +69,16 @@ export default function ConsolidacionNoCorrelativoPage() {
 
   function pushEvent(ev: ProgressEvent) {
     setEvents((prev) => [ev, ...prev].slice(0, 200));
+  }
+
+  function stopStream() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }
+
+  function cancelOperation() {
+    if (!running) return;
+    stopStream();
   }
 
   async function run() {
@@ -154,16 +170,33 @@ export default function ConsolidacionNoCorrelativoPage() {
                 {errorMsg}
               </div>
             )}
-
+            <div className="d-flex gap-10 mT-20"> 
             <button className="btn btn-primary mT-10" disabled={!canRun} onClick={run}>
               {running ? "Procesando..." : "Procesar y Descargar"}
             </button>
+            <button
+                className="btn btn-outline-danger mT-10"
+                disabled={!running}
+                onClick={cancelOperation}
+              >
+                Cancelar
+              </button>
+              </div> 
           </div>
         </div>
 
         <div className="col-md-5">
           <div className="bgc-white p-20 bd">
-            <h5 className="c-grey-900 mB-10">Progreso</h5>
+            <h5 className="c-grey-900 mB-10 d-flex align-items-center gap-2">
+              <span>Progreso</span>
+              {running ? (
+                <img
+                  className="vi-progress-spinner"
+                  src="/medileser/Spinner-Logo-Medileser.gif"
+                  alt="Procesando"
+                />
+              ) : null}
+            </h5>
 
             <div className="progress mB-15" style={{ height: 12 }}>
               <div
@@ -184,10 +217,14 @@ export default function ConsolidacionNoCorrelativoPage() {
                   {events.map((ev, i) => (
                     <li key={i} className="mB-10">
                       <div>
-                        <b>{ev.type}</b>{" "}
-                        {ev.stage ? <span className="text-muted">[{ev.stage}]</span> : null}
+                        <b>{translateProgressType(ev.type)}</b>{" "}
+                        {ev.stage ? (
+                          <span className="text-muted">[{translateProgressStage(ev.stage)}]</span>
+                        ) : null}
                       </div>
-                      <div className="text-muted">{ev.message ?? ev.detail ?? ""}</div>
+                      <div className="text-muted">
+                        {translateProgressMessage(ev.message ?? ev.detail ?? "")}
+                      </div>
                     </li>
                   ))}
                 </ul>

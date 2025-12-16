@@ -55,9 +55,13 @@ export function translateProgressType(type?: string) {
 
 export function translateProgressStage(stage?: string) {
   if (!stage) return "";
-  const key = stage.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const key = stage
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
   const fallback = stage.trim().replace(/[_-]+/g, " ");
-  return capitalize(STAGE_MAP[key] ?? fallback);
+  return capitalize(STAGE_MAP[key] ?? translateProgressMessage(fallback));
 }
 
 export function translateProgressMessage(message?: string) {

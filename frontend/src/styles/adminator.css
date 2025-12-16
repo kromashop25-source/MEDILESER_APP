@@ -263,6 +263,11 @@
   background:rgba(255,255,255,.6);
   z-index:1075;
 }
+.vi-progress-spinner{
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
 
 /* === Login split layout (sin estilos inline) ========================= */
 .vi-login {

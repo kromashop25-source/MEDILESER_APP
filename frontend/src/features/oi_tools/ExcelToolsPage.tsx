@@ -552,7 +552,16 @@ export default function ExcelToolsPage() {
 
         <div className="col-md-5">
           <div className="bgc-white p-20 bd">
-            <h5 className="c-grey-900 mB-10">Progreso</h5>
+            <h5 className="c-grey-900 mB-10 d-flex align-items-center gap-2">
+              <span>Progreso</span>
+              {running ? (
+                <img
+                  className="vi-progress-spinner"
+                  src="/medileser/Spinner-Logo-Medileser.gif"
+                  alt="Procesando"
+                />
+              ) : null}
+            </h5>
 
             <div className="progress mB-15" style={{ height: 12 }}>
               <div
@@ -599,4 +608,3 @@ export default function ExcelToolsPage() {
     </div>
   );
 }
-

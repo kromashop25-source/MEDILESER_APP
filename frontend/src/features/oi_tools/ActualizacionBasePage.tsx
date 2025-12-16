@@ -157,25 +157,14 @@ export default function ActualizacionBasePage() {
       if (code === "PASSWORD_REQUIRED") {
         setErrorMsg("");
         requestPassword(
-          "upload",
-          "Algún archivo está protegido. Ingresa la contraseña de apertura para continuar."
-        );
-        return;
-        setErrorMsg("");
-        requestPassword(
           "dry",
           "Algún archivo está protegido. Ingresa la contraseña de apertura para continuar."
         );
         return;
-        setErrorMsg("Alguna OI está protegida. Ingresa contraseñas y vuelve a intentar.");
       } else if (code === "WRONG_PASSWORD") {
-        setErrorMsg("");
-        requestPassword("upload", "Contraseña incorrecta. Intenta nuevamente.");
-        return;
         setErrorMsg("");
         requestPassword("dry", "Contraseña incorrecta. Intenta nuevamente.");
         return;
-        setErrorMsg("Contraseña incorrecta para una OI. Verifica e intenta nuevamente.");
       } else {
         setErrorMsg(detail);
       }
@@ -214,9 +203,16 @@ export default function ActualizacionBasePage() {
       if (axios.isAxiosError(e) && e.code === "ERR_CANCELED") return;
       const { detail, code } = await extractAxiosError(e);
       if (code === "PASSWORD_REQUIRED") {
-        setErrorMsg("Alguna OI está protegida. Ingresa contraseñas y vuelve a intentar.");
+        setErrorMsg("");
+        requestPassword(
+          "upload",
+          "Algún archivo está protegido. Ingresa la contraseña de apertura para continuar."
+        );
+        return;
       } else if (code === "WRONG_PASSWORD") {
-        setErrorMsg("Contraseña incorrecta para una OI. Verifica e intenta nuevamente.");
+        setErrorMsg("");
+        requestPassword("upload", "Contraseña incorrecta. Intenta nuevamente.");
+        return;
       } else {
         setErrorMsg(detail);
       }
@@ -411,7 +407,16 @@ export default function ActualizacionBasePage() {
 
         <div className="col-md-5">
           <div className="bgc-white p-20 bd">
-            <h5 className="c-grey-900 mB-10">Progreso</h5>
+            <h5 className="c-grey-900 mB-10 d-flex align-items-center gap-2">
+              <span>Progreso</span>
+              {running ? (
+                <img
+                  className="vi-progress-spinner"
+                  src="/medileser/Spinner-Logo-Medileser.gif"
+                  alt="Procesando"
+                />
+              ) : null}
+            </h5>
 
             <div className="progress mB-15" style={{ height: 12 }}>
               <div

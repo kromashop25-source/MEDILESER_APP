@@ -161,9 +161,10 @@ export async function getMergeUploadLimits(): Promise<MergeUploadLimits> {
 
 export async function mergeOisUpload(
   form: FormData,
-  mode: "correlativo" | "no-correlativo"
+  mode: "correlativo" | "no-correlativo",
+  signal?: AbortSignal
 ): Promise<AxiosResponse<Blob>> {
-  return api.post(`/merge/?mode=${encodeURIComponent(mode)}`, form, { responseType: "blob" });
+  return api.post(`/merge/?mode=${encodeURIComponent(mode)}`, form, { responseType: "blob", signal });
 }
 
 export async function uploadOiToolFile(form: FormData): Promise<UploadedFileInfo> {

@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 import asyncio
 import json
+import queue
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, cast, Dict, Any, Tuple
@@ -40,14 +41,17 @@ router = APIRouter(prefix="/integrations", tags=["integrations"], dependencies=[
 @router.get("/vima-to-lista/progress/{operation_id}")
 async def vima_progress_stream(operation_id: str):
     channel, history = progress_manager.subscribe(operation_id)
-    loop = asyncio.get_running_loop()
 
     async def event_stream():
         try:
             for event in history:
                 yield progress_manager.encode_event(event)
             while True:
-                item = await loop.run_in_executor(None, channel.queue.get)
+                try:
+                    item = channel.queue.get_nowait()
+                except queue.Empty:
+                    await asyncio.sleep(0.05)
+                    continue
                 if item is SENTINEL:
                     break
                 yield progress_manager.encode_event(item)

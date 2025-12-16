@@ -66,12 +66,21 @@ export default function OiListPage() {
   // Usuario autenticado y rol (admin vs técnico)
   const auth = getAuth();
   const isAdmin = normalizeRole(auth?.role, auth?.username) !== "technician";
-  const { data: responsables = [], isFetching: loadingResponsables } = useQuery({
-  queryKey: ["oi", "responsables"],
-  queryFn: listResponsables,
-  enabled: isAdmin,
-  staleTime: 60_000,
-});
+  const {
+    data: responsables = [],
+    isFetching: loadingResponsables,
+    isError: responsablesIsError,
+    error: responsablesError,
+  } = useQuery({
+    queryKey: ["oi", "responsables"],
+    queryFn: listResponsables,
+    enabled: isAdmin,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const responsablesErrorMsg = responsablesIsError
+    ? ((responsablesError as any)?.message ?? "No se pudo cargar responsables")
+    : "";
   const formatDateTime = (iso: string | null | undefined) => {
     if (!iso) return "-";
 
@@ -254,24 +263,29 @@ export default function OiListPage() {
               aria-label="Filtrar hasta fecha"
             />
             {isAdmin && (
-              <select
-                className="form-select form-select-sm"
-                value={responsableTech}
-                onChange={(e) => {
-                  setResponsableTech(e.target.value);
-                  setPage(1);
-                }}
-                disabled={busy || loadingResponsables}
-                aria-label="Filtrar por responsable"
-                title="Responsable"
-              >
-                <option value="">Responsable: Todos</option>
-                {responsables.map((u) => (
-                  <option key={u.tech_number} value={String(u.tech_number)}>
-                    {u.full_name}
-                  </option>
-                ))}
-              </select>
+              <div className="d-flex flex-column">
+                <select
+                  className="form-select form-select-sm"
+                  value={responsableTech}
+                  onChange={(e) => {
+                    setResponsableTech(e.target.value);
+                    setPage(1);
+                  }}
+                  disabled={busy || loadingResponsables}
+                  aria-label="Filtrar por responsable"
+                  title="Responsable"
+                >
+                  <option value="">Responsable: Todos</option>
+                  {responsables.map((u) => (
+                    <option key={u.tech_number} value={String(u.tech_number)}>
+                      {u.full_name}
+                    </option>
+                  ))}
+                </select>
+                {responsablesErrorMsg ? (
+                  <small className="text-danger">{responsablesErrorMsg}</small>
+                ) : null}
+              </div>
             )}
 
             <div className="d-flex align-items-center">

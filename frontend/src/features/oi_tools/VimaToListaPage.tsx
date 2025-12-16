@@ -139,14 +139,10 @@ export default function VimaToListaPage() {
         "El archivo VIMA está protegido. Ingresa la contraseña de apertura para continuar."
       );
       return;
-      setErrorMsg("El VIMA está protegido. Ingresa la contraseña y vuelve a intentar.");
-      return;
     }
     if (code === "WRONG_PASSWORD") {
       setErrorMsg("");
       requestPassword(action, "Contraseña incorrecta. Intenta nuevamente.");
-      return;
-      setErrorMsg("Contraseña incorrecta. Verifica e intenta nuevamente.");
       return;
     }
     setErrorMsg(String(detail));
@@ -365,7 +361,7 @@ export default function VimaToListaPage() {
 
             <div className="d-flex gap-10 mT-20">
               <button className="btn btn-primary" disabled={!canRun} onClick={() => void runUpload()}>
-                {running === "upload" ? "Procesando..." : "Procesar y Descargar"}
+                {running === "upload" ? "Procesando..." : "Procesar y Descargar"} 
               </button>
               <button
                 className="btn btn-outline-danger"
@@ -400,7 +396,16 @@ export default function VimaToListaPage() {
 
         <div className="col-md-5">
           <div className="bgc-white p-20 bd">
-            <h5 className="c-grey-900 mB-10">Progreso</h5>
+            <h5 className="c-grey-900 mB-10 d-flex align-items-center gap-2">
+              <span>Progreso</span>
+              {running ? (
+                <img
+                  className="vi-progress-spinner"
+                  src="/medileser/Spinner-Logo-Medileser.gif"
+                  alt="Procesando"
+                />
+              ) : null}
+            </h5>
 
             <div className="progress mB-15" style={{ height: 12 }}>
               <div
