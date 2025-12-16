@@ -10,7 +10,7 @@ Fila inicial de datos: 9
 """
 
 from dataclasses import dataclass, asdict
-from typing import Any, Dict, List, Optional, Tuple, cast, Literal
+from typing import Any, Dict, List, Optional, Tuple, cast, Literal, Callable
 from pathlib import Path
 from functools import lru_cache
 import copy
@@ -88,6 +88,16 @@ class MergeFileReadError(MergeError):
         self.path = Path(path)
         self.cause = cause
         super().__init__(f"{self.path}: {cause}")
+
+
+class MergeCancelledError(MergeError):
+    """La operación fue cancelada por el usuario."""
+    pass
+
+
+def _check_cancel(should_cancel: Optional[Callable[[], bool]]) -> None:
+    if should_cancel and should_cancel():
+        raise MergeCancelledError("Operación cancelada")
 @dataclass
 class TechnicianRow:
     cells: Dict[int, CellPayload]
@@ -304,6 +314,7 @@ def apply_styles_from_sources_exact(
     # --- nuevo para 1.5.3 ---
     separator_style: Optional[SideStyle] = "thick",  # None para desactivar
     group_by: Literal["file", "sheet"] = "file",     # bloque por archivo o por archivo+hoja
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> None:
     """
     Abre el consolidado y aplica estilos exactos A..BL desde cada archivo/hoja/fila de origen.
@@ -331,6 +342,8 @@ def apply_styles_from_sources_exact(
     last_key: Optional[Tuple[str, ...]] = None
 
     for i, tech_row in enumerate(ordered_rows):
+        if i % 100 == 0:
+            _check_cancel(should_cancel)
         dst_r = START_ROW + i
         try:
             wb_src = _open_styles_wb(str(tech_row.source_path))  # cacheado
@@ -355,6 +368,8 @@ def apply_styles_from_sources_exact(
 
             last_key = cur_key
 
+        except MergeCancelledError:
+            raise
         except Exception as e:
             logger.debug("Fila %s: fallo al copiar estilos A..BL: %s", dst_r, e)
 
@@ -483,7 +498,12 @@ def _payload_actual_value(payload: Optional[CellPayload]) -> Any:
 # =========================
 #   LECTURA DE TECNICOS (TODO CONTENIDO)
 # =========================
-def read_rows_from_technician_values_only(path: Path, required_cols: List[str]) -> List[TechnicianRow]:
+def read_rows_from_technician_values_only(
+    path: Path,
+    required_cols: List[str],
+    *,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> List[TechnicianRow]:
     """
     Reglas de aceptacion de fila:
     - Acepta si TODAS las columnas obligatorias (required_cols) tienen dato
@@ -559,6 +579,8 @@ def read_rows_from_technician_values_only(path: Path, required_cols: List[str]) 
         source_sheet = ws_formula.title
         for row_idx, (row_formula, row_values) in enumerate(zip(formula_iter, values_iter), start=START_ROW):
             processed += 1
+            if processed % 200 == 0:
+                _check_cancel(should_cancel)
             if HARD_STOP_ON_FIRST_BLANK_IN_KEY:
                 if key_idx >= len(row_formula) or not _is_nonempty_value(row_formula[key_idx].value):
                     break
@@ -608,7 +630,11 @@ def sort_technician_rows(rows: List[TechnicianRow]) -> List[TechnicianRow]:
 # =========================
 #  LIMPIAR Y ESCRIBIR EN MAESTRO
 # =========================
-def _clear_destination_area_values_only(ws: Worksheet) -> None:
+def _clear_destination_area_values_only(
+    ws: Worksheet,
+    *,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> None:
     """
     Limpia desde START_ROW hasta la ultima fila, pero **solo** celdas que NO contengan formula.
     Esto garantiza que cualquier formula preexistente (p. ej., B10 = B9) NO se borre.
@@ -616,6 +642,8 @@ def _clear_destination_area_values_only(ws: Worksheet) -> None:
     last_row = ws.max_row or START_ROW   # ultima fila considerada
     last_col = ws.max_column or column_index_from_string("AN")  # ultima columna considerada
     for r in range(START_ROW, last_row + 1):
+        if r % 25 == 0:
+            _check_cancel(should_cancel)
         for c in range(column_index_from_string("B"), last_col + 1):
             cell = ws.cell(row=r, column=c)
             if not _is_formula_cell(cell):  # solo borra contenido de celdas sin formula
@@ -930,7 +958,12 @@ def _restore_master_images(master_path: Path, consolidated_path: Path, sheet_nam
             except OSError:
                 pass
 
-def write_rows_into_master_values_only(master_path: Path, row_dicts: List[Dict[int, CellPayload]]) -> Path:
+def write_rows_into_master_values_only(
+    master_path: Path,
+    row_dicts: List[Dict[int, CellPayload]],
+    *,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> Path:
     """
     Escribe la matriz de filas (valores y formulas) en el maestro:
     - Primero limpia solo celdas sin formula (para no perder formulas existentes).
@@ -940,11 +973,13 @@ def write_rows_into_master_values_only(master_path: Path, row_dicts: List[Dict[i
     wb = load_workbook(master_path, data_only=False)  # data_only=False para distinguir formulas
     ws = _safe_get_sheet(wb, MASTER_SHEET_NAME)       # hoja del maestro
     # 1) Limpiar (sin tocar formulas)
-    _clear_destination_area_values_only(ws)
+    _clear_destination_area_values_only(ws, should_cancel=should_cancel)
     max_col = ws.max_column or column_index_from_string("AN")
     # 2) Escribir fila a fila
     r = START_ROW   # fila destino incremental
     for row in row_dicts:
+        if r % 50 == 0:
+            _check_cancel(should_cancel)
         for c_idx, payload in row.items():   # recorre solo columnas presentes en la fila origen
             if c_idx > max_col:
                 continue  # evita escribir fuera del rango del maestro
@@ -1224,6 +1259,8 @@ def build_and_write(
     order_by_col_g: bool = True,
     collect_provenance: bool = True,
     provenance_dir: Optional[Path] = None,
+    progress_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> Path:
     """
     - Lee TODOS los Excels de tecnicos (valores y formulas, conservando el valor evaluado para ordenar).
@@ -1239,17 +1276,36 @@ def build_and_write(
         len(technician_paths),
     )
     clear_last_provenance()
+
+    def emit_progress(stage: str, message: str, percent: Optional[float] = None) -> None:
+        if not progress_cb:
+            return
+        payload: Dict[str, Any] = {"stage": stage, "message": message}
+        if percent is not None:
+            payload["percent"] = float(percent)
+        progress_cb(payload)
+
+    _check_cancel(should_cancel)
     rows_with_meta: List[TechnicianRow] = []
     total_rows = 0
-    for p in technician_paths:
+    total_files = max(1, len(technician_paths))
+    emit_progress("reading", "Leyendo archivos de técnicos...", 50)
+    for idx, p in enumerate(technician_paths, start=1):
         t_start = time.perf_counter()
         try:
-            rows = read_rows_from_technician_values_only(p, REQUIRED_NONEMPTY_COLS)
+            rows = read_rows_from_technician_values_only(
+                p,
+                REQUIRED_NONEMPTY_COLS,
+                should_cancel=should_cancel,
+            )
+        except MergeCancelledError:
+            raise
         except Exception as exc:
             raise MergeFileReadError(p, exc) from exc
         if rows:
             rows_with_meta.extend(rows)
             total_rows += len(rows)
+            emit_progress("reading", f"Leído {idx}/{len(technician_paths)}: {p.name}", 50 + (idx / total_files) * 25)
             logger.info(
                 "Archivo tecnico %s: filas validas=%d (%.2fs)",
                 p.name,
@@ -1260,19 +1316,32 @@ def build_and_write(
             logger.warning("Archivo tecnico %s sin filas validas", p.name)
     if not rows_with_meta:
         raise MergeUserError("No se encontraron filas validas en los archivos de tecnicos.")
+    _check_cancel(should_cancel)
     if order_by_col_g:
          logger.info("Total de filas combinadas antes de ordenar: %d", total_rows)
+         emit_progress("processing", "Ordenando por correlativo (columna G)...", 78)
          ordered_rows = sort_technician_rows(rows_with_meta)
     else:
          logger.info("Total de filas combinadas (sin reordenar): %d", total_rows)
+         emit_progress("processing", "Consolidando (sin reordenar)...", 78)
          ordered_rows = rows_with_meta
     ordered_payloads = [row.cells for row in ordered_rows]
     try:
-        out = write_rows_into_master_values_only(master_path, ordered_payloads)
+        emit_progress("writing", "Escribiendo en maestro...", 82)
+        out = write_rows_into_master_values_only(
+            master_path,
+            ordered_payloads,
+            should_cancel=should_cancel,
+        )
+    except MergeCancelledError:
+        raise
     except Exception as exc:
         raise MergeFileReadError(master_path, exc) from exc
     try:
+        _check_cancel(should_cancel)
         apply_pressure_cf(out, Path(__file__).parent / "Parametros.xlsx")
+    except MergeCancelledError:
+        raise
     except Exception as exc:
         logger.warning("No se pudieron aplicar validaciones: %s", exc)
     #try:
@@ -1280,22 +1349,27 @@ def build_and_write(
     #except Exception as exc:
     #    logger.warning("No se pudieron aplicar bordes exactos: %s", exc)
     try:
-    # PRUEBA: copia valores + formatos exactos (incluye bordes) A..BL
+        _check_cancel(should_cancel)
+        emit_progress("writing", "Aplicando estilos...", 90)
         apply_styles_from_sources_exact(
-    out,
-    ordered_rows,
-    start_col="A",
-    end_col="BL",
-    copy_values=False,
-    # separator_style="double",  # <- si quieres probar “double”
-    # group_by="sheet",          # <- si prefieres separador por archivo+hoja
-)
+            out,
+            ordered_rows,
+            start_col="A",
+            end_col="BL",
+            copy_values=False,
+            should_cancel=should_cancel,
+        )
+    except MergeCancelledError:
+        raise
     except Exception as exc:
         logger.warning("No se pudieron aplicar estilos exactos: %s", exc)
 
     # Restaurar imágenes DESPUÉS de aplicar bordes (evita errores de namespaces al re-guardar)
     try:
+        _check_cancel(should_cancel)
         _restore_master_images(master_path, out, MASTER_SHEET_NAME or 'ERROR FINAL')
+    except MergeCancelledError:
+        raise
     except Exception as exc:
         logger.warning('No se pudieron restaurar imagenes del maestro (post-bordes): %s', exc)
     elapsed = time.perf_counter() - start_time
@@ -1314,6 +1388,8 @@ def build_and_write(
             len(ordered_rows),
         )
     if collect_provenance:
+        _check_cancel(should_cancel)
+        emit_progress("processing", "Generando trazabilidad...", 92)
         artifacts = _generate_provenance_artifacts(
             ordered_rows,
             out,

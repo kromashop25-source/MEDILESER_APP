@@ -20,3 +20,4 @@ backend/app/oi_tools/data/uploads/
 backend/app/data/tmp/
 backend/data/*.db*
 Thumbs.db
+backend/app/oi_tools/modules/oi_merge_b/uploads/*.xlsx

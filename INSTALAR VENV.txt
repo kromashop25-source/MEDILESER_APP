@@ -52,6 +52,7 @@ python -c "import fastapi, uvicorn, pandas, openpyxl, jinja2; print('OK imports'
 7) Probar el servidor local
 Con el .venv aún activo:
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 
 

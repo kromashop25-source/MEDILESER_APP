@@ -1,9 +1,14 @@
-import { useEffect, useMemo,useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
 import type { MergeUploadLimits } from "../../api/oiTools";
-import { getMergeUploadLimits, mergeOisUpload } from "../../api/oiTools";
+import {
+  cancelMergeOperation,
+  getMergeUploadLimits,
+  mergeOisUpload,
+  subscribeOiToolsProgress,
+} from "../../api/oiTools";
 import MultiFilePicker from "./components/MultiFilePicker";
 import SingleFilePicker from "./components/SingleFilePicker";
 import {
@@ -55,6 +60,7 @@ export default function ConsolidacionCorrelativoPage() {
   const [progressPct, setProgressPct] = useState<number | null>(null);
   const [events, setEvents] = useState<ProgressEvent[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const operationIdRef = useRef<string | null>(null);
 
   const canRun = useMemo(
     () => !!masterFile && technicianFiles.length > 0 && !running,
@@ -69,6 +75,14 @@ export default function ConsolidacionCorrelativoPage() {
 
   function pushEvent(ev: ProgressEvent) {
     setEvents((prev) => [ev, ...prev].slice(0, 200));
+
+    const pct =
+      typeof ev.percent === "number"
+        ? ev.percent
+        : typeof ev.progress === "number"
+          ? ev.progress
+          : null;
+    if (pct != null && Number.isFinite(pct)) setProgressPct(Math.max(0, Math.min(100, pct)));
   }
 
   function stopStream() {
@@ -78,6 +92,9 @@ export default function ConsolidacionCorrelativoPage() {
 
   function cancelOperation() {
     if (!running) return;
+    const op = operationIdRef.current;
+    if (op) cancelMergeOperation(op).catch(() => {});
+    pushEvent({ type: "status", stage: "cancelled", message: "Cancelación solicitada" });
     stopStream();
   }
 
@@ -99,29 +116,38 @@ export default function ConsolidacionCorrelativoPage() {
     form.append("master", masterFile);
     for (const f of technicianFiles) form.append("technicians", f);
 
+    const operationId = crypto.randomUUID();
+    operationIdRef.current = operationId;
+    form.append("operation_id", operationId);
+
+    abortRef.current = new AbortController();
+
     setRunning(true);
     try {
-      pushEvent({ type: "status", stage: "upload", message: "Enviando archivos..." });
-      setProgressPct(15);
+      const signal = abortRef.current?.signal;
 
-      pushEvent({ type: "status", stage: "processing", message: "Consolidando (correlativo)..." });
-      setProgressPct(35);
+      subscribeOiToolsProgress(operationId, pushEvent, signal).catch(() => {
+        // si el stream falla, igual dejamos que el request principal continúe
+      });
 
-      const res = await mergeOisUpload(form, "correlativo");
-      setProgressPct(90);
+      const res = await mergeOisUpload(form, "correlativo", signal);
 
       const cd = res.headers["content-disposition"] as string | undefined;
       const filename = parseFilename(cd) ?? "consolidado_correlativo.xlsx";
       downloadBlob(res.data, filename);
-
-      pushEvent({ type: "complete", stage: "done", message: "Consolidación completada." });
-      setProgressPct(100);
     } catch (e) {
+      if (axios.isAxiosError(e) && e.code === "ERR_CANCELED") return;
+      if (axios.isAxiosError(e)) {
+        const code = (e.response?.headers?.["x-code"] as string | undefined) ?? undefined;
+        if (code?.toUpperCase() === "CANCELLED") return;
+      }
       const detail = await extractAxiosError(e);
       pushEvent({ type: "error", stage: "error", detail });
       setErrorMsg(detail);
     } finally {
+      operationIdRef.current = null;
       setRunning(false);
+      stopStream();
     }
   }
 

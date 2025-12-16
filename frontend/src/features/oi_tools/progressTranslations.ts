@@ -16,6 +16,8 @@ const STAGE_MAP: Record<string, string> = {
   reading: "leyendo",
   writing: "escribiendo",
   saving: "guardando",
+  cancelled: "cancelado",
+  canceled: "cancelado",
   copied: "copiado",
   skipped: "omitido",
   skipped_incremental: "omitido (incremental)",

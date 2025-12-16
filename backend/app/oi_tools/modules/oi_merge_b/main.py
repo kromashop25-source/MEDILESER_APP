@@ -7,7 +7,7 @@ import tempfile
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 import threading, time, os
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -16,11 +16,15 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 import sys
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, Query
+from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from openpyxl.utils.exceptions import InvalidFileException
+from starlette.concurrency import run_in_threadpool
 
-from .merge import build_and_write, MergeFileReadError, MergeUserError
+from app.oi_tools.services.cancel_manager import cancel_manager
+from app.oi_tools.services.progress_manager import progress_manager
+
+from .merge import build_and_write, MergeCancelledError, MergeFileReadError, MergeUserError
 from .templates_inline import INDEX_HTML
 
 logger = logging.getLogger(__name__)
@@ -170,7 +174,13 @@ def _log_saved_file(role: str, filename: str, size_bytes: int, path: Path) -> No
     )
 
 
-async def _stream_upload_to_disk(upload: UploadFile, prefix: str, max_file_mb: int) -> tuple[Path, int]:
+async def _stream_upload_to_disk(
+    upload: UploadFile,
+    prefix: str,
+    max_file_mb: int,
+    *,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> tuple[Path, int]:
     filename = _validate_extension(upload)
     limit_bytes = max_file_mb * 1024 * 1024
     destination = _allocate_temp_path(prefix, filename)
@@ -178,6 +188,8 @@ async def _stream_upload_to_disk(upload: UploadFile, prefix: str, max_file_mb: i
     try:
         with destination.open("wb") as target:
             while True:
+                if should_cancel and should_cancel():
+                    raise MergeCancelledError("Operación cancelada")
                 chunk = await upload.read(CHUNK_SIZE_BYTES)
                 if not chunk:
                     break
@@ -230,7 +242,8 @@ async def ui_no_correlativo():
 async def merge(
     master: UploadFile = File(...),
     technicians: list[UploadFile] = File(...),
-    mode: str = Query("correlativo")  # 'correlativo' | 'no-correlativo'
+    mode: str = Query("correlativo"),  # 'correlativo' | 'no-correlativo'
+    operation_id: Optional[str] = Form(None),
 ):
     max_file_mb, max_tech_files = _upload_limits()
 
@@ -244,45 +257,107 @@ async def merge(
         len(technicians), max_file_mb, mode
     )
 
+    token = cancel_manager.create(operation_id) if operation_id else None
+
+    def should_cancel() -> bool:
+        return bool(token and token.is_cancelled())
+
+    def emit(event: dict) -> None:
+        if not operation_id:
+            return
+        progress_manager.emit(operation_id, event)
+
+    def emit_status(stage: str, message: str, percent: Optional[float] = None) -> None:
+        payload = {"type": "status", "stage": stage, "message": message}
+        if percent is not None:
+            payload["percent"] = float(percent)
+        emit(payload)
+
+    def forward_progress(payload: dict) -> None:
+        if not operation_id:
+            return
+        progress_manager.emit(operation_id, {"type": "progress", **payload})
+
     download_name = _sanitize_download_filename(master.filename)
     master_path: Path
     technician_paths: list[Path] = []
     try:
+        emit_status("received", "Archivos recibidos", 0)
         try:
-            master_path, _ = await _stream_upload_to_disk(master, "master", max_file_mb)
+            master_path, _ = await _stream_upload_to_disk(
+                master,
+                "master",
+                max_file_mb,
+                should_cancel=should_cancel,
+            )
         except FileTooLargeError as exc:
+            if operation_id:
+                progress_manager.finish(operation_id)
             raise HTTPException(status_code=413, detail=f"Archivo {exc.filename} supera {exc.limit_mb}MB") from exc
 
         for index, upload in enumerate(technicians, start=1):
             try:
-                t_path, _ = await _stream_upload_to_disk(upload, f"tecnico_{index}", max_file_mb)
+                t_path, _ = await _stream_upload_to_disk(
+                    upload,
+                    f"tecnico_{index}",
+                    max_file_mb,
+                    should_cancel=should_cancel,
+                )
             except FileTooLargeError as exc:
+                if operation_id:
+                    progress_manager.finish(operation_id)
                 raise HTTPException(status_code=413, detail=f"Archivo {exc.filename} supera {exc.limit_mb}MB") from exc
             technician_paths.append(t_path)
+            emit_status(
+                "upload",
+                f"Archivo técnico {index}/{len(technicians)} cargado",
+                5 + (index / max(1, len(technicians))) * 35,
+            )
 
         try:
             # Decide si ordenar por G (correlativo) o respetar el orden original (no-correlativo)
             order_by_g = (mode.lower() == "correlativo")
-            output_path = build_and_write(
+            emit_status("processing", f"Consolidando ({mode.lower()})...", 45)
+            output_path = await run_in_threadpool(
+                build_and_write,
                 master_path,
                 technician_paths,
-                order_by_col_g=order_by_g
+                order_by_col_g=order_by_g,
+                progress_cb=forward_progress,
+                should_cancel=should_cancel,
             )
+            emit_status("saving", "Preparando descarga...", 95)
+        except MergeCancelledError:
+            emit_status("cancelled", "Operación cancelada")
+            if operation_id:
+                progress_manager.finish(operation_id)
+            raise HTTPException(status_code=409, detail="Operación cancelada", headers={"X-Code": "CANCELLED"})
         except MergeFileReadError as exc:
             cause = exc.cause
             if isinstance(cause, (InvalidFileException, zipfile.BadZipFile)):
+                if operation_id:
+                    progress_manager.finish(operation_id)
                 raise HTTPException(status_code=422, detail=f"Archivo {exc.path.name} corrupto o no valido") from exc
             trace_id = uuid.uuid4().hex[:8]
             logger.exception("Error leyendo %s (trace_id=%s)", exc.path, trace_id)
+            if operation_id:
+                progress_manager.finish(operation_id)
             raise HTTPException(status_code=500, detail=f"Error interno. Trace ID: {trace_id}") from exc
         except MergeUserError as exc:
+            if operation_id:
+                progress_manager.finish(operation_id)
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
             trace_id = uuid.uuid4().hex[:8]
             logger.exception("Error inesperado en consolidacion (trace_id=%s)", trace_id)
+            if operation_id:
+                progress_manager.finish(operation_id)
             raise HTTPException(status_code=500, detail=f"Error interno. Trace ID: {trace_id}") from exc
 
         logger.info("Consolidado generado: %s", output_path.name)
+        emit({"type": "complete", "stage": "done", "message": "Consolidación completada", "percent": 100.0})
+        if operation_id:
+            progress_manager.finish(operation_id)
         return FileResponse(
             path=output_path,
             filename=download_name,
@@ -292,6 +367,8 @@ async def merge(
         await master.close()
         for upload in technicians:
             await upload.close()
+        if operation_id:
+            cancel_manager.remove(operation_id)
 
 @app.post("/shutdown")
 def shutdown(request: Request):

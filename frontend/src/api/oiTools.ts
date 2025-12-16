@@ -167,6 +167,10 @@ export async function mergeOisUpload(
   return api.post(`/merge/?mode=${encodeURIComponent(mode)}`, form, { responseType: "blob", signal });
 }
 
+export async function cancelMergeOperation(operationId: string): Promise<void> {
+  await api.post(`/merge/cancel/${encodeURIComponent(operationId)}`);
+}
+
 export async function uploadOiToolFile(form: FormData): Promise<UploadedFileInfo> {
   const { data } = await api.post<UploadedFileInfo>("/tools/files/upload", form);
   return data;
