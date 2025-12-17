@@ -15,9 +15,13 @@ export default function Spinner({
       aria-live="polite"
       aria-label={label}
     >
-      <div className="spinner-border">
-        <span className="visually-hidden">{label}</span>
-      </div>
+      <img
+        className="vi-spinner-logo"
+        src="/medileser/Spinner-Logo-Medileser.gif"
+        alt=""
+        aria-hidden="true"
+      />
+      <span className="visually-hidden">{label}</span>
     </div>
   );
 }
