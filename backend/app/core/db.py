@@ -1,9 +1,11 @@
+from typing import Any
 from pathlib import Path
-from sqlmodel import SQLModel, create_engine
+from sqlmodel import SQLModel, create_engine, Session, select
 import os
 import sys
 
 from app.core.settings import get_settings
+from sqlalchemy.engine.url import make_url
 
 settings = get_settings()
 
@@ -52,17 +54,66 @@ Notas de robustez y backup de vi.db
   baja actividad.
 """
 
-engine = create_engine(
-    settings.database_url,
-    echo=False,
-    connect_args={
-        # Permitimos uso multi-hilo en FastAPI/Uvicorn
-        "check_same_thread": False,
-        # Tiempo máximo de espera antes de lanzar "database is locked" (segundos)
-        "timeout": 5.0,
-    },
-)
 
+DATABASE_URL: str = settings.database_url_resolved
+_url = make_url(DATABASE_URL)
+IS_SQLITE: bool = _url.get_backend_name() == "sqlite"
+
+_engine_kwargs: dict[str, Any] = {"echo": False}
+
+if IS_SQLITE:
+    _engine_kwargs["connect_args"] = {
+        "check_same_thread": False,
+        "timeout": 5.0,
+    }
+else:
+    _engine_kwargs.update(
+        {
+            "pool_pre_ping": True,
+            "pool_recycle": 280,
+        }
+    )
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
+
+def _seed_default_users_portable() -> None:
+    """
+    Inserta usuarios base solo si no existen.
+    Portable entre SQLite y MySQL (sin SQL específico como INSERT OR IGNORE).
+    """
+    if not DEFAULT_USERS:
+        return
+
+    from app.models import User
+
+    with Session(engine) as session:
+        for (
+            id_,
+            username,
+            first_name,
+            last_name,
+            password_hash,
+            tech_number,
+            role,
+            is_active,
+       ) in DEFAULT_USERS:
+            exists = session.exec(select(User).where(User.username == username)).first()
+            if exists:
+                continue
+
+            session.add(
+                User(
+                    id=id_,
+                    username=username,
+                    first_name=first_name,
+                    last_name=last_name,
+                    password_hash=password_hash,
+                    tech_number=tech_number,
+                    role=role,
+                    is_active=bool(is_active),
+                )
+            )
+        session.commit()
 
 def _configure_sqlite_pragmas() -> None:
     """
@@ -212,6 +263,9 @@ def _seed_default_users() -> None:
     """
     if not DEFAULT_USERS:
         return
+    if not IS_SQLITE:
+        _seed_default_users_portable()
+        return
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """
@@ -238,12 +292,13 @@ def _seed_default_users() -> None:
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
-    _configure_sqlite_pragmas()
-    _ensure_updated_at_column()
-    _ensure_oi_lock_columns()
-    _ensure_bancada_updated_at_column()
-    _ensure_oi_constraints()
-    _ensure_user_role_column()
-    _ensure_user_is_active_column()
-    _ensure_user_allowed_modules_column()
+    if IS_SQLITE:
+        _configure_sqlite_pragmas()
+        _ensure_updated_at_column()
+        _ensure_oi_lock_columns()
+        _ensure_bancada_updated_at_column()
+        _ensure_oi_constraints()
+        _ensure_user_role_column()
+        _ensure_user_is_active_column()
+        _ensure_user_allowed_modules_column()
     _seed_default_users()

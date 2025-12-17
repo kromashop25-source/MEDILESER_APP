@@ -66,6 +66,7 @@ def dry_run_upload(
     oi_pattern: str = Form(r"^OI-(\d+)-(\d{4})$"),
     oi_start_row: int = Form(9),
     base_sheet: Optional[str] = Form(None),
+    operation_id: Optional[str] = Form(None),
 ):
     # Leer binarios
     base_file.file.seek(0)

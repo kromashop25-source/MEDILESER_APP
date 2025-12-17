@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Nombre del archivo de base de datos
     database_filename: str = "vi.db"
 
+    # URL opcional para BD (ej: MySQL). Se lee desde VI_DATABASE_URL
+    database_url: str | None = None
+
     # Contraseña interna para proteger celdas bloqueadas y estructura del libro.
     # No se expone en la UI. Se puede sobreescribir con VI_CELLS_PROTECTION_PASSWORD
     cells_protection_password: str = "OI2025"
@@ -112,15 +115,18 @@ class Settings(BaseSettings):
         return data_dir
 
     @property
-    def database_url(self) -> str:
+    def database_url_resolved(self) -> str:
         """
-        URL de conexión a SQLite usando data/vi.db en root_dir.
+        URL de conexión a la base de datos.
+        - Si VI_DATABASE_URL está definido, se usa tal cual.
+        - Si no, se usa SQLite (data/vi.db) como fallback.
+        """
+        if self.database_url:
+            return self.database_url
 
-        Ejemplo EXE:
-        sqlite:///Y:/.../REGISTRO_VI_APP/data/vi.db
-        """
         db_path = self.data_dir / self.database_filename
         return f"sqlite:///{db_path.as_posix()}"
+
 
 
 @lru_cache
