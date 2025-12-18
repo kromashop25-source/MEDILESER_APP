@@ -4,41 +4,78 @@ import {
   listResponsables,
   generateExcel,
   saveCurrentOI,
+  clearCurrentOI,
   deleteOI,
 } from "../../api/oi";
 
 import type { OIListResponse, OIRead } from "../../api/oi";
-import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
 import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
 import PasswordModal from "./PasswordModal";
 import { getAuth, normalizeRole } from "../../api/auth";
+import { closeOpenOiIfAny } from "../../api/client";
 
 
 export default function OiListPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [, setSearchParams] = useSearchParams();
 
   // Filtros y paginación
-  const [searchRaw, setSearchRaw] = useState("");
-  const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [pageSize, setPageSize] = useState(20); // por defecto 20
-  const [page, setPage] = useState(1); // página 1-based
-  const [responsableTech, setResponsableTech] = useState<string>(""); // "" = todos
+  const [searchRaw, setSearchRaw] = useState(() => new URLSearchParams(location.search).get("q") ?? "");
+  const [search, setSearch] = useState(() => (new URLSearchParams(location.search).get("q") ?? "").trim());
+  const [dateFrom, setDateFrom] = useState(() => new URLSearchParams(location.search).get("dateFrom") ?? "");
+  const [dateTo, setDateTo] = useState(() => new URLSearchParams(location.search).get("dateTo") ?? "");
+  const [pageSize, setPageSize] = useState(() => {
+    const raw = new URLSearchParams(location.search).get("pageSize");
+    const v = raw ? Number(raw) : 20;
+    return Number.isFinite(v) && v > 0 ? v : 20;
+  }); // por defecto 20
+  const [page, setPage] = useState(() => {
+    const raw = new URLSearchParams(location.search).get("page");
+    const v = raw ? Number(raw) : 1;
+    return Number.isFinite(v) && v > 0 ? Math.floor(v) : 1;
+  }); // página 1-based
+  const [responsableTech, setResponsableTech] = useState<string>(
+    () => new URLSearchParams(location.search).get("responsableTech") ?? ""
+  ); // "" = todos
 
   const offset = (page - 1) * pageSize;
 
   // Debounce ligero para la búsqueda "en tiempo real"
+  const searchDidMount = useRef(false);
   useEffect(() => {
+    if (!searchDidMount.current) {
+      searchDidMount.current = true;
+      return;
+    }
     const t = setTimeout(() => {
       setSearch(searchRaw.trim());
       setPage(1); // al cambiar búsqueda, volvemos a página 1
     }, 300);
     return () => clearTimeout(t);
   }, [searchRaw]);
+
+  // Persistir filtros/paginación en URL (query string)
+  useEffect(() => {
+    const next = new URLSearchParams();
+    const q = searchRaw.trim();
+    if (q) next.set("q", q);
+    if (dateFrom) next.set("dateFrom", dateFrom);
+    if (dateTo) next.set("dateTo", dateTo);
+    if (responsableTech) next.set("responsableTech", responsableTech);
+    if (page !== 1) next.set("page", String(page));
+    if (pageSize !== 20) next.set("pageSize", String(pageSize));
+
+    const current = location.search.startsWith("?") ? location.search.slice(1) : location.search;
+    const desired = next.toString();
+    if (desired !== current) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [dateFrom, dateTo, location.search, page, pageSize, responsableTech, searchRaw, setSearchParams]);
 
   const {
     data,
@@ -126,13 +163,22 @@ export default function OiListPage() {
     try {
       saveCurrentOI({ id, code });
       toast({ kind: "success", message: `OI ${code} cargada` });
-      navigate("/oi");
+      navigate(`/oi${location.search}`);
     } catch (e: any) {
       toast({
         kind: "error",
         title: "Error",
         message: e?.message ?? "No se pudo abrir el OI",
       });
+    }
+  };
+
+  const handleNewOi = async () => {
+    try {
+      await closeOpenOiIfAny();
+    } finally {
+      clearCurrentOI();
+      navigate(`/oi${location.search}`);
     }
   };
 
@@ -202,7 +248,12 @@ export default function OiListPage() {
     <div>
       <Spinner show={busy} />
       <div className="d-flex align-items-center justify-content-between mb-3">
-        <h1 className="h3 mb-0">Listado de OI</h1>
+        <div className="d-flex align-items-center gap-2">
+          <button className="btn btn-primary" onClick={handleNewOi} disabled={busy} title="Nueva OI">
+            Nueva OI
+          </button>
+          <h1 className="h3 mb-0">Listado de OI</h1>
+        </div>
         <div className="d-flex gap-2">
           <button
             className="btn btn-outline-secondary"

@@ -1,5 +1,8 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { getAuth, getSelectedBank, isSuperuser, isTechnicianRole, normalizeRole } from "../../api/auth";
+import Spinner from "../../components/Spinner";
+import { api, handleAuthFailure } from "../../api/client";
 
 function getModuleIdForPath(pathname: string): string | null {
   if (pathname === "/home") return null;
@@ -18,10 +21,42 @@ export default function RequireAuth() {
   const auth = getAuth();
   const location = useLocation();
 
-  if (!auth?.token) return <Navigate to="/login" replace />;
+  const token = auth?.token ?? null;
+  const [checkingSession, setCheckingSession] = useState<boolean>(() => !!token);
 
-  const role = normalizeRole(auth.role, auth.username);
-  const superuser = isSuperuser(auth);
+  // Validación de sesión: evita quedar "dentro" del módulo con sesión expirada.
+  useEffect(() => {
+    if (!token) {
+      setCheckingSession(false);
+      return;
+    }
+    let cancelled = false;
+    setCheckingSession(true);
+    api
+      .get("/auth/me")
+      .then(() => {
+        if (!cancelled) setCheckingSession(false);
+      })
+      .catch(async (e: any) => {
+        if (cancelled) return;
+        const status = e?.response?.status;
+        if (status === 401 || status === 403) {
+          await handleAuthFailure();
+          return;
+        }
+        setCheckingSession(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  if (!token) return <Navigate to="/login" replace />;
+  if (checkingSession) return <Spinner show />;
+
+  const authed = auth!;
+  const role = normalizeRole(authed.role, authed.username);
+  const superuser = isSuperuser(authed);
   const isTech = isTechnicianRole(role);
 
   const selectedBank = getSelectedBank();
@@ -74,7 +109,7 @@ export default function RequireAuth() {
 
   if (!superuser) {
     const moduleId = getModuleIdForPath(location.pathname);
-    const allowed = auth.allowedModules;
+    const allowed = authed.allowedModules;
     if (moduleId && Array.isArray(allowed) && !allowed.includes(moduleId)) {
       return (
         <Navigate

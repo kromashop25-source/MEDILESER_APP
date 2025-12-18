@@ -6,6 +6,7 @@ import type { NumerationType } from "../../api/oi";
 
 type RowConstraintErrors = {
   medidor_dup?: string;
+  medidor_format?: string;
   q3_li?: string;
   q3_lf?: string;
   q2_li?: string;
@@ -13,6 +14,8 @@ type RowConstraintErrors = {
   q1_li?: string;
   q1_lf?: string;
 };
+
+const MEDIDOR_SERIE_RE = /^[A-Za-z0-9]{10}$/;
 
 // Función para ajustar dinámicamente el ancho del input según su contenido
 const handleAutoResize = (e: React.FormEvent<HTMLInputElement>) => {
@@ -851,6 +854,9 @@ const handleGridKeyDown = (
       if (medidorKey && medidorCounts[medidorKey] > 1) {
         setErr(i, "medidor_dup", "Serie de medidor repetida.");
       }
+      if (medidorKey && !MEDIDOR_SERIE_RE.test(medidorKey)) {
+        setErr(i, "medidor_format", "La serie del medidor debe tener 10 caracteres alfanuméricos.");
+      }
     });
 
     return { rowErrors: result, firstMessage };
@@ -1683,15 +1689,16 @@ useEffect(() => {
                             style={{ minWidth: "100%" }}
                             disabled={isRowLocked}
                             onInput={handleAutoResize}
-                            className={
-                              [
-                                "form-control form-control-sm p-1 text-center vi-medidor-input",
-                                rowErr.medidor_dup ? "vi-error-cell" : "",
-                              ].filter(Boolean).join(" ")
-                            }
-                            onChange={(event) => {
-                              medidorField.onChange(event);
-                              if (index === 0) return;
+                              className={
+                                [
+                                  "form-control form-control-sm p-1 text-center vi-medidor-input",
+                                  rowErr.medidor_dup || rowErr.medidor_format ? "vi-error-cell" : "",
+                                ].filter(Boolean).join(" ")
+                              }
+                              title={rowErr.medidor_format || ""}
+                              onChange={(event) => {
+                                medidorField.onChange(event);
+                                if (index === 0) return;
 
                               const value = event.currentTarget.value.trim();
                               if (!value) {

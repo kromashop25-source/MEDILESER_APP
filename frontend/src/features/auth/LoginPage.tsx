@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { getCatalogs } from "../../api/catalogs";
 import type { Catalogs } from "../../api/catalogs";
 import { isTechnicianRole, login, logout, setSessionBank } from "../../api/auth";
+import { popPendingToast } from "../../api/client";
 import PasswordInput from "../../components/PasswordInput";
 import Spinner from "../../components/Spinner";
 import { useToast } from "../../components/Toast";
@@ -27,6 +28,12 @@ export default function LoginPage() {
   });
 
   const bancos = data?.bancos ?? [];
+
+  useEffect(() => {
+    const msg = popPendingToast();
+    if (!msg) return;
+    toast({ kind: "error", message: msg });
+  }, [toast]);
 
   useEffect(() => {
     if (!showBankModal) return;

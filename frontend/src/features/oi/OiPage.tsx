@@ -7,6 +7,8 @@ import { useMemo, useEffect, useState } from "react";
 import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
 import { getAuth, normalizeRole } from "../../api/auth";
+import { useLocation, useNavigate } from "react-router-dom";
+import { clearOpenOiId, setOpenOiId } from "../../api/client";
 import BancadaModal, { type BancadaForm } from "./BancadaModal";
 import PasswordModal from "./PasswordModal";
 import {
@@ -82,6 +84,8 @@ const resolveEditingRows = (row: BancadaRead): BancadaRow[] => {
 
 export default function OiPage() {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { data } = useQuery<Catalogs>({ queryKey: ["catalogs"], queryFn: getCatalogs });
   const { register, handleSubmit, watch, formState:{errors}, reset, getValues } = useForm<OIFormInput, unknown, OIForm>({
     resolver: zodResolver(OISchema),
@@ -215,6 +219,13 @@ export default function OiPage() {
       }
     };
   }, [oiId, hasLock]);
+
+  // Marca el OI con lock activo para cierre automático en logout (best-effort)
+  useEffect(() => {
+    if (!oiId) return;
+    if (!hasLock || readOnly) return;
+    setOpenOiId(oiId);
+  }, [hasLock, oiId, readOnly]);
 
   const pma = watch("pma");
   const presion = useMemo(() => pressureFromPMA(Number(pma)), [pma]);
@@ -502,6 +513,7 @@ export default function OiPage() {
       unlockOi(oiId).catch(() => undefined);
     }
     clearCurrentOI();
+    clearOpenOiId();
     setOiId(null);
     setBancadas([]);
     setBancadaDrafts({});
@@ -521,6 +533,9 @@ export default function OiPage() {
       numeration_type: "correlativo",
     });
     toast({ kind:"info", message:"OI cerrada"});
+
+    const target = location.search ? `/oi/list${location.search}` : "/oi/list";
+    navigate(target);
   };
 
     const formatDateTime = (iso?: string | null) => {

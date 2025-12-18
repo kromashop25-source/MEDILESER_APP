@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { closeOpenOiIfAny } from "./client";
 
 export type LoginInput = { username: string; password: string; bancoId?: number | null };
 
@@ -155,4 +156,15 @@ export function logout() {
   localStorage.removeItem("vi.auth");
   localStorage.removeItem("vi_auth");
   clearSelectedBank();
+  try {
+    sessionStorage.removeItem("vi.currentOI");
+    sessionStorage.removeItem("openOiId");
+  } catch {
+    // ignore
+  }
+}
+
+export async function logoutWithCleanup() {
+  await closeOpenOiIfAny();
+  logout();
 }

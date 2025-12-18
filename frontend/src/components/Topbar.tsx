@@ -3,7 +3,7 @@ import {
   getAuth,
   getSelectedBank,
   isTechnicianRole,
-  logout,
+  logoutWithCleanup,
   subscribeSelectedBank,
 } from "../api/auth";
 
@@ -22,9 +22,12 @@ export default function Topbar({ sidebarCollapsed, onToggleSidebar }: Props) {
 
   const bankLabel = selectedBank && selectedBank > 0 ? `Banco ${selectedBank}` : "Banco sin seleccionar";
 
-  const handleLogout = () => {
-    logout();
-    location.assign("/login");
+  const handleLogout = async () => {
+    try {
+      await logoutWithCleanup();
+    } finally {
+      location.assign("/login");
+    }
   };
 
   return (

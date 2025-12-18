@@ -66,8 +66,8 @@ def get_current_user_session(authorization: str | None = Header(default=None)) -
     if not sess:
         raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
     if sess["expiresAt"] < datetime.utcnow():
-        _SESSIONS.pop(token, None)
-        raise HTTPException(status_code=401, detail="Sesión expirada")
+        # No removemos la sesión aquí para permitir cierres best-effort (p.ej. liberar lock OI)
+        raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
     return sess
 
 # --- AUTENTICACIÓN ---

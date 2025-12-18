@@ -33,7 +33,7 @@ router = APIRouter()
 LOCK_EXPIRATION_MINUTES = 15
 LOCK_EXPIRATION_DELTA = timedelta(minutes=LOCK_EXPIRATION_MINUTES)
 
-def _get_session_from_header(authorization: str | None) -> dict:
+def _get_session_from_header(authorization: str | None, *, allow_expired: bool = False) -> dict:
     """Recupera la sesión (usuario logueado) a partir del header Authorization."""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Token requerido")
@@ -41,7 +41,17 @@ def _get_session_from_header(authorization: str | None) -> dict:
     token = authorization.split(" ", 1)[1]
     sess = _SESSIONS.get(token)
     if not sess:
-        raise HTTPException(status_code=401, detail="Token inválido")
+        raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
+
+    expires_at = sess.get("expiresAt")
+    try:
+        if isinstance(expires_at, datetime) and expires_at < datetime.utcnow() and not allow_expired:
+            raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
+    except HTTPException:
+        raise
+    except Exception:
+        if not allow_expired:
+            raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
 
     # Normalizar claves user/username igual que en /auth/me
     if "username" not in sess and "user" in sess:
@@ -463,6 +473,37 @@ def release_lock(
         return {"ok": True}
 
     if not _is_admin(sess) and oi.locked_by_user_id != sess.get("userId"):
+        raise HTTPException(status_code=403, detail="No puede liberar el lock de otro usuario")
+
+    oi.locked_by_user_id = None
+    oi.locked_at = None
+    session.add(oi)
+    session.commit()
+    return {"ok": True}
+
+
+@router.post("/{oi_id:int}/close")
+def close_oi(
+    oi_id: int,
+    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+):
+    """
+    Libera el lock de una OI si pertenece al usuario autenticado.
+    Endpoint idempotente: si ya está libre, devuelve OK.
+    """
+    oi = session.get(OI, oi_id)
+    if not oi:
+        raise HTTPException(status_code=404, detail="OI no encontrada")
+
+    # allow_expired: best-effort para liberar locks aun si la sesión expiró
+    sess = _get_session_from_header(authorization, allow_expired=True)
+    _ensure_oi_access(oi, sess)
+
+    if oi.locked_by_user_id is None:
+        return {"ok": True}
+
+    if oi.locked_by_user_id != sess.get("userId"):
         raise HTTPException(status_code=403, detail="No puede liberar el lock de otro usuario")
 
     oi.locked_by_user_id = None
