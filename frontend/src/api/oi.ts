@@ -21,6 +21,8 @@ export type OIRead = OICreate & {
   locked_by_full_name?: string | null;
   locked_at?: string | null;
   read_only_for_current_user?: boolean;
+  medidores_usuario?: number | null;
+  medidores_total_code?: number | null;
 };
 
 // ---- Listado paginado de OI (para Listado OI) ----
@@ -38,6 +40,11 @@ export type OIListResponse = {
   total: number;
   limit: number;
   offset: number;
+  summary?: {
+    medidores_resultado: number;
+    oi_unicas: number;
+    medidores_total_oi_unicas: number;
+  };
 };
 
 // Payload mínimo para actualizar los valores técnicos de la OI
@@ -313,4 +320,3 @@ export function loadCurrentOI(): CurrentOI | null {
 export function clearCurrentOI() {
   sessionStorage.removeItem(KEY);
 }
-

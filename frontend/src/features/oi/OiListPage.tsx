@@ -133,6 +133,12 @@ export default function OiListPage() {
   const items: OIRead[] = data?.items ?? [];
   const rows = items;
 
+  const summary = data?.summary ?? {
+    medidores_resultado: 0,
+    oi_unicas: 0,
+    medidores_total_oi_unicas: 0,
+  };
+
   const total = data?.total ?? 0;
   const limit = data?.limit ?? pageSize;
 
@@ -280,18 +286,23 @@ export default function OiListPage() {
 
       <div className="card vi-card-table">
         <div className="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-          <h2 className="h6 mb-0">Registros</h2>
+          <div>
+            <h2 className="h6 mb-0">Registros</h2>
+            <small className="text-muted">
+              Medidores (resultados): {summary.medidores_resultado} | OI unicas: {summary.oi_unicas} | Medidores (Total OI): {summary.medidores_total_oi_unicas}
+            </small>
+          </div>
           <div className="d-flex flex-wrap align-items-center gap-2">
             <input
               type="text"
               className="form-control form-control-sm"
-              placeholder="Buscar OI..."
+              placeholder="Buscar OI o medidor..."
               value={searchRaw}
               onChange={(e) => {
                 setSearchRaw(e.target.value);
                 setPage(1);
               }}
-              aria-label="Buscar por código de OI"
+              aria-label="Buscar por codigo de OI o medidor"
             />
             <input
               type="date"
@@ -366,6 +377,7 @@ export default function OiListPage() {
                 <tr>
                   <th>ID</th>
                   <th>OI</th>
+                  <th>Medidores</th>
                   <th>Q3</th>
                   <th>Alcance</th>
                   <th>PMA</th>
@@ -380,7 +392,7 @@ export default function OiListPage() {
               <tbody>
                 {!busy && rows.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="text-center text-muted py-3">
+                    <td colSpan={12} className="text-center text-muted py-3">
                       {total > 0
                         ? "No hay registros que coincidan con los filtros."
                         : "Sin registros."}
@@ -392,6 +404,9 @@ export default function OiListPage() {
                   <tr key={r.id}>
                     <td>{r.id}</td>
                     <td>{r.code}</td>
+                    <td title="Mi registro / Total OI">
+                      {`${r.medidores_usuario ?? 0} / ${r.medidores_total_code ?? 0}`}
+                    </td>
                     <td>{r.q3}</td>
                     <td>{r.alcance}</td>
                     <td>{r.pma}</td>

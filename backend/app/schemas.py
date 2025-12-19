@@ -66,7 +66,9 @@ class OIRead(BaseModel):
     locked_by_full_name: Optional[str] = None
     locked_at: Optional[datetime] = None
     read_only_for_current_user: bool = False
-    
+    medidores_usuario: Optional[int] = 0
+    medidores_total_code: Optional[int] = 0
+
 
 class BancadaBase(BaseModel):
     medidor: Optional[str] = None
@@ -122,8 +124,15 @@ class UserUpdate(BaseModel):
     tech_number: Optional[int] = None
     role: Optional[str] = None
 
+class OIListSummary(BaseModel):
+    medidores_resultado: int = 0
+    oi_unicas: int = 0
+    medidores_total_oi_unicas: int = 0
+
+
 class OIListResponse(BaseModel):
-    items: List[OIRead] 
+    items: List[OIRead]
     total: int
     limit: int
     offset: int
+    summary: Optional[OIListSummary] = None

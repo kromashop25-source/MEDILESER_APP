@@ -82,6 +82,9 @@ const resolveEditingRows = (row: BancadaRead): BancadaRow[] => {
   }));
 };
 
+const calcMedidoresFromBancadas = (items: BancadaRead[]) =>
+  items.reduce((acc, item) => acc + (item.rows ?? 0), 0);
+
 export default function OiPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -117,6 +120,8 @@ export default function OiPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<BancadaRead | null>(null);
   const [showPwd, setShowPwd] = useState(false);
+  const [medidoresUsuarioApi, setMedidoresUsuarioApi] = useState<number | null>(null);
+  const [medidoresTotalCode, setMedidoresTotalCode] = useState(0);
 
   // Borradores temporales de bancadas (por id o "new")
   const [bancadaDrafts, setBancadaDrafts] = useState<Record<string, BancadaForm>>({});
@@ -141,6 +146,8 @@ export default function OiPage() {
         const full = await getOiFull(current.id);
         setOiId(full.id);
         setBancadas(full.bancadas ?? []);
+        setMedidoresUsuarioApi(full.medidores_usuario ?? null);
+        setMedidoresTotalCode(full.medidores_total_code ?? 0);
         // Guardamos la versión (updated_at o, en su defecto, created_at)
         setOiVersion(full.updated_at ?? full.created_at);
         const initial: OIForm = {
@@ -251,6 +258,8 @@ export default function OiPage() {
       const created = await createOI(payload);
       setOiId(created.id);
       setOiVersion(created.updated_at ?? created.created_at);
+      setMedidoresUsuarioApi(created.medidores_usuario ?? 0);
+      setMedidoresTotalCode(created.medidores_total_code ?? 0);
       saveCurrentOI({ id: created.id, code: created.code });
       setOriginalOI(v);
       
@@ -378,6 +387,7 @@ export default function OiPage() {
         const upd = await updateBancada(editing.id, updPayload);
         setBancadas(prev => prev.map(x => (x.id === upd.id ? upd : x)));
         setOiVersion(upd.updated_at ?? upd.created_at ?? oiVersion);
+        setMedidoresUsuarioApi(null);
         // Limpiar borrador de esta bancada editada
         setBancadaDrafts(prev => {
           const key = `bancada-${editing.id}`;
@@ -389,12 +399,21 @@ export default function OiPage() {
         const created = await addBancada(oiId, payload);
         setBancadas(prev => [...prev, created]);
         setOiVersion(created.updated_at ?? created.created_at ?? oiVersion);
+        setMedidoresUsuarioApi(null);
         // Limpiar borrador de "nueva bancada"
         setBancadaDrafts(prev => {
           const { new: _, ...rest } = prev;
           return rest;
         });
         toast({ kind: "success", message: "Bancada agregada" });
+      }
+
+      try {
+        const refreshed = await getOi(oiId);
+        setMedidoresUsuarioApi(refreshed.medidores_usuario ?? null);
+        setMedidoresTotalCode(refreshed.medidores_total_code ?? medidoresTotalCode);
+      } catch {
+        // ignore
       }
 
       // ✅ Cerrar la modal tras guardar correctamente
@@ -439,6 +458,7 @@ export default function OiPage() {
       }
       await deleteBancada(row.id);
       setBancadas(prev => prev.filter(x => x.id !== row.id));
+      setMedidoresUsuarioApi(null);
       setBancadaDrafts(prev => {
         const key = `bancada-${row.id}`;
         const { [key]: _, ...rest } = prev;
@@ -450,6 +470,8 @@ export default function OiPage() {
       setLockedByName(refreshed.locked_by_full_name ?? null);
       setReadOnly(refreshed.read_only_for_current_user ?? false);
       setHasLock((refreshed.locked_by_user_id ?? null) === authUserId);
+      setMedidoresUsuarioApi(refreshed.medidores_usuario ?? null);
+      setMedidoresTotalCode(refreshed.medidores_total_code ?? medidoresTotalCode);
 
       toast({ kind:"success", message:`Bancada #${row.item} eliminada` });
     } catch (e: any) {
@@ -524,6 +546,8 @@ export default function OiPage() {
     setLockedByName(null);
     setLockedByUserId(null);
     setHasLock(false);
+    setMedidoresUsuarioApi(null);
+    setMedidoresTotalCode(0);
     // opcional: resetear a defaults
     reset({
       oi: `OI-0001-${new Date().getFullYear()}`,
@@ -537,6 +561,12 @@ export default function OiPage() {
     const target = location.search ? `/oi/list${location.search}` : "/oi/list";
     navigate(target);
   };
+
+  const medidoresUsuarioLocal = useMemo(
+    () => calcMedidoresFromBancadas(bancadas),
+    [bancadas]
+  );
+  const medidoresUsuarioDisplay = medidoresUsuarioApi ?? medidoresUsuarioLocal;
 
     const formatDateTime = (iso?: string | null) => {
       if (!iso) return "-";
@@ -671,7 +701,12 @@ export default function OiPage() {
       {/* ---- Tabla de Bancadas con estilo Adminator ---- */}
       <div className="card vi-card-table mt-3">
         <div className="card-header d-flex align-items-center justify-content-between">
-          <h2 className="h6 mb-0">Bancadas</h2>
+          <div>
+            <h2 className="h6 mb-0">Bancadas</h2>
+            <small className="text-muted">
+              Medidores (mi registro): {medidoresUsuarioDisplay} | Total OI: {medidoresTotalCode}
+            </small>
+          </div>
           <button className="btn btn-primary" onClick={openNew} disabled={!oiId || busy || isEditingOI || readOnly}>Agregar Bancada</button>
         </div>
         <div className="card-body p-0">
@@ -681,7 +716,7 @@ export default function OiPage() {
                 <tr>
                   <th className="vi-col-60">Item</th>
                   <th># Medidor</th>
-                  <th>Filas</th>
+                  <th>Medidores</th>
                   <th className="vi-col-160">Fecha creación</th>
                   <th className="vi-col-160">Última fecha mod.</th>
                   <th className="vi-col-160 text-end">Acciones</th>

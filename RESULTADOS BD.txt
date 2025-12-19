@@ -1,0 +1,210 @@
+# Field, Type, Collation, Null, Key, Default, Extra, Privileges, Comment
+'id', 'int', NULL, 'NO', 'PRI', NULL, 'auto_increment', 'select,insert,update,references', ''
+'code', 'varchar(255)', 'utf8mb4_0900_ai_ci', 'NO', 'MUL', NULL, '', 'select,insert,update,references', ''
+'q3', 'float', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'alcance', 'int', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'pma', 'int', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'presion_bar', 'float', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'banco_id', 'int', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'tech_number', 'int', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'locked_by_user_id', 'int', NULL, 'YES', 'MUL', NULL, '', 'select,insert,update,references', ''
+'locked_at', 'datetime', NULL, 'YES', '', NULL, '', 'select,insert,update,references', ''
+'numeration_type', 'varchar(14)', 'utf8mb4_0900_ai_ci', 'NO', '', NULL, '', 'select,insert,update,references', ''
+'created_at', 'datetime', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'updated_at', 'datetime', NULL, 'YES', '', NULL, '', 'select,insert,update,references', ''
+# Table, Create Table
+'oi', 'CREATE TABLE `oi` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `code` varchar(255) NOT NULL,\n  `q3` float NOT NULL,\n  `alcance` int NOT NULL,\n  `pma` int NOT NULL,\n  `presion_bar` float NOT NULL,\n  `banco_id` int NOT NULL,\n  `tech_number` int NOT NULL,\n  `locked_by_user_id` int DEFAULT NULL,\n  `locked_at` datetime DEFAULT NULL,\n  `numeration_type` varchar(14) NOT NULL,\n  `created_at` datetime NOT NULL,\n  `updated_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  KEY `ix_oi_code` (`code`),\n  KEY `ix_oi_locked_by_user_id` (`locked_by_user_id`),\n  CONSTRAINT `oi_ibfk_1` FOREIGN KEY (`locked_by_user_id`) REFERENCES `user` (`id`),\n  CONSTRAINT `ck_oi_numeration_type` CHECK ((`numeration_type` in (_utf8mb4\'correlativo\',_utf8mb4\'no correlativo\')))\n) ENGINE=InnoDB AUTO_INCREMENT=164 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci'
+# Table, Create Table
+'bancada', 'CREATE TABLE `bancada` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `oi_id` int NOT NULL,\n  `item` int NOT NULL,\n  `medidor` varchar(255) DEFAULT NULL,\n  `estado` int NOT NULL,\n  `rows` int NOT NULL,\n  `rows_data` json DEFAULT NULL,\n  `created_at` datetime NOT NULL,\n  `updated_at` datetime DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  KEY `oi_id` (`oi_id`),\n  CONSTRAINT `bancada_ibfk_1` FOREIGN KEY (`oi_id`) REFERENCES `oi` (`id`)\n) ENGINE=InnoDB AUTO_INCREMENT=754 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci'
+# Table, Create Table
+'user', 'CREATE TABLE `user` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `username` varchar(255) NOT NULL,\n  `first_name` varchar(255) NOT NULL,\n  `last_name` varchar(255) NOT NULL,\n  `password_hash` varchar(255) NOT NULL,\n  `tech_number` int NOT NULL,\n  `role` varchar(255) NOT NULL,\n  `is_active` tinyint(1) NOT NULL,\n  `allowed_modules` json DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `ix_user_username` (`username`)\n) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci'
+# Field, Type, Collation, Null, Key, Default, Extra, Privileges, Comment
+'id', 'int', NULL, 'NO', 'PRI', NULL, 'auto_increment', 'select,insert,update,references', ''
+'oi_id', 'int', NULL, 'NO', 'MUL', NULL, '', 'select,insert,update,references', ''
+'item', 'int', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'medidor', 'varchar(255)', 'utf8mb4_0900_ai_ci', 'YES', '', NULL, '', 'select,insert,update,references', ''
+'estado', 'int', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'rows', 'int', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'rows_data', 'json', NULL, 'YES', '', NULL, '', 'select,insert,update,references', ''
+'created_at', 'datetime', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'updated_at', 'datetime', NULL, 'YES', '', NULL, '', 'select,insert,update,references', ''
+# Field, Type, Collation, Null, Key, Default, Extra, Privileges, Comment
+'id', 'int', NULL, 'NO', 'PRI', NULL, 'auto_increment', 'select,insert,update,references', ''
+'username', 'varchar(255)', 'utf8mb4_0900_ai_ci', 'NO', 'UNI', NULL, '', 'select,insert,update,references', ''
+'first_name', 'varchar(255)', 'utf8mb4_0900_ai_ci', 'NO', '', NULL, '', 'select,insert,update,references', ''
+'last_name', 'varchar(255)', 'utf8mb4_0900_ai_ci', 'NO', '', NULL, '', 'select,insert,update,references', ''
+'password_hash', 'varchar(255)', 'utf8mb4_0900_ai_ci', 'NO', '', NULL, '', 'select,insert,update,references', ''
+'tech_number', 'int', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'role', 'varchar(255)', 'utf8mb4_0900_ai_ci', 'NO', '', NULL, '', 'select,insert,update,references', ''
+'is_active', 'tinyint(1)', NULL, 'NO', '', NULL, '', 'select,insert,update,references', ''
+'allowed_modules', 'json', NULL, 'YES', '', NULL, '', 'select,insert,update,references', ''
+# Table, Non_unique, Key_name, Seq_in_index, Column_name, Collation, Cardinality, Sub_part, Packed, Null, Index_type, Comment, Index_comment, Visible, Expression
+'oi', '0', 'PRIMARY', '1', 'id', 'A', '159', NULL, NULL, '', 'BTREE', '', '', 'YES', NULL
+'oi', '1', 'ix_oi_code', '1', 'code', 'A', '32', NULL, NULL, '', 'BTREE', '', '', 'YES', NULL
+'oi', '1', 'ix_oi_locked_by_user_id', '1', 'locked_by_user_id', 'A', '13', NULL, NULL, 'YES', 'BTREE', '', '', 'YES', NULL
+# Table, Non_unique, Key_name, Seq_in_index, Column_name, Collation, Cardinality, Sub_part, Packed, Null, Index_type, Comment, Index_comment, Visible, Expression
+'bancada', '0', 'PRIMARY', '1', 'id', 'A', '555', NULL, NULL, '', 'BTREE', '', '', 'YES', NULL
+'bancada', '1', 'oi_id', '1', 'oi_id', 'A', '148', NULL, NULL, '', 'BTREE', '', '', 'YES', NULL
+# Table, Non_unique, Key_name, Seq_in_index, Column_name, Collation, Cardinality, Sub_part, Packed, Null, Index_type, Comment, Index_comment, Visible, Expression
+'user', '0', 'PRIMARY', '1', 'id', 'A', '18', NULL, NULL, '', 'BTREE', '', '', 'YES', NULL
+'user', '0', 'ix_user_username', '1', 'username', 'A', '18', NULL, NULL, '', 'BTREE', '', '', 'YES', NULL
+# TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+'bancada', 'oi_id', 'bancada_ibfk_1', 'oi', 'id'
+'oi', 'locked_by_user_id', 'oi_ibfk_1', 'user', 'id'
+# TABLE_NAME, CONSTRAINT_NAME, CHECK_CLAUSE
+'oi', 'ck_oi_numeration_type', '(`numeration_type` in (_utf8mb4\\\'correlativo\\\',_utf8mb4\\\'no correlativo\\\'))'
+# table_name, rows_count
+'oi', '160'
+'bancada', '749'
+'user', '18'
+# code, oi_rows
+'OI-1303-2025', '18'
+'OI-1304-2025', '15'
+'OI-1285-2025', '14'
+'OI-1282-2025', '13'
+'OI-1284-2025', '12'
+'OI-1279-2025', '11'
+'OI-1283-2025', '9'
+'OI-1286-2025', '8'
+'OI-1314-2025', '8'
+'OI-1315-2025', '7'
+'OI-1312-2025', '5'
+'OI-1313-2025', '5'
+'OI-1348-2025', '5'
+'OI-1316-2025', '4'
+'OI-0001-2025', '3'
+'OI-1280-2025', '3'
+'OI-1287-2025', '3'
+'OI-1281-2025', '2'
+'OI-1311-2025', '2'
+# oi_id, bancadas
+'85', '13'
+'99', '13'
+'75', '13'
+'147', '13'
+'97', '12'
+'115', '12'
+'49', '10'
+'98', '10'
+'2', '9'
+'108', '9'
+'33', '9'
+'14', '9'
+'114', '9'
+'65', '9'
+'26', '9'
+'66', '9'
+'74', '9'
+'73', '9'
+'133', '9'
+'152', '9'
+'3', '8'
+'118', '8'
+'105', '8'
+'8', '8'
+'10', '8'
+'36', '8'
+'90', '8'
+'92', '8'
+'51', '8'
+'91', '8'
+'124', '8'
+'155', '8'
+'88', '7'
+'57', '7'
+'54', '7'
+'24', '7'
+'42', '7'
+'119', '7'
+'121', '7'
+'122', '7'
+'127', '7'
+'141', '7'
+'156', '7'
+'80', '6'
+'89', '6'
+'116', '6'
+'5', '6'
+'81', '6'
+'87', '6'
+'41', '6'
+# total_bancadas, rows_data_null, json_invalid
+'749', '0', '0'
+# id, oi_id, item, rows, json_valid, json_len
+'753', '161', '6', '11', '1', '11'
+'752', '162', '4', '12', '1', '12'
+'751', '161', '5', '11', '1', '11'
+'750', '163', '1', '9', '1', '9'
+'749', '160', '4', '11', '1', '11'
+'748', '162', '3', '12', '1', '12'
+'747', '161', '4', '11', '1', '11'
+'746', '160', '3', '11', '1', '11'
+'745', '161', '3', '11', '1', '11'
+'744', '162', '2', '12', '1', '12'
+'743', '160', '2', '11', '1', '11'
+'742', '161', '2', '11', '1', '11'
+'741', '160', '1', '11', '1', '11'
+'740', '161', '1', '4', '1', '4'
+'739', '162', '1', '2', '1', '2'
+'738', '157', '5', '10', '1', '10'
+'737', '157', '4', '12', '1', '12'
+'736', '155', '8', '7', '1', '7'
+'735', '155', '7', '11', '1', '11'
+'734', '156', '7', '8', '1', '8'
+# mismatches
+'0'
+# code, total_medidores
+'OI-1303-2025', '982'
+'OI-1304-2025', '940'
+'OI-1284-2025', '632'
+'OI-1282-2025', '626'
+'OI-1285-2025', '617'
+'OI-1279-2025', '600'
+'OI-1286-2025', '600'
+'OI-1313-2025', '600'
+'OI-1314-2025', '600'
+'OI-1315-2025', '600'
+'OI-1283-2025', '581'
+'OI-1312-2025', '520'
+'OI-1316-2025', '309'
+'OI-1287-2025', '141'
+'OI-1311-2025', '134'
+'OI-1280-2025', '121'
+'OI-1348-2025', '94'
+'OI-1302-2025', '80'
+'OI-1367-2025', '47'
+'OI-1281-2025', '46'
+'OI-1353-2025', '39'
+'OI-1349-2025', '38'
+'OI-1351-2025', '37'
+'OI-1354-2025', '36'
+'OI-1345-2025', '15'
+'OI-1300-2025', '10'
+'OI-1376-2025', '5'
+'OI-1350-2025', '3'
+'OI-1352-2025', '3'
+'OI-0011-2025', '1'
+'OI-0101-2025', '1'
+# TABLE_NAME, TABLE_COLLATION
+'bancada', 'utf8mb4_0900_ai_ci'
+'oi', 'utf8mb4_0900_ai_ci'
+'user', 'utf8mb4_0900_ai_ci'
+# Variable_name, Value
+'character_set_server', 'utf8mb4'
+# Variable_name, Value
+'collation_server', 'utf8mb4_0900_ai_ci'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
