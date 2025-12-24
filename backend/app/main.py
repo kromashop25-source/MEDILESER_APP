@@ -18,6 +18,7 @@ from app.oi_tools.routers import updates as oi_updates
 from app.oi_tools.routers import oi_merge as oi_merge
 from app.oi_tools.routers import excel as oi_excel
 from app.oi_tools.routers import files as oi_files
+from app.logistica.routers import log01 as log01_router
 
 configure_logging()
 
@@ -58,6 +59,8 @@ app.include_router(oi_updates.router)
 app.include_router(oi_merge.router)
 app.include_router(oi_excel.router, prefix="/tools/excel", tags=["excel-tools"])
 app.include_router(oi_files.router, prefix="/tools/files", tags=["files"])
+
+app.include_router(log01_router.router)
 
 
 @app.on_event("startup")
@@ -177,7 +180,8 @@ async def spa_for_react_routes(request: Request, call_next):
     if (
         request.method == "GET"
         and "text/html" in accept
-        and (path in spa_paths or path.startswith("/oi") or path.startswith("/admin"))
+        and (path in spa_paths or path.startswith("/oi") or path.startswith("/admin") or path.startswith("/logistica"))
+
     ):
         index_file = frontend_root / "index.html"
         if index_file.exists():

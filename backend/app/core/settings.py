@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # Nota: el template vive en app/data/templates/vi/
     data_template_path: str = "data/templates/vi/PLANTILLA_VI.xlsx"
 
+    # Plantilla LOG-01 (Logística)
+    log01_template_path: str = "data/templates/logistica/LOG01_PLANTILLA_SALIDA.xlsx"
+
+
     # Nombre del archivo de base de datos
     database_filename: str = "vi.db"
 
@@ -93,6 +97,31 @@ class Settings(BaseSettings):
         # Si no existe ninguna, devolvemos la primera para mantener el fallback actual
         # (el servicio de Excel creará un workbook vacío).
         return str(candidates[0].resolve())
+    
+    @property
+    def log01_template_abs_path(self) -> str:
+        """Ruta absoluta de la plantilla LOG-01 en runtime."""
+        meipass_path = getattr(sys, "_MEIPASS", None)
+        if meipass_path:
+            base = Path(meipass_path) / "app"
+        else:
+            base = Path(__file__).resolve().parents[1]  # .../backend/app
+
+        # Permite override con VI_LOG01_TEMPLATE_PATH
+        candidates = [
+            (base / self.log01_template_path),
+            (base / "data" / "templates" / "logistica" / "LOG01_PLANTILLA_SALIDA.xlsx"),
+            (base / "data" / "LOG01_PLANTILLA_SALIDA.xlsx"),  # legacy si existiera
+        ]
+        for p in candidates:
+            if p.exists():
+                return str(p.resolve())
+
+        raise FileNotFoundError(
+            "No se encontró LOG01_PLANTILLA_SALIDA.xlsx. "
+            f"Revisar VI_LOG01_TEMPLATE_PATH o colocarla en {candidates[0]}"
+        )
+
 
     # ----------------------------
     # Rutas para BD y otros datos

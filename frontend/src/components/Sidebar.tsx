@@ -13,6 +13,7 @@ type GroupKey =
   | "oi_formato_ac"
   | "oi_consolidacion"
   | "oi_verificacion"
+  | "logistica"
   | "usuarios"
   | "administrar";
 
@@ -173,6 +174,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
       oi_formato_ac: true,
       oi_consolidacion: true,
       oi_verificacion: true,
+      logistica: true,
       usuarios: false,
       administrar: false,
     }),
@@ -215,6 +217,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
       users: exact("/users"),
       password: exact("/password"),
       permisos: exact("/admin/permisos"),
+      log01Excel: exact("/logistica/log01/excel"),
     };
   }, [pathname]);
 
@@ -235,6 +238,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           activeLeaves.registroOi ||
           activeLeaves.listadoOi,
         usuarios: activeLeaves.users || activeLeaves.password,
+        logistica: activeLeaves.log01Excel,
         administrar: activeLeaves.permisos,
       }) satisfies Record<GroupKey, boolean>,
     [activeLeaves]
@@ -391,8 +395,26 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
         )}
 
         {canFutureLogistica && (
-          <SidebarDisabledItem icon="ti-package" label="LOGÍSTICA (FUTURO)" depth={0} collapsed={collapsed} />
+          <SidebarGroup
+            groupKey="logistica"
+            icon="ti-package"
+            label="LOGÍSTICA"
+            depth={0}
+            collapsed={collapsed}
+            open={open.logistica}
+            active={activeGroups.logistica}
+            onToggle={toggleGroup}
+          >
+            <SidebarNavItem
+              to="/logistica/log01/excel"
+              icon="ti-files"
+              label="LOG-01 · Consolidación Excel"
+              depth={1}
+              collapsed={collapsed}
+            />
+          </SidebarGroup>
         )}
+
         {canFutureSmart && (
           <SidebarDisabledItem icon="ti-bar-chart" label="SMART (FUTURO)" depth={0} collapsed={collapsed} />
         )}

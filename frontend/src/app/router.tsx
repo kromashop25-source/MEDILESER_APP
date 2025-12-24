@@ -15,6 +15,7 @@ import ConsolidacionNoCorrelativoPage from "../features/oi_tools/ConsolidacionNo
 import ExcelToolsPage from "../features/oi_tools/ExcelToolsPage";
 import HomePage from "../features/home/HomePage";
 import { getAuth } from "../api/auth";
+import Log01ExcelPage  from "../features/logistica/Log01ExcelPage";
 
 
 export default function AppRouter() {
@@ -39,6 +40,7 @@ export default function AppRouter() {
             <Route path="/users" element={<UsersPage />} />
             <Route path="/password" element={<ChangePasswordPage />} />
             <Route path="/admin/permisos" element={<AdminPermisosPage />} />
+            <Route path="/logistica/log01/excel" element={<Log01ExcelPage />} />
 
             {/* OI Tools (Fase 2.2: páginas cascarón; menú se habilita luego) */}
             <Route path="/oi/tools/vima-to-lista" element={<VimaToListaPage />} />

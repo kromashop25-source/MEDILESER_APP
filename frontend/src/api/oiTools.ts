@@ -119,6 +119,29 @@ export async function subscribeOiToolsProgress(
   await readNdjsonStream(res, onEvent);
 }
 
+export async function subscribeLog01Progress(
+  operationId: string,
+  onEvent: (ev: ProgressEvent) => void,
+  signal?: AbortSignal
+) {
+  const url = buildUrl(`/logistica/log01/progress/${operationId}`);
+  const token = getAuth()?.token;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    signal,
+  });
+
+  if (!res.ok) {
+    const code = res.headers.get("X-Code") ?? undefined;
+    throw asErrorWithCode(`No se pudo abrir el stream (${res.status})`, res.status, code);
+  }
+
+  await readNdjsonStream(res, onEvent);
+}
+
+
 export async function actualizacionBaseDryRunUpload(
   form: FormData,
   onEvent: (ev: ProgressEvent) => void,
@@ -153,6 +176,14 @@ export async function actualizacionBaseUpload(
 ): Promise<AxiosResponse<Blob>> {
   return api.post("/bases/actualizar/upload", form, { responseType: "blob", signal });
 }
+
+export async function log01Upload(
+  form: FormData,
+  signal?: AbortSignal
+): Promise<AxiosResponse<Blob>> {
+  return api.post("/logistica/log01/upload", form, { responseType: "blob", signal });
+}
+
 
 export async function getMergeUploadLimits(): Promise<MergeUploadLimits> {
   const { data } = await api.get<MergeUploadLimits>("/merge/config/upload-limits");
