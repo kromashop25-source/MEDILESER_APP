@@ -45,6 +45,10 @@ class ProgressManager:
             channel.last_touch = time()
             return channel
 
+    def get_channel(self, operation_id: str) -> Optional[ProgressChannel]:
+        with self._lock:
+            return self._channels.get(operation_id)
+
     def emit(self, operation_id: Optional[str], event: Dict[str, Any]) -> None:
         if not operation_id:
             return
@@ -63,6 +67,17 @@ class ProgressManager:
         channel = self.ensure(operation_id)
         channel.subscribers += 1
         history = list(channel.history)
+        return channel, history
+
+    def subscribe_existing(
+        self, operation_id: str
+    ) -> Optional[Tuple[ProgressChannel, List[Dict[str, Any]]]]:
+        with self._lock:
+            channel = self._channels.get(operation_id)
+            if channel is None:
+                return None
+            channel.subscribers += 1
+            history = list(channel.history)
         return channel, history
 
     def unsubscribe(self, operation_id: str) -> None:

@@ -10,12 +10,14 @@ from copy import copy
 from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from openpyxl import load_workbook
+from openpyxl.cell.cell import Cell
 from openpyxl.styles import Alignment, Font
+from openpyxl.worksheet.worksheet import Worksheet
 
 from app.api.auth import get_current_user_session
 from app.core.settings import get_settings
@@ -177,7 +179,18 @@ def _normalize_output_date(value: Any) -> Any:
 # ----------------------------
 @router.get("/progress/{operation_id}")
 async def log01_progress_stream(operation_id: str):
-    channel, history = progress_manager.subscribe(operation_id)
+    deadline = time.monotonic() + 1.5
+    subscribed = progress_manager.subscribe_existing(operation_id)
+    while subscribed is None and time.monotonic() < deadline:
+        await asyncio.sleep(0.1)
+        subscribed = progress_manager.subscribe_existing(operation_id)
+    if subscribed is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Operacion no encontrada.",
+            headers={"X-Code": "NOT_FOUND"},
+        )
+    channel, history = subscribed
 
     async def event_stream():
         last_heartbeat = time.monotonic()
@@ -237,6 +250,8 @@ def log01_upload(
     # token de cancelación (opcional)
     cancel_token = cancel_manager.create(operation_id) if operation_id else None
     cancel_emitted = False
+    if operation_id:
+        progress_manager.ensure(operation_id)
 
     def _raise_cancelled() -> None:
         nonlocal cancel_emitted
@@ -255,6 +270,7 @@ def log01_upload(
 
     try:
         _emit(operation_id, {"type": "status", "stage": "received", "message": "Archivos recibidos", "progress": 0})
+        time.sleep(0.01) # Yield para permitir flush del primer evento
 
         # 1) Consolidar serie -> (oi mayor, estado final)
         series: Dict[str, SerieInfo] = {}
@@ -264,6 +280,7 @@ def log01_upload(
 
         for idx, up in enumerate(files, start=1):
             _raise_cancelled()
+            time.sleep(0.01) # Yield entre archivos
 
             fname = up.filename or f"archivo_{idx}.xlsx"
             _emit(operation_id, {"type": "status", "stage": "file_start", "message": f"Procesando: {fname}", "progress": int((idx-1)*100/max(total_files,1))})
@@ -275,7 +292,7 @@ def log01_upload(
                     raise ValueError("Archivo vacío.")
                 
                 wb = load_workbook(BytesIO(data), data_only=True)
-                ws = wb.worksheets[0]
+                ws: Worksheet = wb.worksheets[0]
 
                 header_row = _find_header_row(ws)
                 if header_row is None:
@@ -305,6 +322,7 @@ def log01_upload(
                 for r in range(data_start, ws.max_row + 1):
                     if r % 200 == 0:
                         _raise_cancelled()
+                        time.sleep(0.001) # Yield crítico: libera GIL durante lectura pesada
                     serie = _norm_str(ws.cell(row=r, column=col_serie).value)
                     if not serie:
                         continue
@@ -313,7 +331,7 @@ def log01_upload(
                         # si viene basura o vacio, lo ignoramos
                         continue
 
-                    row_values = {"medidor": serie, "estado": estado}
+                    row_values: Dict[str, Any] = {"medidor": serie, "estado": estado}
                     for key in _OUTPUT_KEYS:
                         if key in ("medidor", "estado"):
                             continue
@@ -327,11 +345,13 @@ def log01_upload(
                 
                 ok_files += 1
                 _emit(operation_id, {"type": "status", "stage": "file_ok", "message": f"OK: {fname} (registros leídos: {extracted})", "progress": int(idx*100/max(total_files,1))})
+                time.sleep(0.01) # Yield tras archivo exitoso
 
             except Exception as e:
                 bad_files += 1
                 _emit(operation_id, {"type": "error", "stage": "file_error", "message": f"Error en {fname}", "detail": str(e), "code": "FILE_INVALID"})
                 # Importante: continuar con el lote
+                time.sleep(0.01) # Yield tras error de archivo
                 continue
 
         # 2) Filtrar solo CONFORME
@@ -346,7 +366,13 @@ def log01_upload(
             template_path = str((st.data_dir.parent / "app" / "data" / "templates" / "logistica" / "LOG01_PLANTILLA_SALIDA.xlsx").resolve())
 
         wb_out = load_workbook(template_path)
-        ws_out = next((ws for ws in wb_out.worksheets if ws.sheet_state == "visible"), wb_out.active)
+        ws_out = next(
+            (ws for ws in wb_out.worksheets if ws.sheet_state == "visible"),
+            None,
+        )
+        if ws_out is None:
+            ws_out = wb_out.active
+        ws_out = cast(Worksheet, ws_out)
 
         # Detect output columns from header row to stay aligned with template changes.
         header_map = {}
@@ -386,7 +412,7 @@ def log01_upload(
             ws_out.row_dimensions[r].height = 15
 
             info = series[serie]
-            item_cell = ws_out.cell(row=r, column=col_item, value=i)           # item
+            item_cell = cast(Cell, ws_out.cell(row=r, column=col_item, value=i))           # item
             _apply_output_format(item_cell)
             for key, col in output_cols.items():
                 value = info.values.get(key)
@@ -394,7 +420,7 @@ def log01_upload(
                     value = serie
                 if value is None:
                     continue
-                cell = ws_out.cell(row=r, column=col)
+                cell = cast(Cell, ws_out.cell(row=r, column=col))
                 if key == "fecha":
                     value = _normalize_output_date(value)
                     cell.number_format = "dd/mm/yyyy"
@@ -422,6 +448,7 @@ def log01_upload(
             "series_conformes": len(conformes),
         }
 
+        time.sleep(0.01) # Yield antes de completar
         _emit(operation_id, {"type": "complete", "message": "Consolidación completada", "percent": 100.0, "result": summary})
         progress_manager.finish(operation_id)
 
