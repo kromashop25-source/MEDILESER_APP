@@ -2,7 +2,11 @@ import { useRef, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
-import { log01Upload, subscribeLog01Progress } from "../../api/oiTools";
+import {
+  cancelLog01Operation,
+  log01Upload,
+  subscribeLog01Progress,
+} from "../../api/oiTools";
 import MultiFilePicker from "../oi_tools/components/MultiFilePicker";
 import {
   translateProgressMessage,
@@ -44,7 +48,9 @@ export default function Log01ExcelPage() {
   const [running, setRunning] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  const abortRef = useRef<AbortController | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const progressAbortRef = useRef<AbortController | null>(null);
+  const operationIdRef = useRef<string | null>(null);
 
   function pushEvent(ev: ProgressEvent) {
     const label = `${translateProgressType(ev.type)} · ${translateProgressStage(ev.stage)} · ${translateProgressMessage(
@@ -64,11 +70,35 @@ export default function Log01ExcelPage() {
     return form;
   }
 
-  function stopStream() {
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
+  function stopProgressStream() {
+    progressAbortRef.current?.abort();
+    progressAbortRef.current = null;
+  }
+
+  function stopUpload() {
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
+  }
+
+  async function cancelOperation() {
+    if (!running) return;
+    const operationId = operationIdRef.current;
+    if (operationId) {
+      try {
+        await cancelLog01Operation(operationId);
+      } catch (e) {
+        const ax = e as AxiosError<any>;
+        if (!axios.isCancel(ax)) {
+          setErrorMsg(
+            (ax.response?.data?.detail as string) ||
+              ax.message ||
+              "No se pudo cancelar la operacion"
+          );
+        }
+      }
     }
+    stopUpload();
+    stopProgressStream();
   }
 
   async function run() {
@@ -83,17 +113,19 @@ export default function Log01ExcelPage() {
     }
 
     const operationId = crypto.randomUUID();
-    abortRef.current = new AbortController();
+    operationIdRef.current = operationId;
+    progressAbortRef.current = new AbortController();
+    uploadAbortRef.current = new AbortController();
 
     // progreso (NDJSON)
-    subscribeLog01Progress(operationId, pushEvent, abortRef.current.signal).catch(() => {
+    subscribeLog01Progress(operationId, pushEvent, progressAbortRef.current.signal).catch(() => {
       // si el stream falla, el request principal igual continúa
     });
 
     setRunning(true);
     try {
       const form = buildForm(operationId);
-      const res = await log01Upload(form, abortRef.current.signal);
+      const res = await log01Upload(form, uploadAbortRef.current.signal);
 
       const cd = res.headers["content-disposition"] as string | undefined;
       const xf = res.headers["x-file-name"] as string | undefined;
@@ -105,7 +137,9 @@ export default function Log01ExcelPage() {
       const detail = (ax.response?.data?.detail as string) || ax.message || "Error inesperado";
       setErrorMsg(detail);
     } finally {
-      stopStream();
+      stopUpload();
+      stopProgressStream();
+      operationIdRef.current = null;
       setRunning(false);
     }
   }
@@ -147,13 +181,33 @@ export default function Log01ExcelPage() {
               </div>
 
               <div className="col-md-6 mB-15 d-flex align-items-end">
-                <button className="btn btn-primary w-100" onClick={run} disabled={running}>
-                  {running ? "Procesando..." : "Consolidar y descargar"}
-                </button>
+                <div className="d-flex gap-10 w-100">
+                  <button className="btn btn-primary w-100" onClick={run} disabled={running}>
+                    {running ? "Procesando..." : "Consolidar y descargar"}
+                  </button>
+                  {running ? (
+                    <button
+                      className="btn btn-outline-danger"
+                      onClick={() => void cancelOperation()}
+                    >
+                      Cancelar
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
 
             <div className="mT-10">
+              <h6 className="c-grey-900 mB-10 d-flex align-items-center gap-2">
+                <span>Progreso</span>
+                {running ? (
+                  <img
+                    className="vi-progress-spinner"
+                    src="/medileser/Spinner-Logo-Medileser.gif"
+                    alt="Procesando"
+                  />
+                ) : null}
+              </h6>
               <div className="progress">
                 <div
                   className="progress-bar"

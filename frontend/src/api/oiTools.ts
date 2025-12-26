@@ -107,7 +107,11 @@ export async function subscribeOiToolsProgress(
 
   const res = await fetch(url, {
     method: "GET",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Accept: "application/x-ndjson",
+      "Cache-Control": "no-cache",
+    },
     signal,
   });
 
@@ -182,6 +186,10 @@ export async function log01Upload(
   signal?: AbortSignal
 ): Promise<AxiosResponse<Blob>> {
   return api.post("/logistica/log01/upload", form, { responseType: "blob", signal });
+}
+
+export async function cancelLog01Operation(operationId: string): Promise<void> {
+  await api.post(`/logistica/log01/cancel/${encodeURIComponent(operationId)}`);
 }
 
 

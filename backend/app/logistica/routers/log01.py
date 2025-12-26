@@ -4,15 +4,18 @@ import asyncio
 import json
 import queue
 import re
+import time
 import unicodedata
 from copy import copy
 from dataclasses import dataclass
+from datetime import date, datetime
 from io import BytesIO
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font
 
 from app.api.auth import get_current_user_session
 from app.core.settings import get_settings
@@ -119,6 +122,56 @@ def _copy_cell_style(src, dst) -> None:
     dst.protection = copy(src.protection)
 
 
+def _apply_output_format(cell) -> None:
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+    font = cell.font
+    cell.font = Font(
+        name="Arial",
+        size=8,
+        b=font.b,
+        i=font.i,
+        strike=font.strike,
+        outline=font.outline,
+        shadow=font.shadow,
+        condense=font.condense,
+        extend=font.extend,
+        color=font.color,
+        vertAlign=font.vertAlign,
+        u=font.u,
+        charset=font.charset,
+        family=font.family,
+        scheme=font.scheme,
+    )
+
+
+def _normalize_output_date(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return value
+        try:
+            return datetime.fromisoformat(s).date()
+        except ValueError:
+            pass
+        for fmt in (
+            "%d/%m/%Y",
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+            "%Y-%m-%d",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+        ):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+    return value
+
+
 # ----------------------------
 # Progreso (NDJSON stream)
 # ----------------------------
@@ -127,6 +180,7 @@ async def log01_progress_stream(operation_id: str):
     channel, history = progress_manager.subscribe(operation_id)
 
     async def event_stream():
+        last_heartbeat = time.monotonic()
         try:
             for event in history:
                 yield progress_manager.encode_event(event)
@@ -134,14 +188,41 @@ async def log01_progress_stream(operation_id: str):
                 try:
                     item = channel.queue.get_nowait()
                 except queue.Empty:
-                    await asyncio.sleep(0.05)
+                    now = time.monotonic()
+                    if now - last_heartbeat >= 0.8:
+                        yield b"\n"
+                        last_heartbeat = now
+                    await asyncio.sleep(0.1)
                     continue
                 if item is SENTINEL:
                     break
                 yield progress_manager.encode_event(item)
+                last_heartbeat = time.monotonic()
         finally:
             progress_manager.unsubscribe(operation_id)
-    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(
+        event_stream(),
+        media_type="application/x-ndjson",
+        headers=headers,
+    )
+
+
+@router.post("/cancel/{operation_id}")
+def log01_cancel(operation_id: str):
+    if not cancel_manager.cancel(operation_id):
+        raise HTTPException(
+            status_code=404,
+            detail="Operacion no encontrada.",
+            headers={"X-Code": "NOT_FOUND"},
+        )
+    _emit(operation_id, {"type": "status", "stage": "cancelled", "message": "Cancelado por el usuario"})
+    progress_manager.finish(operation_id)
+    return {"ok": True}
 
 
 # ----------------------------
@@ -155,6 +236,22 @@ def log01_upload(
 ):
     # token de cancelación (opcional)
     cancel_token = cancel_manager.create(operation_id) if operation_id else None
+    cancel_emitted = False
+
+    def _raise_cancelled() -> None:
+        nonlocal cancel_emitted
+        if cancel_token and cancel_token.is_cancelled():
+            if not cancel_emitted:
+                _emit(
+                    operation_id,
+                    {"type": "status", "stage": "cancelled", "message": "Cancelado por el usuario"},
+                )
+                cancel_emitted = True
+            raise HTTPException(
+                status_code=499,
+                detail="Operación cancelada por el usuario.",
+                headers={"X-Code": "CANCELLED"},
+            )
 
     try:
         _emit(operation_id, {"type": "status", "stage": "received", "message": "Archivos recibidos", "progress": 0})
@@ -166,8 +263,7 @@ def log01_upload(
         bad_files = 0
 
         for idx, up in enumerate(files, start=1):
-            if cancel_token and cancel_token.is_cancelled():
-                raise HTTPException(status_code=499, detail="Operación cancelada por el usuario.", headers={"X-Code": "CANCELLED"})
+            _raise_cancelled()
 
             fname = up.filename or f"archivo_{idx}.xlsx"
             _emit(operation_id, {"type": "status", "stage": "file_start", "message": f"Procesando: {fname}", "progress": int((idx-1)*100/max(total_files,1))})
@@ -207,12 +303,14 @@ def log01_upload(
 
                 extracted = 0
                 for r in range(data_start, ws.max_row + 1):
+                    if r % 200 == 0:
+                        _raise_cancelled()
                     serie = _norm_str(ws.cell(row=r, column=col_serie).value)
                     if not serie:
                         continue
                     estado = _norm_str(ws.cell(row=r, column=col_estado).value).upper()
                     if estado not in ("CONFORME", "NO CONFORME"):
-                        # si viene basura o vacío, lo ignoramos
+                        # si viene basura o vacio, lo ignoramos
                         continue
 
                     row_values = {"medidor": serie, "estado": estado}
@@ -285,14 +383,23 @@ def log01_upload(
                     dst = ws_out.cell(row=r, column=c)
                     _copy_cell_style(src, dst)
 
-            ws_out.cell(row=r, column=col_item, value=i)           # item
+            ws_out.row_dimensions[r].height = 15
+
             info = series[serie]
+            item_cell = ws_out.cell(row=r, column=col_item, value=i)           # item
+            _apply_output_format(item_cell)
             for key, col in output_cols.items():
                 value = info.values.get(key)
                 if key == "medidor" and not value:
                     value = serie
-                if value is not None:
-                    ws_out.cell(row=r, column=col, value=value)
+                if value is None:
+                    continue
+                cell = ws_out.cell(row=r, column=col)
+                if key == "fecha":
+                    value = _normalize_output_date(value)
+                    cell.number_format = "dd/mm/yyyy"
+                cell.value = value
+                _apply_output_format(cell)
         
         bio = BytesIO()
         wb_out.save(bio)
