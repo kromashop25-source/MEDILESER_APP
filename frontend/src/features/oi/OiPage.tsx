@@ -1,4 +1,4 @@
-Ôªøimport { useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { getCatalogs, type Catalogs } from "../../api/catalogs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -114,7 +114,7 @@ export default function OiPage() {
 
   // Id del OI creado y lista local de bancadas
   const [oiId, setOiId] = useState<number | null>(null);
-  // Marca de tiempo de la √∫ltima versi√≥n conocida de la OI (para control optimista)
+  // Marca de tiempo de la ˙ltima versiÛn conocida de la OI (para control optimista)
   const [oiVersion, setOiVersion] = useState<string | null>(null);
   const [bancadas, setBancadas] = useState<BancadaRead[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -130,14 +130,14 @@ export default function OiPage() {
   row ? `bancada-${row.id}` : "new";
 
 
-  // Set defaults de selects al cargar cat√°logos
+  // Set defaults de selects al cargar cat·logos
   useEffect(() => {
     if (data) {
       reset(v => ({ ...v, q3: data.q3[0], alcance: data.alcance[0], pma: 16 }));
     }
   }, [data, reset]);
 
-  // Al montar: si hay un OI activo en sesi√≥n, cargarlo (incluye bancadas)
+  // Al montar: si hay un OI activo en sesiÛn, cargarlo (incluye bancadas)
   useEffect(() => {
     const current = loadCurrentOI();
     if (!current) return;
@@ -148,7 +148,7 @@ export default function OiPage() {
         setBancadas(full.bancadas ?? []);
         setMedidoresUsuarioApi(full.medidores_usuario ?? null);
         setMedidoresTotalCode(full.medidores_total_code ?? 0);
-        // Guardamos la versi√≥n (updated_at o, en su defecto, created_at)
+        // Guardamos la versiÛn (updated_at o, en su defecto, created_at)
         setOiVersion(full.updated_at ?? full.created_at);
         const initial: OIForm = {
           oi: full.code,
@@ -170,7 +170,7 @@ export default function OiPage() {
     })();
   }, [reset, authUserId]);
 
-  // Lock de OI para t√©cnicos: intenta tomar o refrescar lock al abrir la pantalla
+  // Lock de OI para tÈcnicos: intenta tomar o refrescar lock al abrir la pantalla
   useEffect(() => {
     if (!oiId || !authUserId) return;
     let cancelled = false;
@@ -204,8 +204,8 @@ export default function OiPage() {
         }
         const message =
           lockedName
-            ? `La OI est√° siendo editada por ${lockedName}. Se abre en modo lectura.`
-            : e?.message ?? "La OI est√° siendo editada por otro usuario. Int√©ntelo m√°s tarde.";
+            ? `La OI est· siendo editada por ${lockedName}. Se abre en modo lectura.`
+            : e?.message ?? "La OI est· siendo editada por otro usuario. IntÈntelo m·s tarde.";
         toast({
           kind: status === 423 || status === 409 ? "warning" : "error",
           title: status === 423 || status === 409 ? "OI bloqueada" : "Error",
@@ -227,7 +227,7 @@ export default function OiPage() {
     };
   }, [oiId, hasLock]);
 
-  // Marca el OI con lock activo para cierre autom√°tico en logout (best-effort)
+  // Marca el OI con lock activo para cierre autom·tico en logout (best-effort)
   useEffect(() => {
     if (!oiId) return;
     if (!hasLock || readOnly) return;
@@ -243,7 +243,7 @@ export default function OiPage() {
     try {
       setBusy(true);
       const auth = getAuth();
-      if (!auth) throw new Error("Sesi√≥n no v√°lida");
+      if (!auth) throw new Error("SesiÛn no v·lida");
       const bancoId = auth.bancoId;
       if (bancoId == null) throw new Error("Debe seleccionar un banco para crear una OI.");
       const payload = {
@@ -273,7 +273,7 @@ export default function OiPage() {
   const onSubmitUpdate = async (v: OIForm) => {
     if (!oiId) return;
     if (readOnly) {
-      toast({ kind: "warning", title: "Solo lectura", message: "La OI est√° bloqueada por otro usuario." });
+      toast({ kind: "warning", title: "Solo lectura", message: "La OI est· bloqueada por otro usuario." });
       return;
     }
     try {
@@ -282,7 +282,7 @@ export default function OiPage() {
         throw new Error("No hay OI seleccionada para actualizar.");
       }
       if (!oiVersion) {
-        throw new Error("No se pudo determinar la versi√≥n actual de la OI. Recargue la p√°gina e int√©ntelo de nuevo.");
+        throw new Error("No se pudo determinar la versiÛn actual de la OI. Recargue la p·gina e intÈntelo de nuevo.");
       }
 
       const updated = await updateOI(oiId, {
@@ -293,7 +293,7 @@ export default function OiPage() {
         updated_at: oiVersion,
       });
       setOriginalOI(v);
-      // Actualizamos la versi√≥n local con lo que devuelve el backend
+      // Actualizamos la versiÛn local con lo que devuelve el backend
       setOiVersion(updated.updated_at ?? updated.created_at)
       setLockedByUserId(updated.locked_by_user_id ?? null);
       setLockedByName(updated.locked_by_full_name ?? null);
@@ -307,7 +307,7 @@ export default function OiPage() {
         toast({
           kind: "error",
           title: "Conflicto",
-          message: "La OI fue modificada por otro usuario. Recargue la p√°gina y vuelva a intentar.",
+          message: "La OI fue modificada por otro usuario. Recargue la p·gina y vuelva a intentar.",
         });
       } else {
         toast({ kind:"error", title:"Error", message: e?.message ?? "Error actualizando OI" });
@@ -322,7 +322,7 @@ export default function OiPage() {
 
   const openNew = () => {
     if (readOnly) {
-      toast({ kind: "warning", title: "Solo lectura", message: "No puede agregar bancadas mientras la OI est√° bloqueada." });
+      toast({ kind: "warning", title: "Solo lectura", message: "No puede agregar bancadas mientras la OI est· bloqueada." });
       return;
     }
     setEditing(null);
@@ -330,7 +330,7 @@ export default function OiPage() {
   };
   const openEdit = (row: BancadaRead) => {
     if (readOnly) {
-      toast({ kind: "warning", title: "Solo lectura", message: "No puede editar bancadas mientras la OI est√° bloqueada." });
+      toast({ kind: "warning", title: "Solo lectura", message: "No puede editar bancadas mientras la OI est· bloqueada." });
       return;
     }
     setEditing(row);
@@ -365,7 +365,7 @@ export default function OiPage() {
   const handleSaveBancada = async (form: BancadaForm) => {
     if (!oiId) return;
     if (readOnly) {
-      toast({ kind: "warning", title: "Solo lectura", message: "No puede guardar bancadas mientras la OI est√° bloqueada." });
+      toast({ kind: "warning", title: "Solo lectura", message: "No puede guardar bancadas mientras la OI est· bloqueada." });
       return;
     }
     try {
@@ -381,7 +381,7 @@ export default function OiPage() {
       if (editing) {
         const expectedVersion = form.version ?? editing.updated_at ?? editing.created_at ?? null;
         if (!expectedVersion) {
-          throw new Error("No se pudo determinar la versi√≥n actual de la bancada. Recargue y vuelva a intentar.");
+          throw new Error("No se pudo determinar la versiÛn actual de la bancada. Recargue y vuelva a intentar.");
         }
         const updPayload: BancadaUpdatePayload = { ...payload, updated_at: expectedVersion };
         const upd = await updateBancada(editing.id, updPayload);
@@ -416,7 +416,7 @@ export default function OiPage() {
         // ignore
       }
 
-      // ‚úÖ Cerrar la modal tras guardar correctamente
+      // ? Cerrar la modal tras guardar correctamente
       setLockedByUserId(auth?.userId ?? lockedByUserId);
       setLockedByName(auth?.fullName ?? lockedByName);
       setHasLock(authUserId !== null);
@@ -431,7 +431,7 @@ export default function OiPage() {
         toast({
           kind: "error",
           title: "Conflicto",
-          message: "La bancada fue modificada por otro usuario. Recargue la p√°gina y vuelva a intentar.",
+          message: "La bancada fue modificada por otro usuario. Recargue la p·gina y vuelva a intentar.",
         });
       } else {
         toast({
@@ -448,7 +448,7 @@ export default function OiPage() {
   const handleDelete = async (row: BancadaRead) => {
     if (!confirm(`Eliminar bancada #${row.item}?`)) return;
     if (readOnly) {
-      toast({ kind: "warning", title: "Solo lectura", message: "No puede eliminar bancadas mientras la OI est√° bloqueada." });
+      toast({ kind: "warning", title: "Solo lectura", message: "No puede eliminar bancadas mientras la OI est· bloqueada." });
       return;
     }
     try {
@@ -495,7 +495,7 @@ export default function OiPage() {
       await generateExcel(oiId, password);
       toast({ kind: "success", message: "Excel generado" });
     } catch (e: any) {
-      // 422 (listas E4/O4 no coinciden) vendr√° como mensaje en e.message
+      // 422 (listas E4/O4 no coinciden) vendr· como mensaje en e.message
       toast({ kind: "error", title: "Error", message: e?.message ?? "Error generando Excel" });
     } finally {
       setBusy(false);
@@ -510,7 +510,7 @@ export default function OiPage() {
 
   const handleStartEditOI = () => {
     if (readOnly) {
-      toast({ kind: "warning", title: "Solo lectura", message: "La OI est√° bloqueada por otro usuario." });
+      toast({ kind: "warning", title: "Solo lectura", message: "La OI est· bloqueada por otro usuario." });
       return;
     }
     const current = getValues();
@@ -593,8 +593,8 @@ export default function OiPage() {
       {readOnly && (
         <div className="alert alert-warning mt-2">
           {lockedByName
-            ? `Esta OI est√° siendo editada por ${lockedByName}. Se abre en modo lectura.`
-            : "Esta OI est√° en modo lectura. No se pueden realizar cambios."}
+            ? `Esta OI est· siendo editada por ${lockedByName}. Se abre en modo lectura.`
+            : "Esta OI est· en modo lectura. No se pueden realizar cambios."}
         </div>
       )}
 
@@ -614,7 +614,7 @@ export default function OiPage() {
         </div>
 
         <div className="col-md-4">
-          <label htmlFor="q3" className="form-label">Q3 (m¬≥/h)</label>
+          <label htmlFor="q3" className="form-label">Q3 (m≥/h)</label>
           <select id="q3" className="form-select" {...register("q3",{valueAsNumber:true})} disabled={(!!oiId && !isEditingOI) || readOnly}>
             {data?.q3.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
@@ -632,17 +632,17 @@ export default function OiPage() {
           <select id="pma" className="form-select" {...register("pma",{valueAsNumber:true})} disabled={(!!oiId && !isEditingOI) || readOnly}>
             {data?.pma.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
-          <div className="form-text">Solo en formulario; calcula Presi√≥n (bar).</div>
+          <div className="form-text">Solo en formulario; calcula PresiÛn (bar).</div>
         </div>
 
         <div className="col-md-4">
-          <label htmlFor="presion" className="form-label">Presi√≥n (bar)</label>
+          <label htmlFor="presion" className="form-label">PresiÛn (bar)</label>
           <input id="presion" className="form-control" value={isNaN(presion) ? "" : presion} disabled />
         </div>
 
         <div className="col-md-4">
           <label htmlFor="numeration_type" className="form-label">
-            Tipo de numeraci√≥n (# Medidor)
+            Tipo de numeraciÛn (# Medidor)
           </label>
           <select
             id="numeration_type"
@@ -654,7 +654,7 @@ export default function OiPage() {
             <option value="no correlativo">No Correlativo</option>
           </select>
           <div className="form-text">
-            Define c√≥mo se completa la columna # Medidor en el Grid.
+            Define cÛmo se completa la columna # Medidor en el Grid.
           </div>
         </div>
 
@@ -717,15 +717,16 @@ export default function OiPage() {
                   <th className="vi-col-60">Item</th>
                   <th># Medidor</th>
                   <th>Medidores</th>
-                  <th className="vi-col-160">Fecha creaci√≥n</th>
-                  <th className="vi-col-160">√öltima fecha mod.</th>
+                  <th className="vi-col-160">Fecha creaciÛn</th>
+                  <th className="vi-col-160">Fecha guardado</th>
+                  <th className="vi-col-160">⁄ltima fecha mod.</th>
                   <th className="vi-col-160 text-end">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {bancadas.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-muted text-center py-3">
+                    <td colSpan={7} className="text-muted text-center py-3">
                       Sin bancadas. Agrega la primera.
                     </td>
                   </tr>
@@ -744,6 +745,7 @@ export default function OiPage() {
                     <td>{displayMed}</td>
                     <td>{b.rows}</td>
                     <td>{formatDateTime(b.created_at)}</td>
+                    <td>{formatDateTime(b.saved_at)}</td>
                     <td>{formatDateTime(b.updated_at ?? b.created_at)}</td>
                     <td className="text-end">
                       {/* botones Editar / Eliminar */}
@@ -754,7 +756,7 @@ export default function OiPage() {
                           aria-label={`Editar bancada #${b.item}`}
                           title="Editar"
                         >
-                          ‚úèÔ∏è
+                          ??
                         </button>
                         <button
                           className="btn btn-sm btn-outline-danger"
@@ -763,7 +765,7 @@ export default function OiPage() {
                           aria-label={`Eliminar bancada #${b.item}`}
                           title="Eliminar"
                         > 
-                          üóëÔ∏è
+                          ???
                         </button>
                       </td>
                     </tr>
@@ -789,11 +791,13 @@ export default function OiPage() {
 
       <PasswordModal
         show={showPwd}
-        title="Contrase√±a para proteger Excel"
+        title="ContraseÒa para proteger Excel"
         onClose={() => setShowPwd(false)}
         onConfirm={(pwd) => { setShowPwd(false); handleExcelConfirmed(pwd); }}
       />
     </div>
   );
 }
+
+
 

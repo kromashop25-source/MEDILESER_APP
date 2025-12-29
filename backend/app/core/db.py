@@ -1,6 +1,7 @@
 from typing import Any
 from pathlib import Path
 from sqlmodel import SQLModel, create_engine, Session, select
+from sqlalchemy import inspect
 import os
 import sys
 
@@ -131,6 +132,74 @@ def _configure_sqlite_pragmas() -> None:
         conn.exec_driver_sql("PRAGMA synchronous=NORMAL;")
         # Además del timeout de conexión, reforzamos el valor con PRAGMA.
         conn.exec_driver_sql("PRAGMA busy_timeout = 5000;")
+
+
+def _get_mysql_columns(table_name: str) -> set[str]:
+    try:
+        inspector = inspect(engine)
+        return {col["name"] for col in inspector.get_columns(table_name)}
+    except Exception:
+        return set()
+
+
+def _ensure_oi_saved_at_column() -> None:
+    if IS_SQLITE:
+        with engine.begin() as conn:
+            cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(oi)").all()}
+            if not cols:
+                return
+            added = False
+            if "saved_at" not in cols:
+                conn.exec_driver_sql("ALTER TABLE oi ADD COLUMN saved_at DATETIME")
+                added = True
+            if added:
+                conn.exec_driver_sql(
+                    "UPDATE oi SET saved_at = created_at WHERE saved_at IS NULL"
+                )
+        return
+
+    cols = _get_mysql_columns("oi")
+    if not cols:
+        return
+    with engine.begin() as conn:
+        added = False
+        if "saved_at" not in cols:
+            conn.exec_driver_sql("ALTER TABLE oi ADD COLUMN saved_at DATETIME NULL")
+            added = True
+        if added:
+            conn.exec_driver_sql(
+                "UPDATE oi SET saved_at = created_at WHERE saved_at IS NULL"
+            )
+
+
+def _ensure_bancada_saved_at_column() -> None:
+    if IS_SQLITE:
+        with engine.begin() as conn:
+            cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(bancada)").all()}
+            if not cols:
+                return
+            added = False
+            if "saved_at" not in cols:
+                conn.exec_driver_sql("ALTER TABLE bancada ADD COLUMN saved_at DATETIME")
+                added = True
+            if added:
+                conn.exec_driver_sql(
+                    "UPDATE bancada SET saved_at = created_at WHERE saved_at IS NULL"
+                )
+        return
+
+    cols = _get_mysql_columns("bancada")
+    if not cols:
+        return
+    with engine.begin() as conn:
+        added = False
+        if "saved_at" not in cols:
+            conn.exec_driver_sql("ALTER TABLE bancada ADD COLUMN saved_at DATETIME NULL")
+            added = True
+        if added:
+            conn.exec_driver_sql(
+                "UPDATE bancada SET saved_at = created_at WHERE saved_at IS NULL"
+            )
 
 
 def _ensure_updated_at_column() -> None:
@@ -292,6 +361,8 @@ def _seed_default_users() -> None:
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    _ensure_oi_saved_at_column()
+    _ensure_bancada_saved_at_column()
     if IS_SQLITE:
         _configure_sqlite_pragmas()
         _ensure_updated_at_column()

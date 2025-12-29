@@ -61,6 +61,7 @@ class OIRead(BaseModel):
     numeration_type: NumerationType
     created_at: datetime
     updated_at: Optional[datetime] = None
+    saved_at: Optional[datetime] = None
     creator_name: str
     locked_by_user_id: Optional[int] = None
     locked_by_full_name: Optional[str] = None
@@ -90,6 +91,7 @@ class BancadaRead(BancadaBase):
     item: int
     created_at: datetime
     updated_at: Optional[datetime] = None
+    saved_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 

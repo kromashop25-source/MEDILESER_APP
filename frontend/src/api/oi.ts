@@ -16,6 +16,7 @@ export type OIRead = OICreate & {
   presion_bar: number;
   created_at: string;
   updated_at: string | null;
+  saved_at: string | null;
   creator_name: string;
   locked_by_user_id?: number | null;
   locked_by_full_name?: string | null;
@@ -111,6 +112,7 @@ export type BancadaRead = {
   q1?: QBlock | null;
   created_at: string;
   updated_at: string | null;
+  saved_at: string | null;
 };
 ;
 export type OIWithBancadas = OIRead & { bancadas: BancadaRead[] };

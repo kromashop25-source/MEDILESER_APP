@@ -57,6 +57,7 @@ class OI(SQLModel, table=True):
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
+    saved_at: Optional[datetime] = None
 
     bancadas: List["Bancada"] = Relationship(back_populates="oi")
 
@@ -78,6 +79,7 @@ class Bancada(SQLModel, table=True):
     # Auditoría de la bancada
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
+    saved_at: Optional[datetime] = None
 
     oi: Optional[OI] = Relationship(back_populates="bancadas")
 

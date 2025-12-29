@@ -385,6 +385,7 @@ export default function OiListPage() {
                   <th>Técnico</th>
                   <th>Responsable</th>
                   <th>Creación</th>
+                  <th>Guardado</th>
                   <th>Últ. mod.</th>
                   <th className="text-end">Acciones</th>
                 </tr>
@@ -392,7 +393,7 @@ export default function OiListPage() {
               <tbody>
                 {!busy && rows.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="text-center text-muted py-3">
+                    <td colSpan={13} className="text-center text-muted py-3">
                       {total > 0
                         ? "No hay registros que coincidan con los filtros."
                         : "Sin registros."}
@@ -414,6 +415,7 @@ export default function OiListPage() {
                     <td>{r.tech_number}</td>
                     <td>{r.creator_name}</td>
                     <td>{formatDateTime(r.created_at)}</td>
+                    <td>{formatDateTime(r.saved_at)}</td>
                     <td>{formatDateTime(r.updated_at)}</td>
                     <td className="text-end">
                       <button
@@ -520,3 +522,5 @@ export default function OiListPage() {
     </div>
   );
 }
+
+

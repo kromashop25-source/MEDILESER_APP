@@ -1,7 +1,8 @@
 from io import BytesIO
 from pathlib import Path
 from typing import Iterable, Tuple, Optional, cast
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from zipfile import ZipFile, ZIP_DEFLATED
 from xml.etree import ElementTree as ET
 
@@ -224,7 +225,12 @@ def _coerce_estado(val) -> Optional[int]:
         return None
     return max(0, min(5, n))
 
-def generate_excel(oi: OI, bancadas: Iterable[Bancada], password: str | None = None) -> Tuple[bytes, str]:
+def generate_excel(
+    oi: OI,
+    bancadas: Iterable[Bancada],
+    password: str | None = None,
+    work_dt: Optional[datetime] = None,
+) -> Tuple[bytes, str]:
     wb, _ws_active = _ensure_workbook()
     ws = _get_sheet(wb, SHEET_NAME)  # usar siempre "ERROR FINAL"
 
@@ -265,7 +271,13 @@ def generate_excel(oi: OI, bancadas: Iterable[Bancada], password: str | None = N
     rows.sort(key=lambda b: (b.item or 0))
     
     # Datos globales para columnas B, C, D, E, H
-    today_date = datetime.now().date()
+    work_dt = work_dt or datetime.utcnow()
+    if work_dt.tzinfo is None:
+        dt_utc = work_dt.replace(tzinfo=timezone.utc)
+    else:
+        dt_utc = work_dt.astimezone(timezone.utc)
+    dt_pe = dt_utc.astimezone(ZoneInfo("America/Lima"))
+    today_date = dt_pe.date()
     presion_val = pma_to_pressure(oi.pma) if oi.pma else None
 
     current_row = DATA_START_ROW

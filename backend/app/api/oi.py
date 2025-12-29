@@ -1,13 +1,14 @@
 import re
 from io import BytesIO
 from typing import List, Sequence, cast
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select, delete
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, update
 from sqlalchemy.sql.elements import ColumnElement
+from zoneinfo import ZoneInfo
 
 from ..core.db import engine
 from ..core.rbac import is_admin_like_for_oi, is_technician_role
@@ -237,6 +238,25 @@ def _ensure_lock_allows_write(oi: OI, sess: dict, session: Session) -> dict:
     return lock_state
 
 
+def _apply_saved_at_on_close(oi: OI, session: Session, current_user_id: int | None) -> None:
+    if oi.id is None:
+        return
+    if oi.locked_by_user_id is None:
+        return
+    if current_user_id is None or oi.locked_by_user_id != current_user_id:
+        return
+    if oi.saved_at is not None:
+        return
+    now = datetime.utcnow()
+    oi.saved_at = now
+    session.exec(
+        update(Bancada)
+        .where(Bancada.oi_id == oi.id)
+        .where(Bancada.saved_at.is_(None))
+        .values(saved_at=now)
+    )
+
+
 def _touch_or_take_lock(oi: OI, sess: dict, lock_state: dict | None = None) -> None:
     """
     Refresca el lock si pertenece al usuario actual o lo toma si estaba libre/expirado.
@@ -324,6 +344,7 @@ def _build_oi_read(
         numeration_type=numeration_type,
         created_at=oi.created_at,
         updated_at=oi.updated_at,
+        saved_at=oi.saved_at,
         creator_name=full_name,
         locked_by_user_id=locked_by_user_id,
         locked_by_full_name=locked_by_full_name,
@@ -522,8 +543,12 @@ def release_lock(
     if oi.locked_by_user_id is None:
         return {"ok": True}
 
-    if not _is_admin(sess) and oi.locked_by_user_id != sess.get("userId"):
+    is_admin = _is_admin(sess)
+    current_user_id = sess.get("userId")
+    if not is_admin and oi.locked_by_user_id != current_user_id:
         raise HTTPException(status_code=403, detail="No puede liberar el lock de otro usuario")
+
+    _apply_saved_at_on_close(oi, session, current_user_id)
 
     oi.locked_by_user_id = None
     oi.locked_at = None
@@ -553,8 +578,12 @@ def close_oi(
     if oi.locked_by_user_id is None:
         return {"ok": True}
 
-    if oi.locked_by_user_id != sess.get("userId"):
+    is_admin = _is_admin(sess)
+    current_user_id = sess.get("userId")
+    if not is_admin and oi.locked_by_user_id != current_user_id:
         raise HTTPException(status_code=403, detail="No puede liberar el lock de otro usuario")
+
+    _apply_saved_at_on_close(oi, session, current_user_id)
 
     oi.locked_by_user_id = None
     oi.locked_at = None
@@ -1025,8 +1054,9 @@ def export_excel(
     bancadas = list(session.exec(select(Bancada).where(Bancada.oi_id == oi_id)))
     bancadas.sort(key=lambda x: (x.item or 0))
     # Si la plantilla no encuentra coincidencias exactas en E4/O4, devolver 422 (no 500)
+    work_dt = oi.saved_at or oi.created_at or datetime.utcnow()
     try:
-        data, _ = build_excel_file(oi, bancadas, password=req.password)
+        data, _ = build_excel_file(oi, bancadas, password=req.password, work_dt=work_dt)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -1034,10 +1064,12 @@ def export_excel(
     # Patrón: OI-####-YYYY-nombre-apellido-YYYY-MM-DD.xlsx
     # La fecha corresponde a la última modificación de la OI;
     # si aún no tiene updated_at, se usa created_at.
-    effective_dt = oi.updated_at or oi.created_at
-    if effective_dt is None:
-        effective_dt = datetime.utcnow()
-    date_str = effective_dt.strftime("%Y-%m-%d")
+    if work_dt.tzinfo is None:
+        dt_utc = work_dt.replace(tzinfo=timezone.utc)
+    else:
+        dt_utc = work_dt.astimezone(timezone.utc)
+    dt_pe = dt_utc.astimezone(ZoneInfo("America/Lima"))
+    date_str = dt_pe.strftime("%Y-%m-%d")
 
     # Nombre y apellido del técnico (creador del OI) usando el helper existente
     full_name = get_full_name_by_tech_number(oi.tech_number) or ""
