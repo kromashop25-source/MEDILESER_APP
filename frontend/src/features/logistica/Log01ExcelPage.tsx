@@ -163,7 +163,6 @@ export default function Log01ExcelPage() {
       setErrorMsg(detail);
     } finally {
       stopUpload();
-      stopProgressStream("cleanup");
       operationIdRef.current = null;
       setRunning(false);
     }

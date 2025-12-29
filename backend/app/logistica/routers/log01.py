@@ -201,6 +201,7 @@ async def log01_progress_stream(operation_id: str):
     async def event_stream():
         last_heartbeat = time.monotonic()
         try:
+            yield b" " * 2048 + b"\n"
             for event in history:
                 yield progress_manager.encode_event(event)
             while True:
@@ -220,13 +221,13 @@ async def log01_progress_stream(operation_id: str):
         finally:
             progress_manager.unsubscribe(operation_id)
     headers = {
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-transform",
         "Connection": "keep-alive",
         "X-Accel-Buffering": "no",
     }
     return StreamingResponse(
         event_stream(),
-        media_type="application/x-ndjson",
+        media_type="application/x-ndjson; charset=utf-8",
         headers=headers,
     )
 

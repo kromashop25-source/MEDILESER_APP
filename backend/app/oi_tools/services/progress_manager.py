@@ -1,10 +1,13 @@
 ﻿import json
+import logging
 import threading
 import queue
 from time import time
 from typing import Any, Dict, List, Optional, Tuple
 
 _SENTINEL = object()
+
+logger = logging.getLogger(__name__)
 
 class ProgressChannel:
     __slots__ = ("queue", "history", "closed", "subscribers", "last_touch")
@@ -54,6 +57,16 @@ class ProgressManager:
             return
         channel = self.ensure(operation_id)
         channel.add(event)
+        try:
+            queue_size = channel.queue.qsize()
+        except Exception:
+            queue_size = -1
+        logger.info(
+            "Progress emit operation_id=%s history=%s queue=%s",
+            operation_id,
+            len(channel.history),
+            queue_size,
+        )
 
     def finish(self, operation_id: Optional[str]) -> None:
         if not operation_id:
@@ -61,12 +74,33 @@ class ProgressManager:
         with self._lock:
             channel = self._channels.get(operation_id)
         if channel is not None:
+            try:
+                queue_size = channel.queue.qsize()
+            except Exception:
+                queue_size = -1
+            logger.info(
+                "Progress finish operation_id=%s history=%s queue=%s",
+                operation_id,
+                len(channel.history),
+                queue_size,
+            )
             channel.close()
 
     def subscribe(self, operation_id: str) -> Tuple[ProgressChannel, List[Dict[str, Any]]]:
         channel = self.ensure(operation_id)
         channel.subscribers += 1
         history = list(channel.history)
+        try:
+            queue_size = channel.queue.qsize()
+        except Exception:
+            queue_size = -1
+        logger.info(
+            "Progress subscribe operation_id=%s history=%s queue=%s subscribers=%s",
+            operation_id,
+            len(history),
+            queue_size,
+            channel.subscribers,
+        )
         return channel, history
 
     def subscribe_existing(
@@ -78,6 +112,17 @@ class ProgressManager:
                 return None
             channel.subscribers += 1
             history = list(channel.history)
+        try:
+            queue_size = channel.queue.qsize()
+        except Exception:
+            queue_size = -1
+        logger.info(
+            "Progress subscribe_existing operation_id=%s history=%s queue=%s subscribers=%s",
+            operation_id,
+            len(history),
+            queue_size,
+            channel.subscribers,
+        )
         return channel, history
 
     def unsubscribe(self, operation_id: str) -> None:
