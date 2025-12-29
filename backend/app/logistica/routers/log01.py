@@ -37,6 +37,7 @@ router = APIRouter(
 )
 
 logger = logging.getLogger(__name__)
+_LOG01_HELLO_PAD = " " * 2048
 
 class Log01Cancelled(Exception):
     pass
@@ -540,7 +541,12 @@ async def log01_progress_stream(operation_id: str):
         try:
             # Primer evento JSON para handshake; evita carrera entre stream y start.
             yield progress_manager.encode_event(
-                {"type": "hello", "ts": time.time(), "operation_id": operation_id}
+                {
+                    "type": "hello",
+                    "ts": time.time(),
+                    "operation_id": operation_id,
+                    "pad": _LOG01_HELLO_PAD,
+                }
             )
             for event in history:
                 logger.debug(

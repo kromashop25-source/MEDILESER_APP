@@ -161,8 +161,10 @@ export default function Log01ExcelPage() {
     operationIdRef.current = null;
     const operationId = getOrCreateOperationId();
     let helloResolve: (() => void) | null = null;
-    const helloPromise = new Promise<void>((resolve) => {
+    let helloReject: ((err: Error) => void) | null = null;
+    const helloPromise = new Promise<void>((resolve, reject) => {
       helloResolve = resolve;
+      helloReject = reject;
     });
     progressAbortRef.current = new AbortController();
     uploadAbortRef.current = new AbortController();
@@ -185,6 +187,10 @@ export default function Log01ExcelPage() {
         console.info("[LOG01] progress stream aborted (reason) =", progressAbortReasonRef.current);
       } else {
         console.info("[LOG01] progress stream error =", err);
+        if (helloReject) {
+          helloReject(err as Error);
+          helloReject = null;
+        }
       }
     });
 
