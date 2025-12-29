@@ -4,7 +4,8 @@ import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
 import {
   cancelLog01Operation,
-  log01Upload,
+  log01Result,
+  log01Start,
   subscribeLog01Progress,
 } from "../../api/oiTools";
 import MultiFilePicker from "../oi_tools/components/MultiFilePicker";
@@ -38,6 +39,20 @@ function downloadBlob(blob: Blob, filename: string) {
   window.URL.revokeObjectURL(url);
 }
 
+async function waitForHello(promise: Promise<void>, timeoutMs: number) {
+  let timeoutId: number | null = null;
+  const timeoutPromise = new Promise<void>((_resolve, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error("Timeout esperando handshake del stream."));
+    }, timeoutMs);
+  });
+  try {
+    await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId != null) window.clearTimeout(timeoutId);
+  }
+}
+
 export default function Log01ExcelPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [outputFilename, setOutputFilename] = useState<string>("");
@@ -47,6 +62,8 @@ export default function Log01ExcelPage() {
   const [progressLabel, setProgressLabel] = useState<string>("Listo para procesar");
   const [running, setRunning] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [resultReady, setResultReady] = useState<boolean>(false);
+  const [resultOperationId, setResultOperationId] = useState<string | null>(null);
 
   const uploadAbortRef = useRef<AbortController | null>(null);
   const progressAbortRef = useRef<AbortController | null>(null);
@@ -69,8 +86,17 @@ export default function Log01ExcelPage() {
     setEvents((prev) => [...prev, ev]);
     if (typeof (ev as any).progress === "number") setProgressPct((ev as any).progress);
     if (typeof (ev as any).percent === "number") setProgressPct(Math.round((ev as any).percent));
-    if (!terminalEventRef.current && (ev.type === "complete" || ev.stage === "cancelled")) {
+    if (!terminalEventRef.current && (ev.type === "complete" || ev.stage === "cancelled" || ev.stage === "failed")) {
       terminalEventRef.current = true;
+      if (ev.type === "complete") {
+        setResultReady(true);
+        setResultOperationId(operationIdRef.current);
+      } else {
+        setResultReady(false);
+        setResultOperationId(null);
+        operationIdRef.current = null;
+      }
+      setRunning(false);
       stopProgressStream("terminal_event");
     }
   }
@@ -115,7 +141,6 @@ export default function Log01ExcelPage() {
       }
     }
     stopUpload();
-    stopProgressStream("cancel");
   }
 
   async function run() {
@@ -123,6 +148,8 @@ export default function Log01ExcelPage() {
     setEvents([]);
     setProgressPct(0);
     setProgressLabel("Listo para procesar");
+    setResultReady(false);
+    setResultOperationId(null);
     progressAbortReasonRef.current = null;
     terminalEventRef.current = false;
 
@@ -131,13 +158,28 @@ export default function Log01ExcelPage() {
       return;
     }
 
+    operationIdRef.current = null;
     const operationId = getOrCreateOperationId();
+    let helloResolve: (() => void) | null = null;
+    const helloPromise = new Promise<void>((resolve) => {
+      helloResolve = resolve;
+    });
     progressAbortRef.current = new AbortController();
     uploadAbortRef.current = new AbortController();
 
     // progreso (NDJSON)
     console.info("[LOG01] operation_id(stream) =", operationId);
-    subscribeLog01Progress(operationId, pushEvent, progressAbortRef.current.signal).catch((err) => {
+    const onProgressEvent = (ev: ProgressEvent) => {
+      if (ev.type === "hello") {
+        if (helloResolve) {
+          helloResolve();
+          helloResolve = null;
+        }
+        return;
+      }
+      pushEvent(ev);
+    };
+    subscribeLog01Progress(operationId, onProgressEvent, progressAbortRef.current.signal).catch((err) => {
       const name = (err as any)?.name as string | undefined;
       if (name === "AbortError") {
         console.info("[LOG01] progress stream aborted (reason) =", progressAbortReasonRef.current);
@@ -148,23 +190,47 @@ export default function Log01ExcelPage() {
 
     setRunning(true);
     try {
+      // Esperar el handshake "hello" evita la carrera entre stream y start.
+      await waitForHello(helloPromise, 5000);
       const form = buildForm(operationId);
-      console.info("[LOG01] operation_id(upload) =", operationId);
-      const res = await log01Upload(form, uploadAbortRef.current.signal);
-
-      const cd = res.headers["content-disposition"] as string | undefined;
-      const xf = res.headers["x-file-name"] as string | undefined;
-      const filename = parseFilename(cd) ?? xf ?? "BD_CONSOLIDADO.xlsx";
-      downloadBlob(res.data, filename);
+      console.info("[LOG01] operation_id(start) =", operationId);
+      await log01Start(form, uploadAbortRef.current!.signal);
     } catch (e) {
       const ax = e as AxiosError<any>;
       if (axios.isCancel(ax)) return;
       const detail = (ax.response?.data?.detail as string) || ax.message || "Error inesperado";
       setErrorMsg(detail);
+      setRunning(false);
+      stopUpload();
+      stopProgressStream("start_failed");
+      operationIdRef.current = null;
     } finally {
       stopUpload();
+    }
+  }
+
+  async function downloadResult() {
+    const operationId = resultOperationId ?? operationIdRef.current;
+    if (!operationId) {
+      setErrorMsg("No hay resultado disponible.");
+      return;
+    }
+    try {
+      setErrorMsg("");
+      console.info("[LOG01] operation_id(result) =", operationId);
+      const res = await log01Result(operationId);
+      const cd = res.headers["content-disposition"] as string | undefined;
+      const xf = res.headers["x-file-name"] as string | undefined;
+      const filename = parseFilename(cd) ?? xf ?? "BD_CONSOLIDADO.xlsx";
+      downloadBlob(res.data, filename);
+      setResultReady(false);
+      setResultOperationId(null);
       operationIdRef.current = null;
-      setRunning(false);
+    } catch (e) {
+      const ax = e as AxiosError<any>;
+      if (axios.isCancel(ax)) return;
+      const detail = (ax.response?.data?.detail as string) || ax.message || "No se pudo descargar.";
+      setErrorMsg(detail);
     }
   }
 
@@ -207,7 +273,7 @@ export default function Log01ExcelPage() {
               <div className="col-md-6 mB-15 d-flex align-items-end">
                 <div className="d-flex gap-10 w-100">
                   <button className="btn btn-primary w-100" onClick={run} disabled={running}>
-                    {running ? "Procesando..." : "Consolidar y descargar"}
+                    {running ? "Procesando..." : "Consolidar"}
                   </button>
                   {running ? (
                     <button
@@ -215,6 +281,14 @@ export default function Log01ExcelPage() {
                       onClick={() => void cancelOperation()}
                     >
                       Cancelar
+                    </button>
+                  ) : null}
+                  {!running && resultReady ? (
+                    <button
+                      className="btn btn-outline-primary"
+                      onClick={() => void downloadResult()}
+                    >
+                      Descargar
                     </button>
                   ) : null}
                 </div>

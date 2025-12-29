@@ -220,6 +220,29 @@ export async function log01Upload(
   return api.post("/logistica/log01/upload", form, { responseType: "blob", signal });
 }
 
+export type Log01StartResponse = {
+  operation_id: string;
+  status: "started";
+};
+
+export async function log01Start(
+  form: FormData,
+  signal?: AbortSignal
+): Promise<AxiosResponse<Log01StartResponse>> {
+  return api.post("/logistica/log01/start", form, { signal });
+}
+
+export async function log01Result(
+  operationId: string,
+  signal?: AbortSignal
+): Promise<AxiosResponse<Blob>> {
+  return api.get(`/logistica/log01/result/${encodeURIComponent(operationId)}`, {
+    responseType: "blob",
+    signal,
+    validateStatus: (status) => status === 200,
+  });
+}
+
 export async function cancelLog01Operation(operationId: string): Promise<void> {
   await api.post(`/logistica/log01/cancel/${encodeURIComponent(operationId)}`);
 }

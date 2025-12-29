@@ -61,11 +61,12 @@ class ProgressManager:
             queue_size = channel.queue.qsize()
         except Exception:
             queue_size = -1
-        logger.info(
-            "Progress emit operation_id=%s history=%s queue=%s",
+        logger.debug(
+            "Progress emit operation_id=%s history=%s queue=%s ts=%s",
             operation_id,
             len(channel.history),
             queue_size,
+            time(),
         )
 
     def finish(self, operation_id: Optional[str]) -> None:
@@ -78,11 +79,12 @@ class ProgressManager:
                 queue_size = channel.queue.qsize()
             except Exception:
                 queue_size = -1
-            logger.info(
-                "Progress finish operation_id=%s history=%s queue=%s",
+            logger.debug(
+                "Progress finish operation_id=%s history=%s queue=%s ts=%s",
                 operation_id,
                 len(channel.history),
                 queue_size,
+                time(),
             )
             channel.close()
 
@@ -94,12 +96,13 @@ class ProgressManager:
             queue_size = channel.queue.qsize()
         except Exception:
             queue_size = -1
-        logger.info(
-            "Progress subscribe operation_id=%s history=%s queue=%s subscribers=%s",
+        logger.debug(
+            "Progress subscribe operation_id=%s history=%s queue=%s subscribers=%s ts=%s",
             operation_id,
             len(history),
             queue_size,
             channel.subscribers,
+            time(),
         )
         return channel, history
 
@@ -116,12 +119,13 @@ class ProgressManager:
             queue_size = channel.queue.qsize()
         except Exception:
             queue_size = -1
-        logger.info(
-            "Progress subscribe_existing operation_id=%s history=%s queue=%s subscribers=%s",
+        logger.debug(
+            "Progress subscribe_existing operation_id=%s history=%s queue=%s subscribers=%s ts=%s",
             operation_id,
             len(history),
             queue_size,
             channel.subscribers,
+            time(),
         )
         return channel, history
 

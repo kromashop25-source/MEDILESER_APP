@@ -13,7 +13,7 @@ export type VimaToListaSummary = {
 };
 
 export type ProgressEvent = {
-  type: "status" | "progress" | "complete" | "error";
+  type: "status" | "progress" | "complete" | "error" | "hello";
   stage?: string;
   message?: string;
   progress?: number; // a veces llega como "progress"
