@@ -50,7 +50,16 @@ export default function Log01ExcelPage() {
 
   const uploadAbortRef = useRef<AbortController | null>(null);
   const progressAbortRef = useRef<AbortController | null>(null);
+  const progressAbortReasonRef = useRef<string | null>(null);
+  const terminalEventRef = useRef<boolean>(false);
   const operationIdRef = useRef<string | null>(null);
+
+  function getOrCreateOperationId() {
+    if (!operationIdRef.current) {
+      operationIdRef.current = crypto.randomUUID();
+    }
+    return operationIdRef.current;
+  }
 
   function pushEvent(ev: ProgressEvent) {
     const label = `${translateProgressType(ev.type)} · ${translateProgressStage(ev.stage)} · ${translateProgressMessage(
@@ -60,6 +69,10 @@ export default function Log01ExcelPage() {
     setEvents((prev) => [...prev, ev]);
     if (typeof (ev as any).progress === "number") setProgressPct((ev as any).progress);
     if (typeof (ev as any).percent === "number") setProgressPct(Math.round((ev as any).percent));
+    if (!terminalEventRef.current && (ev.type === "complete" || ev.stage === "cancelled")) {
+      terminalEventRef.current = true;
+      stopProgressStream("terminal_event");
+    }
   }
 
   function buildForm(operationId: string) {
@@ -70,8 +83,11 @@ export default function Log01ExcelPage() {
     return form;
   }
 
-  function stopProgressStream() {
-    progressAbortRef.current?.abort();
+  function stopProgressStream(reason: string) {
+    if (!progressAbortRef.current) return;
+    progressAbortReasonRef.current = reason;
+    console.info("[LOG01] progress abort reason =", reason);
+    progressAbortRef.current.abort();
     progressAbortRef.current = null;
   }
 
@@ -84,6 +100,7 @@ export default function Log01ExcelPage() {
     if (!running) return;
     const operationId = operationIdRef.current;
     if (operationId) {
+      console.info("[LOG01] operation_id(cancel) =", operationId);
       try {
         await cancelLog01Operation(operationId);
       } catch (e) {
@@ -98,7 +115,7 @@ export default function Log01ExcelPage() {
       }
     }
     stopUpload();
-    stopProgressStream();
+    stopProgressStream("cancel");
   }
 
   async function run() {
@@ -106,25 +123,33 @@ export default function Log01ExcelPage() {
     setEvents([]);
     setProgressPct(0);
     setProgressLabel("Listo para procesar");
+    progressAbortReasonRef.current = null;
+    terminalEventRef.current = false;
 
     if (!files.length) {
       setErrorMsg("Debes seleccionar al menos 1 Excel.");
       return;
     }
 
-    const operationId = crypto.randomUUID();
-    operationIdRef.current = operationId;
+    const operationId = getOrCreateOperationId();
     progressAbortRef.current = new AbortController();
     uploadAbortRef.current = new AbortController();
 
     // progreso (NDJSON)
-    subscribeLog01Progress(operationId, pushEvent, progressAbortRef.current.signal).catch(() => {
-      // si el stream falla, el request principal igual continúa
+    console.info("[LOG01] operation_id(stream) =", operationId);
+    subscribeLog01Progress(operationId, pushEvent, progressAbortRef.current.signal).catch((err) => {
+      const name = (err as any)?.name as string | undefined;
+      if (name === "AbortError") {
+        console.info("[LOG01] progress stream aborted (reason) =", progressAbortReasonRef.current);
+      } else {
+        console.info("[LOG01] progress stream error =", err);
+      }
     });
 
     setRunning(true);
     try {
       const form = buildForm(operationId);
+      console.info("[LOG01] operation_id(upload) =", operationId);
       const res = await log01Upload(form, uploadAbortRef.current.signal);
 
       const cd = res.headers["content-disposition"] as string | undefined;
@@ -138,7 +163,7 @@ export default function Log01ExcelPage() {
       setErrorMsg(detail);
     } finally {
       stopUpload();
-      stopProgressStream();
+      stopProgressStream("cleanup");
       operationIdRef.current = null;
       setRunning(false);
     }

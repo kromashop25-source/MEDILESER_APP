@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import queue
 import re
 import time
@@ -29,6 +30,8 @@ router = APIRouter(
     tags=["logistica/log01"],
     dependencies=[Depends(get_current_user_session)],
 )
+
+logger = logging.getLogger(__name__)
 
 # ----------------------------
 # Utilitarios
@@ -111,8 +114,10 @@ _INPUT_HEADER_ALIASES = {
 }
 
 def _emit(operation_id: Optional[str], ev: Dict[str, Any]) -> None:
-    if operation_id:
-        progress_manager.emit(operation_id, ev)
+    if not operation_id:
+        logger.warning("LOG01 emit skipped: operation_id None")
+        return
+    progress_manager.emit(operation_id, ev)
 
 
 def _copy_cell_style(src, dst) -> None:
@@ -179,6 +184,7 @@ def _normalize_output_date(value: Any) -> Any:
 # ----------------------------
 @router.get("/progress/{operation_id}")
 async def log01_progress_stream(operation_id: str):
+    logger.info("LOG01 progress subscribe operation_id=%s", operation_id)
     deadline = time.monotonic() + 1.5
     subscribed = progress_manager.subscribe_existing(operation_id)
     while subscribed is None and time.monotonic() < deadline:
@@ -247,6 +253,7 @@ def log01_upload(
     operation_id: Optional[str] = Form(None),
     output_filename: Optional[str] = Form(None),
 ):
+    logger.info("LOG01 upload operation_id=%s", operation_id)
     # token de cancelación (opcional)
     cancel_token = cancel_manager.create(operation_id) if operation_id else None
     cancel_emitted = False

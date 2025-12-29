@@ -133,7 +133,11 @@ export async function subscribeLog01Progress(
 
   const res = await fetch(url, {
     method: "GET",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Accept: "application/x-ndjson",
+      "Cache-Control": "no-cache",
+    },
     signal,
   });
 
@@ -142,7 +146,35 @@ export async function subscribeLog01Progress(
     throw asErrorWithCode(`No se pudo abrir el stream (${res.status})`, res.status, code);
   }
 
-  await readNdjsonStream(res, onEvent);
+  if (!res.body) return;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let sawFirstByte = false;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (!sawFirstByte && value && value.length) {
+      console.info("[LOG01] progress first byte");
+      sawFirstByte = true;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, idx).trim();
+      buffer = buffer.slice(idx + 1);
+      if (!line) continue;
+      try {
+        const ev = JSON.parse(line) as ProgressEvent;
+        console.info("[LOG01] progress event =", ev);
+        onEvent(ev);
+      } catch {
+        // ignore malformed lines
+      }
+    }
+  }
 }
 
 
