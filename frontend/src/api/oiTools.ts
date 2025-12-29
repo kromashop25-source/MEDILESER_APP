@@ -3,6 +3,11 @@ import { api } from "./client";
 import { getAuth } from "./auth";
 import type { ProgressEvent } from "./integrations";
 
+const isDev = import.meta.env.DEV;
+const logDev = (...args: unknown[]) => {
+  if (isDev) console.info(...args);
+};
+
 export type MergeUploadLimits = {
   max_file_mb: number;
   max_tech_files: number;
@@ -146,7 +151,13 @@ export async function subscribeLog01Progress(
     throw asErrorWithCode(`No se pudo abrir el stream (${res.status})`, res.status, code);
   }
 
-  if (!res.body) return;
+  const contentType = res.headers.get("Content-Type") ?? "";
+  if (!contentType.includes("application/x-ndjson")) {
+    throw asErrorWithCode("Stream no es NDJSON", res.status);
+  }
+  if (!res.body) {
+    throw asErrorWithCode("Stream sin body", res.status);
+  }
   const reader = res.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
@@ -156,7 +167,7 @@ export async function subscribeLog01Progress(
     const { value, done } = await reader.read();
     if (done) break;
     if (!sawFirstByte && value && value.length) {
-      console.info("[LOG01] progress first byte");
+      logDev("[LOG01] progress first byte");
       sawFirstByte = true;
     }
 
@@ -168,7 +179,7 @@ export async function subscribeLog01Progress(
       if (!line) continue;
       try {
         const ev = JSON.parse(line) as ProgressEvent;
-        console.info("[LOG01] progress event =", ev);
+        logDev("[LOG01] progress event =", ev);
         onEvent(ev);
       } catch {
         // ignore malformed lines
@@ -225,11 +236,39 @@ export type Log01StartResponse = {
   status: "started";
 };
 
+export type Log01PollResponse = {
+  cursor_next: number;
+  events: ProgressEvent[];
+  done: boolean;
+  summary?: unknown;
+};
+
 export async function log01Start(
   form: FormData,
   signal?: AbortSignal
 ): Promise<AxiosResponse<Log01StartResponse>> {
   return api.post("/logistica/log01/start", form, { signal });
+}
+
+export async function pollLog01Progress(
+  operationId: string,
+  cursor: number,
+  signal?: AbortSignal
+): Promise<Log01PollResponse> {
+  const url = buildUrl(`/logistica/log01/poll/${operationId}?cursor=${encodeURIComponent(cursor)}`);
+  const token = getAuth()?.token;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    signal,
+  });
+
+  if (!res.ok) {
+    const code = res.headers.get("X-Code") ?? undefined;
+    throw asErrorWithCode(`No se pudo hacer poll (${res.status})`, res.status, code);
+  }
+
+  return (await res.json()) as Log01PollResponse;
 }
 
 export async function log01Result(

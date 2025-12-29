@@ -6,6 +6,7 @@ import {
   cancelLog01Operation,
   log01Result,
   log01Start,
+  pollLog01Progress,
   subscribeLog01Progress,
 } from "../../api/oiTools";
 import MultiFilePicker from "../oi_tools/components/MultiFilePicker";
@@ -14,6 +15,11 @@ import {
   translateProgressStage,
   translateProgressType,
 } from "../oi_tools/progressTranslations";
+
+const isDev = import.meta.env.DEV;
+const logDev = (...args: unknown[]) => {
+  if (isDev) console.info(...args);
+};
 
 // Copia tal cual de ActualizacionBasePage.tsx (si ya lo tienes ahí, reutilízalo)
 function parseFilename(contentDisposition?: string): string | null {
@@ -39,18 +45,23 @@ function downloadBlob(blob: Blob, filename: string) {
   window.URL.revokeObjectURL(url);
 }
 
-async function waitForHello(promise: Promise<void>, timeoutMs: number) {
+async function waitForHello(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
   let timeoutId: number | null = null;
-  const timeoutPromise = new Promise<void>((_resolve, reject) => {
+  let timedOut = false;
+  const timeoutPromise = new Promise<void>((resolve) => {
     timeoutId = window.setTimeout(() => {
-      reject(new Error("Timeout esperando handshake del stream."));
+      timedOut = true;
+      resolve();
     }, timeoutMs);
   });
   try {
     await Promise.race([promise, timeoutPromise]);
+  } catch {
+    return false;
   } finally {
     if (timeoutId != null) window.clearTimeout(timeoutId);
   }
+  return !timedOut;
 }
 
 export default function Log01ExcelPage() {
@@ -70,6 +81,12 @@ export default function Log01ExcelPage() {
   const progressAbortReasonRef = useRef<string | null>(null);
   const terminalEventRef = useRef<boolean>(false);
   const operationIdRef = useRef<string | null>(null);
+  const pollTimerRef = useRef<number | null>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
+  const pollInFlightRef = useRef<boolean>(false);
+  const pollingActiveRef = useRef<boolean>(false);
+  const pollCursorRef = useRef<number>(-1);
+  const lastCursorRef = useRef<number>(-1);
 
   function getOrCreateOperationId() {
     if (!operationIdRef.current) {
@@ -98,7 +115,23 @@ export default function Log01ExcelPage() {
       }
       setRunning(false);
       stopProgressStream("terminal_event");
+      stopPolling("terminal_event");
     }
+  }
+
+  function shouldSkipEvent(ev: ProgressEvent) {
+    if (typeof ev.cursor !== "number") return false;
+    if (ev.cursor <= lastCursorRef.current) return true;
+    lastCursorRef.current = ev.cursor;
+    if (ev.cursor > pollCursorRef.current) {
+      pollCursorRef.current = ev.cursor;
+    }
+    return false;
+  }
+
+  function handleEvent(ev: ProgressEvent) {
+    if (shouldSkipEvent(ev)) return;
+    pushEvent(ev);
   }
 
   function buildForm(operationId: string) {
@@ -112,9 +145,70 @@ export default function Log01ExcelPage() {
   function stopProgressStream(reason: string) {
     if (!progressAbortRef.current) return;
     progressAbortReasonRef.current = reason;
-    console.info("[LOG01] progress abort reason =", reason);
+    logDev("[LOG01] progress abort reason =", reason);
     progressAbortRef.current.abort();
     progressAbortRef.current = null;
+  }
+
+  function stopPolling(reason: string) {
+    if (!pollingActiveRef.current) return;
+    pollingActiveRef.current = false;
+    if (pollTimerRef.current != null) {
+      window.clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = null;
+    pollInFlightRef.current = false;
+    logDev("[LOG01] polling stopped =", reason);
+  }
+
+  function schedulePoll(delayMs: number) {
+    if (!pollingActiveRef.current) return;
+    if (pollTimerRef.current != null) window.clearTimeout(pollTimerRef.current);
+    pollTimerRef.current = window.setTimeout(() => {
+      void pollOnce();
+    }, delayMs);
+  }
+
+  async function pollOnce() {
+    if (!pollingActiveRef.current || pollInFlightRef.current) return;
+    const operationId = operationIdRef.current;
+    if (!operationId) {
+      stopPolling("no_operation_id");
+      return;
+    }
+    pollInFlightRef.current = true;
+    try {
+      const res = await pollLog01Progress(
+        operationId,
+        pollCursorRef.current,
+        pollAbortRef.current?.signal
+      );
+      logDev("[LOG01] poll cursor =", pollCursorRef.current, "->", res.cursor_next);
+      pollCursorRef.current = res.cursor_next;
+      for (const ev of res.events) handleEvent(ev);
+      if (res.done && res.events.length === 0) {
+        stopPolling("done");
+        return;
+      }
+    } catch (err) {
+      const name = (err as any)?.name as string | undefined;
+      if (name !== "AbortError") {
+        logDev("[LOG01] poll error =", err);
+      }
+    } finally {
+      pollInFlightRef.current = false;
+      if (pollingActiveRef.current) schedulePoll(350);
+    }
+  }
+
+  function startPolling(reason: string) {
+    if (pollingActiveRef.current) return;
+    pollingActiveRef.current = true;
+    pollAbortRef.current = new AbortController();
+    logDev("[LOG01] fallback polling enabled =", reason);
+    schedulePoll(0);
   }
 
   function stopUpload() {
@@ -126,7 +220,7 @@ export default function Log01ExcelPage() {
     if (!running) return;
     const operationId = operationIdRef.current;
     if (operationId) {
-      console.info("[LOG01] operation_id(cancel) =", operationId);
+      logDev("[LOG01] operation_id(cancel) =", operationId);
       try {
         await cancelLog01Operation(operationId);
       } catch (e) {
@@ -152,6 +246,9 @@ export default function Log01ExcelPage() {
     setResultOperationId(null);
     progressAbortReasonRef.current = null;
     terminalEventRef.current = false;
+    pollCursorRef.current = -1;
+    lastCursorRef.current = -1;
+    stopPolling("reset");
 
     if (!files.length) {
       setErrorMsg("Debes seleccionar al menos 1 Excel.");
@@ -170,7 +267,7 @@ export default function Log01ExcelPage() {
     uploadAbortRef.current = new AbortController();
 
     // progreso (NDJSON)
-    console.info("[LOG01] operation_id(stream) =", operationId);
+    logDev("[LOG01] operation_id(stream) =", operationId);
     const onProgressEvent = (ev: ProgressEvent) => {
       if (ev.type === "hello") {
         if (helloResolve) {
@@ -179,27 +276,42 @@ export default function Log01ExcelPage() {
         }
         return;
       }
-      pushEvent(ev);
+      handleEvent(ev);
     };
-    subscribeLog01Progress(operationId, onProgressEvent, progressAbortRef.current.signal).catch((err) => {
+    const streamPromise = subscribeLog01Progress(
+      operationId,
+      onProgressEvent,
+      progressAbortRef.current.signal
+    );
+    streamPromise.then(() => {
+      if (!terminalEventRef.current) {
+        startPolling("stream_closed");
+      }
+    }).catch((err) => {
       const name = (err as any)?.name as string | undefined;
       if (name === "AbortError") {
-        console.info("[LOG01] progress stream aborted (reason) =", progressAbortReasonRef.current);
+        logDev("[LOG01] progress stream aborted (reason) =", progressAbortReasonRef.current);
       } else {
-        console.info("[LOG01] progress stream error =", err);
+        logDev("[LOG01] progress stream error =", err);
         if (helloReject) {
           helloReject(err as Error);
           helloReject = null;
         }
+        startPolling("stream_error");
       }
     });
 
     setRunning(true);
     try {
       // Esperar el handshake "hello" evita la carrera entre stream y start.
-      await waitForHello(helloPromise, 5000);
+      const helloOk = await waitForHello(helloPromise, 1800);
+      if (!helloOk) {
+        startPolling("hello_timeout");
+      } else {
+        logDev("[LOG01] hello received");
+      }
       const form = buildForm(operationId);
-      console.info("[LOG01] operation_id(start) =", operationId);
+      logDev("[LOG01] operation_id(start) =", operationId);
       await log01Start(form, uploadAbortRef.current!.signal);
     } catch (e) {
       const ax = e as AxiosError<any>;
@@ -209,6 +321,7 @@ export default function Log01ExcelPage() {
       setRunning(false);
       stopUpload();
       stopProgressStream("start_failed");
+      stopPolling("start_failed");
       operationIdRef.current = null;
     } finally {
       stopUpload();
@@ -223,7 +336,7 @@ export default function Log01ExcelPage() {
     }
     try {
       setErrorMsg("");
-      console.info("[LOG01] operation_id(result) =", operationId);
+      logDev("[LOG01] operation_id(result) =", operationId);
       const res = await log01Result(operationId);
       const cd = res.headers["content-disposition"] as string | undefined;
       const xf = res.headers["x-file-name"] as string | undefined;

@@ -28,7 +28,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from app.api.auth import get_current_user_session
 from app.core.settings import get_settings
 from app.oi_tools.services.progress_manager import progress_manager, _SENTINEL as SENTINEL # mismo sentinel
-from app.oi_tools.services.cancel_manager import cancel_manager
+from app.oi_tools.services.cancel_manager import cancel_manager, CancelToken
 
 router = APIRouter(
     prefix="/logistica/log01",
@@ -533,21 +533,25 @@ def _run_log01_job(
 # ----------------------------
 @router.get("/progress/{operation_id}")
 async def log01_progress_stream(operation_id: str):
-    logger.debug("LOG01 progress client connected operation_id=%s", operation_id)
+    logger.info("LOG01 progress client connected operation_id=%s", operation_id)
     channel, history = progress_manager.subscribe(operation_id)
 
     async def event_stream():
         last_heartbeat = time.monotonic()
         try:
             # Primer evento JSON para handshake; evita carrera entre stream y start.
+            hello_event = {
+                "type": "hello",
+                "ts": time.time(),
+                "operation_id": operation_id,
+                "pad": _LOG01_HELLO_PAD,
+            }
             yield progress_manager.encode_event(
                 {
-                    "type": "hello",
-                    "ts": time.time(),
-                    "operation_id": operation_id,
-                    "pad": _LOG01_HELLO_PAD,
+                    **hello_event,
                 }
             )
+            logger.info("LOG01 progress hello sent operation_id=%s", operation_id)
             for event in history:
                 logger.debug(
                     "LOG01 progress yield operation_id=%s type=%s stage=%s",
@@ -577,7 +581,7 @@ async def log01_progress_stream(operation_id: str):
                 yield progress_manager.encode_event(item)
                 last_heartbeat = time.monotonic()
         finally:
-            logger.debug("LOG01 progress client disconnected operation_id=%s", operation_id)
+            logger.info("LOG01 progress client disconnected operation_id=%s", operation_id)
             progress_manager.unsubscribe(operation_id)
     headers = {
         # Streaming NDJSON: evitar buffering/transformaciones (sin gzip).
@@ -590,6 +594,37 @@ async def log01_progress_stream(operation_id: str):
         media_type="application/x-ndjson; charset=utf-8",
         headers=headers,
     )
+
+
+@router.get("/poll/{operation_id}")
+def log01_poll(operation_id: str, cursor: int = -1):
+    channel, events, cursor_next = progress_manager.get_events_since(operation_id, cursor)
+    done = channel.closed
+    summary = None
+    if events:
+        for ev in reversed(events):
+            if ev.get("type") == "complete":
+                summary = ev.get("result")
+                break
+    if summary is None and done and channel.history:
+        for ev in reversed(channel.history):
+            if ev.get("type") == "complete":
+                summary = ev.get("result")
+                break
+    logger.info(
+        "LOG01 poll operation_id=%s cursor=%s cursor_next=%s done=%s events=%s",
+        operation_id,
+        cursor,
+        cursor_next,
+        done,
+        len(events),
+    )
+    return {
+        "cursor_next": cursor_next,
+        "events": events,
+        "done": done,
+        "summary": summary,
+    }
 
 
 @router.post("/cancel/{operation_id}")

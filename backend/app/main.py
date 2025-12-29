@@ -173,6 +173,16 @@ async def spa_for_react_routes(request: Request, call_next):
     """
     accept = request.headers.get("accept", "")
     path = request.url.path.rstrip("/")
+
+    if (
+        path.startswith("/logistica/log01/progress")
+        or path.startswith("/logistica/log01/poll")
+        or path.startswith("/logistica/log01/start")
+        or path.startswith("/logistica/log01/upload")
+        or path.startswith("/logistica/log01/result")
+        or path.startswith("/logistica/log01/cancel")
+    ):
+        return await call_next(request)
     
     # Agregué "/login" y "/" por seguridad para la navegación directa
     spa_paths = {"/home", "/oi", "/oi/list", "/login", "/password", "/users", "/admin/permisos"}

@@ -18,6 +18,7 @@ export type ProgressEvent = {
   message?: string;
   progress?: number; // a veces llega como "progress"
   percent?: number;  // a veces llega como "percent"
+  cursor?: number;
   result?: unknown;
   status?: number;
   detail?: string;

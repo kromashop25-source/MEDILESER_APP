@@ -1,6 +1,6 @@
 import re
 from io import BytesIO
-from typing import List, cast
+from typing import List, Sequence, cast
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Header
@@ -75,6 +75,9 @@ def _get_session_from_header(authorization: str | None, *, allow_expired: bool =
     return sess
 
 OI_CODE_RE = re.compile(r"^OI-\d{4}-\d{4}$")
+
+def _oi_bancada_onclause() -> ColumnElement:
+    return cast(ColumnElement, Bancada.oi_id == OI.id)
 
 def _is_admin(sess: dict) -> bool:
     """Determina si la sesión corresponde a un usuario administrador."""
@@ -278,7 +281,7 @@ def _row_medidor_value(row: object) -> str:
     return str(value).strip()
 
 
-def _medidor_matches(search_lc: str, medidor: str | None, rows_data: list | None) -> bool:
+def _medidor_matches(search_lc: str, medidor: str | None, rows_data: Sequence[object] | None) -> bool:
     if medidor:
         if search_lc in str(medidor).strip().lower():
             return True
@@ -441,7 +444,7 @@ def get_oi(
     medidores_total_code_raw = session.exec(
         select(func.coalesce(func.sum(Bancada.rows), 0))
         .select_from(OI)
-        .join(Bancada, Bancada.oi_id == OI.id, isouter=True)
+        .join(Bancada, _oi_bancada_onclause(), isouter=True)
         .where(OI.code == oi.code)
     ).one()
     medidores_total_code = int(medidores_total_code_raw or 0)
@@ -634,13 +637,18 @@ def list_oi(
         limit = 100
 
     # Construir condiciones comunes (rol, búsqueda, rango de fechas)
-    conditions = []
+    conditions: list[ColumnElement] = []
+    oi_id_col: ColumnElement = cast(ColumnElement, OI.id)
+    oi_code_col: ColumnElement = cast(ColumnElement, OI.code)
+    oi_tech_number_col: ColumnElement = cast(ColumnElement, OI.tech_number)
+    oi_banco_id_col: ColumnElement = cast(ColumnElement, OI.banco_id)
+    bancada_oi_id_col: ColumnElement = cast(ColumnElement, Bancada.oi_id)
 
     if not is_admin:
         if tech_number is not None:
-            conditions.append(OI.tech_number == tech_number)
+            conditions.append(oi_tech_number_col == tech_number)
         if banco_id is not None:
-            conditions.append(OI.banco_id == banco_id)
+            conditions.append(oi_banco_id_col == banco_id)
 
     # Búsqueda por código de OI (parcial, insensitive)
     search = (q or "").strip()
@@ -662,13 +670,12 @@ def list_oi(
         except Exception:
             raise HTTPException(status_code=400, detail="responsable_tech_number inválido")
         if resp_tech > 0:
-            conditions.append(OI.tech_number == resp_tech)
+            conditions.append(oi_tech_number_col == resp_tech)
 
     # Filtro por busqueda: codigo OI o medidor (parcial, insensitive)
     if search:
-        code_col: ColumnElement = cast(ColumnElement, OI.code)  # normaliza tipo para linters
         code_conditions = list(conditions)
-        code_conditions.append(code_col.ilike(f"%{search}%"))
+        code_conditions.append(oi_code_col.ilike(f"%{search}%"))
         code_stmt = select(OI.id)
         if code_conditions:
             code_stmt = code_stmt.where(*code_conditions)
@@ -678,7 +685,7 @@ def list_oi(
         search_lc = search.lower()
         medidor_stmt = (
             select(Bancada.oi_id, Bancada.medidor, Bancada.rows_data)
-            .join(OI, OI.id == Bancada.oi_id)
+            .join(OI, _oi_bancada_onclause())
         )
         if conditions:
             medidor_stmt = medidor_stmt.where(*conditions)
@@ -695,7 +702,7 @@ def list_oi(
                 offset=offset,
                 summary=OIListSummary(),
             )
-        conditions = conditions + [OI.id.in_(list(matched_ids))]
+        conditions = conditions + [oi_id_col.in_(list(matched_ids))]
 
     # --- Consulta base con filtros ---
     base_stmt = select(OI)
@@ -709,7 +716,7 @@ def list_oi(
     total = session.exec(count_stmt).one()
 
     sum_stmt = select(func.coalesce(func.sum(Bancada.rows), 0)).select_from(OI).join(
-        Bancada, Bancada.oi_id == OI.id, isouter=True
+        Bancada, _oi_bancada_onclause(), isouter=True
     )
     if conditions:
         sum_stmt = sum_stmt.where(*conditions)
@@ -724,15 +731,15 @@ def list_oi(
 
     totals_by_code = (
         select(
-            OI.code.label("code"),
+            oi_code_col.label("code"),
             func.coalesce(func.sum(Bancada.rows), 0).label("total_medidores"),
         )
         .select_from(OI)
-        .join(Bancada, Bancada.oi_id == OI.id, isouter=True)
-        .group_by(OI.code)
+        .join(Bancada, _oi_bancada_onclause(), isouter=True)
+        .group_by(oi_code_col)
         .subquery()
     )
-    filtered_codes = select(func.distinct(OI.code).label("code")).select_from(OI)
+    filtered_codes = select(func.distinct(oi_code_col).label("code")).select_from(OI)
     if conditions:
         filtered_codes = filtered_codes.where(*conditions)
     filtered_codes = filtered_codes.subquery()
@@ -750,10 +757,9 @@ def list_oi(
     # Ordenar por "más reciente":
     # usamos coalesce(updated_at, created_at) para considerar última modificación
     sort_expr = func.coalesce(OI.updated_at, OI.created_at).desc()
-    id_column: ColumnElement = cast(ColumnElement, OI.id)  # normaliza tipo para linters
     data_stmt = (
         base_stmt
-        .order_by(sort_expr, desc(id_column))
+        .order_by(sort_expr, desc(oi_id_col))
         .limit(limit)
         .offset(offset)
     )
@@ -766,8 +772,8 @@ def list_oi(
     if page_oi_ids:
         user_stmt = (
             select(Bancada.oi_id, func.coalesce(func.sum(Bancada.rows), 0))
-            .where(Bancada.oi_id.in_(page_oi_ids))
-            .group_by(Bancada.oi_id)
+            .where(bancada_oi_id_col.in_(page_oi_ids))
+            .group_by(bancada_oi_id_col)
         )
         for oi_id, total_rows in session.exec(user_stmt).all():
             medidores_usuario_by_id[int(oi_id)] = int(total_rows or 0)
@@ -777,9 +783,9 @@ def list_oi(
         total_stmt = (
             select(OI.code, func.coalesce(func.sum(Bancada.rows), 0))
             .select_from(OI)
-            .join(Bancada, Bancada.oi_id == OI.id, isouter=True)
-            .where(OI.code.in_(page_codes))
-            .group_by(OI.code)
+            .join(Bancada, _oi_bancada_onclause(), isouter=True)
+            .where(oi_code_col.in_(page_codes))
+            .group_by(oi_code_col)
         )
         for code, total_rows in session.exec(total_stmt).all():
             medidores_total_by_code[str(code)] = int(total_rows or 0)
@@ -906,7 +912,7 @@ def get_oi_with_bancadas(
     medidores_total_code_raw = session.exec(
         select(func.coalesce(func.sum(Bancada.rows), 0))
         .select_from(OI)
-        .join(Bancada, Bancada.oi_id == OI.id, isouter=True)
+        .join(Bancada, _oi_bancada_onclause(), isouter=True)
         .where(OI.code == oi.code)
     ).one()
     medidores_total_code = int(medidores_total_code_raw or 0)
