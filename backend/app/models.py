@@ -101,4 +101,4 @@ def _normalize_numeration_type(mapper, connection, target: OI):
         if enum_val is None:
             enum_val = NumerationType.correlativo
     # Guardamos siempre como string oficial (con espacio)
-    target.numeration_type = enum_val.value if isinstance(enum_val, NumerationType) else str(enum_val)
+    target.numeration_type = enum_val
