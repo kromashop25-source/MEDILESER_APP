@@ -93,19 +93,19 @@ def _natural_key(s: str):
     # Natural sort: divide digitos y texto
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
 
-def _find_header_row(ws) -> Optional[int]:
+def _find_item_header_cell(ws: Worksheet, max_rows: int = 50, max_cols: int = 50) -> Optional[Tuple[int, int]]:
     """
-    Busca en filas 1..20:
-        C{r} == 'Serie del medidor'
-        M{r} == 'Estado'
-    Retorna r si encuentra.
+    Busca la cabecera 'Item' (fila/col variable) en el rango superior del Excel.
+    Retorna (row, col) de la celda donde se encontró.
     """
-    for r in range(1, 21):
-        c = _norm_str(ws.cell(row=r, column=3).value).lower()
-        m = _norm_str(ws.cell(row=r, column=13).value).lower()
-        if c == "serie del medidor" and m == "estado":
-            return r
+    r_max = min(max_rows, ws.max_row or max_rows)
+    c_max = min(max_cols, ws.max_column or max_cols)
+    for r in range(1, r_max + 1):
+        for c in range(1, c_max + 1):
+            if _norm_header(ws.cell(row=r, column=c).value) == "item":
+                return (r, c)
     return None
+
 
 @dataclass
 class SerieInfo:
@@ -310,10 +310,11 @@ def _process_log01_files(
             wb = load_workbook(BytesIO(data), data_only=True)
             ws: Worksheet = wb.worksheets[0]
 
-            header_row = _find_header_row(ws)
-            if header_row is None:
-                # fallback a la norma: cabecera en fila 8, data desde fila 9
-                header_row = 8
+            item_pos = _find_item_header_cell(ws)
+            if item_pos is None:
+                raise ValueError("No se encontró la cabecera 'Item' en la primera hoja.")
+            header_row, _item_col = item_pos
+
 
             input_header_map = {}
             for c in range(1, ws.max_column + 1):
@@ -329,21 +330,49 @@ def _process_log01_files(
                 return input_header_map.get(_norm_header(key))
 
             input_cols = {key: find_input_col(key) for key in _OUTPUT_KEYS}
-            col_serie = input_cols.get("medidor") or 3
-            col_estado = input_cols.get("estado") or 13
+
+            missing = [k for k in _OUTPUT_KEYS if not input_cols.get(k)]
+            if missing:
+                raise ValueError("Faltan cabeceras requeridas: " + ", ".join(missing))
+
+            # Forzar tipo (Pylance): desde aquí son int, no Optional[int]
+            col_serie = cast(int, input_cols["medidor"])
+            col_estado = cast(int, input_cols["estado"])
+            
+
 
             data_start = header_row + 1  # si hay fila en blanco, se ignora porque serie estará vacía
+            def _is_empty_cell_value(v: Any) -> bool:
+                if v is None:
+                    return True
+                if isinstance(v, str) and not v.strip():
+                    return True
+                return False
 
+            required_cols_for_empty_check: List[int] = [cast(int, input_cols[k]) for k in _OUTPUT_KEYS]
             extracted = 0
             for r in range(data_start, ws.max_row + 1):
                 if r % 200 == 0:
                     _raise_cancelled()
+
+                # Opción A: fin por fila completamente vacía (pero solo si ya leímos al menos 1 registro)
+                row_is_empty = True
+                for c in required_cols_for_empty_check:
+                    if not _is_empty_cell_value(ws.cell(row=r, column=c).value):
+                        row_is_empty = False
+                        break
+
+                if row_is_empty:
+                    if extracted == 0:
+                        continue  # tolera filas vacías iniciales
+                    break         # fin real del bloque de datos
+
                 serie = _norm_str(ws.cell(row=r, column=col_serie).value)
                 if not serie:
                     continue
+
                 estado = _norm_str(ws.cell(row=r, column=col_estado).value).upper()
                 if estado not in ("CONFORME", "NO CONFORME"):
-                    # si viene basura o vacio, lo ignoramos
                     continue
 
                 row_values: Dict[str, Any] = {"medidor": serie, "estado": estado}
@@ -357,6 +386,7 @@ def _process_log01_files(
                 prev = series.get(serie)
                 if prev is None or oi_num > prev.oi_num:
                     series[serie] = SerieInfo(oi_num=oi_num, estado=estado, values=row_values)
+
 
             ok_files += 1
             _emit(
