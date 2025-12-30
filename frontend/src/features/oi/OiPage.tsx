@@ -3,18 +3,18 @@ import { getCatalogs, type Catalogs } from "../../api/catalogs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { OISchema, pressureFromPMA, type OIForm, type OIFormInput, type BancadaRowForm } from "./schema"
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState, useRef } from "react";
 import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
 import { getAuth, normalizeRole } from "../../api/auth";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { clearOpenOiId, setOpenOiId } from "../../api/client";
 import BancadaModal, { type BancadaForm } from "./BancadaModal";
 import PasswordModal from "./PasswordModal";
 import {
   createOI, updateOI, generateExcel,
   addBancada, updateBancada, deleteBancada,
-  getOiFull, getOi, saveCurrentOI, loadCurrentOI, clearCurrentOI, lockOi, unlockOi,
+  getOiFull, getOi, saveCurrentOI, loadCurrentOI, clearCurrentOI, lockOi, unlockOi, updateOiSavedAt, restoreBancada, restoreOiUpdatedAt,
   type BancadaRead,
   type BancadaRow,
   type BancadaCreate,
@@ -85,10 +85,56 @@ const resolveEditingRows = (row: BancadaRead): BancadaRow[] => {
 const calcMedidoresFromBancadas = (items: BancadaRead[]) =>
   items.reduce((acc, item) => acc + (item.rows ?? 0), 0);
 
+const cloneBancadas = (items: BancadaRead[]) =>
+  JSON.parse(JSON.stringify(items)) as BancadaRead[];
+
+const serializeBancada = (b: BancadaRead) =>
+  JSON.stringify({
+    medidor: b.medidor ?? null,
+    estado: b.estado ?? 0,
+    rows: b.rows ?? 0,
+    rows_data: b.rows_data ?? null,
+    q1: b.q1 ?? null,
+    q2: b.q2 ?? null,
+    q3: b.q3 ?? null,
+  });
+
+const getRowsDataForBancada = (row: BancadaRead): BancadaRow[] => {
+  if (row.rows_data && row.rows_data.length > 0) {
+    return row.rows_data;
+  }
+  return resolveEditingRows(row);
+};
+
+const resolveMode = (raw: string | null, hasExisting: boolean) => {
+  if (!hasExisting) return "edit";
+  if (raw === "edit") return "edit";
+  return "view";
+};
+
+const toDatetimeLocal = (iso?: string | null) => {
+  if (!iso) return "";
+  const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+  const normalized = hasTz ? iso : `${iso}Z`;
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const toUtcNaiveIso = (value: string) => {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().replace("Z", "");
+};
+
 export default function OiPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const { oiId: oiIdParam } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data } = useQuery<Catalogs>({ queryKey: ["catalogs"], queryFn: getCatalogs });
   const { register, handleSubmit, watch, formState:{errors}, reset, getValues } = useForm<OIFormInput, unknown, OIForm>({
     resolver: zodResolver(OISchema),
@@ -103,14 +149,30 @@ export default function OiPage() {
   const auth = useMemo(() => getAuth(), []);
   const authUserId = auth?.userId ?? null;
   const isAdmin = normalizeRole(auth?.role, auth?.username) !== "technician";
+  const storedCurrent = loadCurrentOI();
+  const parsedOiId = oiIdParam ? Number(oiIdParam) : null;
+  const oiIdFromRoute = Number.isFinite(parsedOiId) ? parsedOiId : null;
+  const hasExistingOi = oiIdFromRoute != null || (storedCurrent?.id ?? null) != null;
+  const rawMode = (searchParams.get("mode") || "").toLowerCase();
+  const mode = resolveMode(rawMode, hasExistingOi);
+  const isViewMode = mode === "view";
+  const isEditMode = mode === "edit";
   const [busy, setBusy] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [lockedByName, setLockedByName] = useState<string | null>(null);
   const [lockedByUserId, setLockedByUserId] = useState<number | null>(null);
   const [hasLock, setHasLock] = useState(false);
+  const isReadOnly = readOnly || isViewMode;
   
   const [isEditingOI, setIsEditingOI] = useState(false);
   const [originalOI, setOriginalOI] = useState<OIForm | null>(null);
+  const [oiSavedAt, setOiSavedAt] = useState<string | null>(null);
+  const [oiCreatedAt, setOiCreatedAt] = useState<string | null>(null);
+  const [showSavedAtModal, setShowSavedAtModal] = useState(false);
+  const [savedAtInput, setSavedAtInput] = useState("");
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const originalBancadasRef = useRef<BancadaRead[]>([]);
+  const originalOiUpdatedAtRef = useRef<string | null>(null);
 
   // Id del OI creado y lista local de bancadas
   const [oiId, setOiId] = useState<number | null>(null);
@@ -126,6 +188,15 @@ export default function OiPage() {
   // Borradores temporales de bancadas (por id o "new")
   const [bancadaDrafts, setBancadaDrafts] = useState<Record<string, BancadaForm>>({});
 
+  const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
+  const getReturnTo = () =>
+    typeof returnTo === "string" && returnTo ? returnTo : "/oi/list";
+  const setModeParam = (nextMode: "view" | "edit") => {
+    const next = new URLSearchParams(searchParams);
+    next.set("mode", nextMode);
+    setSearchParams(next, { replace: true });
+  };
+
   const getDraftKey = (row: BancadaRead | null) =>
   row ? `bancada-${row.id}` : "new";
 
@@ -137,18 +208,41 @@ export default function OiPage() {
     }
   }, [data, reset]);
 
-  // Al montar: si hay un OI activo en sesión, cargarlo (incluye bancadas)
+  // Al montar: si hay un OI activo (ruta o sesi?n), cargarlo (incluye bancadas)
   useEffect(() => {
-    const current = loadCurrentOI();
-    if (!current) return;
+    const stored = loadCurrentOI();
+    const targetId = oiIdFromRoute ?? stored?.id ?? null;
+    if (!targetId) {
+      setOiId(null);
+      setBancadas([]);
+      originalBancadasRef.current = [];
+      originalOiUpdatedAtRef.current = null;
+      setMedidoresUsuarioApi(null);
+      setMedidoresTotalCode(0);
+      setOiVersion(null);
+      setOiSavedAt(null);
+      setOiCreatedAt(null);
+      setIsEditingOI(false);
+      setReadOnly(false);
+      setLockedByName(null);
+      setLockedByUserId(null);
+      setHasLock(false);
+      setOriginalOI(null);
+      return;
+    }
     (async () => {
       try {
-        const full = await getOiFull(current.id);
+        const full = await getOiFull(targetId);
         setOiId(full.id);
+        saveCurrentOI({ id: full.id, code: full.code });
         setBancadas(full.bancadas ?? []);
+        originalBancadasRef.current = cloneBancadas(full.bancadas ?? []);
+        originalOiUpdatedAtRef.current = full.updated_at ?? null;
         setMedidoresUsuarioApi(full.medidores_usuario ?? null);
         setMedidoresTotalCode(full.medidores_total_code ?? 0);
-        // Guardamos la versión (updated_at o, en su defecto, created_at)
+        setOiSavedAt(full.saved_at ?? null);
+        setOiCreatedAt(full.created_at ?? null);
+        // Guardamos la versi?n (updated_at o, en su defecto, created_at)
         setOiVersion(full.updated_at ?? full.created_at);
         const initial: OIForm = {
           oi: full.code,
@@ -166,13 +260,13 @@ export default function OiPage() {
         setOriginalOI(initial);
       } catch {
         clearCurrentOI();
-       }
+      }
     })();
-  }, [reset, authUserId]);
+  }, [reset, authUserId, oiIdFromRoute]);
 
-  // Lock de OI para técnicos: intenta tomar o refrescar lock al abrir la pantalla
+  // Lock de OI para t?cnicos: intenta tomar o refrescar lock al abrir la pantalla
   useEffect(() => {
-    if (!oiId || !authUserId) return;
+    if (!oiId || !authUserId || !isEditMode) return;
     let cancelled = false;
     (async () => {
       const applyLockInfo = (res: any) => {
@@ -204,8 +298,8 @@ export default function OiPage() {
         }
         const message =
           lockedName
-            ? `La OI está siendo editada por ${lockedName}. Se abre en modo lectura.`
-            : e?.message ?? "La OI está siendo editada por otro usuario. Inténtelo más tarde.";
+            ? `La OI est? siendo editada por ${lockedName}. Se abre en modo lectura.`
+            : e?.message ?? "La OI est? siendo editada por otro usuario. Int?ntelo m?s tarde.";
         toast({
           kind: status === 423 || status === 409 ? "warning" : "error",
           title: status === 423 || status === 409 ? "OI bloqueada" : "Error",
@@ -213,10 +307,13 @@ export default function OiPage() {
         });
         setReadOnly(true);
         setHasLock(false);
+        if (rawMode !== "view") {
+          setModeParam("view");
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [oiId, authUserId, isAdmin]);
+  }, [oiId, authUserId, isEditMode]);
 
   // Libera lock al desmontar si lo posee el usuario actual
   useEffect(() => {
@@ -230,16 +327,16 @@ export default function OiPage() {
   // Marca el OI con lock activo para cierre automático en logout (best-effort)
   useEffect(() => {
     if (!oiId) return;
-    if (!hasLock || readOnly) return;
+    if (!hasLock || isReadOnly || !isEditMode) return;
     setOpenOiId(oiId);
-  }, [hasLock, oiId, readOnly]);
+  }, [hasLock, oiId, isReadOnly, isEditMode]);
 
   const pma = watch("pma");
   const presion = useMemo(() => pressureFromPMA(Number(pma)), [pma]);
   const numerationType = watch("numeration_type") ?? "correlativo";
 
 
-  const onSubmitCreate = async (v: OIForm) => {
+  const onSubmitCreate = async (v: OIForm): Promise<boolean> => {
     try {
       setBusy(true);
       const auth = getAuth();
@@ -260,21 +357,25 @@ export default function OiPage() {
       setOiVersion(created.updated_at ?? created.created_at);
       setMedidoresUsuarioApi(created.medidores_usuario ?? 0);
       setMedidoresTotalCode(created.medidores_total_code ?? 0);
+      setOiSavedAt(created.saved_at ?? null);
+      setOiCreatedAt(created.created_at ?? null);
       saveCurrentOI({ id: created.id, code: created.code });
       setOriginalOI(v);
       
       toast({ kind: "success", title: "OI creada", message: `${created.code} (#${created.id})` });
+      return true;
     } catch (e: any) {
       toast({ kind:"error", title:"Error", message: e?.message ?? "Error creando OI" });
+      return false;
     }
      finally { setBusy(false); }
   };
 
-  const onSubmitUpdate = async (v: OIForm) => {
-    if (!oiId) return;
-    if (readOnly) {
+  const onSubmitUpdate = async (v: OIForm): Promise<boolean> => {
+    if (!oiId) return false;
+    if (isReadOnly) {
       toast({ kind: "warning", title: "Solo lectura", message: "La OI está bloqueada por otro usuario." });
-      return;
+      return false;
     }
     try {
       setBusy(true);
@@ -295,12 +396,15 @@ export default function OiPage() {
       setOriginalOI(v);
       // Actualizamos la versión local con lo que devuelve el backend
       setOiVersion(updated.updated_at ?? updated.created_at)
+      setOiSavedAt(updated.saved_at ?? null);
+      setOiCreatedAt(updated.created_at ?? null);
       setLockedByUserId(updated.locked_by_user_id ?? null);
       setLockedByName(updated.locked_by_full_name ?? null);
       setReadOnly(updated.read_only_for_current_user ?? false);
       setHasLock((updated.locked_by_user_id ?? null) === authUserId);
       setIsEditingOI(false);
       toast({ kind: "success", title: "OI actualizada", message: v.oi});
+      return true;
     } catch (e: any) {
       const status = e?.status ?? e?.response?.status;
       if (status === 409) {
@@ -312,16 +416,17 @@ export default function OiPage() {
       } else {
         toast({ kind:"error", title:"Error", message: e?.message ?? "Error actualizando OI" });
       }
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
-  const isEditingExisting = !!oiId && isEditingOI && !readOnly;
+  const isEditingExisting = !!oiId && isEditingOI && !isReadOnly;
   
 
   const openNew = () => {
-    if (readOnly) {
+    if (isReadOnly) {
       toast({ kind: "warning", title: "Solo lectura", message: "No puede agregar bancadas mientras la OI está bloqueada." });
       return;
     }
@@ -329,8 +434,8 @@ export default function OiPage() {
     setShowModal(true);
   };
   const openEdit = (row: BancadaRead) => {
-    if (readOnly) {
-      toast({ kind: "warning", title: "Solo lectura", message: "No puede editar bancadas mientras la OI está bloqueada." });
+    if (isReadOnly && !isViewMode) {
+      toast({ kind: "warning", title: "Solo lectura", message: "No puede editar bancadas mientras la OI est? bloqueada." });
       return;
     }
     setEditing(row);
@@ -364,7 +469,7 @@ export default function OiPage() {
 
   const handleSaveBancada = async (form: BancadaForm) => {
     if (!oiId) return;
-    if (readOnly) {
+    if (isReadOnly) {
       toast({ kind: "warning", title: "Solo lectura", message: "No puede guardar bancadas mientras la OI está bloqueada." });
       return;
     }
@@ -412,6 +517,8 @@ export default function OiPage() {
         const refreshed = await getOi(oiId);
         setMedidoresUsuarioApi(refreshed.medidores_usuario ?? null);
         setMedidoresTotalCode(refreshed.medidores_total_code ?? medidoresTotalCode);
+        setOiSavedAt(refreshed.saved_at ?? null);
+        setOiCreatedAt(refreshed.created_at ?? null);
       } catch {
         // ignore
       }
@@ -447,7 +554,7 @@ export default function OiPage() {
 
   const handleDelete = async (row: BancadaRead) => {
     if (!confirm(`Eliminar bancada #${row.item}?`)) return;
-    if (readOnly) {
+    if (isReadOnly) {
       toast({ kind: "warning", title: "Solo lectura", message: "No puede eliminar bancadas mientras la OI está bloqueada." });
       return;
     }
@@ -466,6 +573,8 @@ export default function OiPage() {
       });
       const refreshed = await getOi(oiId);
       setOiVersion(refreshed.updated_at ?? refreshed.created_at ?? null);
+      setOiSavedAt(refreshed.saved_at ?? null);
+      setOiCreatedAt(refreshed.created_at ?? null);
       setLockedByUserId(refreshed.locked_by_user_id ?? null);
       setLockedByName(refreshed.locked_by_full_name ?? null);
       setReadOnly(refreshed.read_only_for_current_user ?? false);
@@ -502,6 +611,60 @@ export default function OiPage() {
     }
   };
 
+  const handleOpenSavedAt = () => {
+    if (!oiId || !isAdmin) return;
+    const seed = oiSavedAt ?? oiCreatedAt;
+    setSavedAtInput(toDatetimeLocal(seed));
+    setShowSavedAtModal(true);
+  };
+
+  const handleSaveSavedAt = async () => {
+    if (!oiId || !isAdmin) return;
+    const nextIso = toUtcNaiveIso(savedAtInput);
+    if (!nextIso) {
+      toast({ kind: "warning", title: "Fecha", message: "Ingrese una fecha valida." });
+      return;
+    }
+    try {
+      setBusy(true);
+      const updated = await updateOiSavedAt(oiId, {
+        saved_at: nextIso,
+        propagate_to_bancadas: true,
+      });
+      setOiSavedAt(updated.saved_at ?? null);
+      setOiCreatedAt(updated.created_at ?? null);
+      setOiVersion(updated.updated_at ?? updated.created_at);
+      const refreshed = await getOiFull(oiId);
+      setBancadas(refreshed.bancadas ?? []);
+      setMedidoresUsuarioApi(refreshed.medidores_usuario ?? null);
+      setMedidoresTotalCode(refreshed.medidores_total_code ?? 0);
+      setOiSavedAt(refreshed.saved_at ?? null);
+      setOiCreatedAt(refreshed.created_at ?? null);
+      setOiVersion(refreshed.updated_at ?? refreshed.created_at);
+      setLockedByName(refreshed.locked_by_full_name ?? null);
+      setLockedByUserId(refreshed.locked_by_user_id ?? null);
+      setReadOnly(refreshed.read_only_for_current_user ?? false);
+      setHasLock((refreshed.locked_by_user_id ?? null) === authUserId);
+      if (!isEditingOI) {
+        const nextForm: OIForm = {
+          oi: refreshed.code,
+          q3: refreshed.q3,
+          alcance: refreshed.alcance,
+          pma: refreshed.pma,
+          numeration_type: refreshed.numeration_type ?? "correlativo",
+        };
+        reset(nextForm);
+        setOriginalOI(nextForm);
+      }
+      setShowSavedAtModal(false);
+      toast({ kind: "success", message: "Fecha guardada actualizada" });
+    } catch (e: any) {
+      toast({ kind: "error", title: "Error", message: e?.message ?? "Error actualizando fecha" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleBancadaCancel = (draft: BancadaForm) => {
   const key = getDraftKey(editing);
   setBancadaDrafts(prev => ({ ...prev, [key]: draft }));
@@ -509,7 +672,7 @@ export default function OiPage() {
 };
 
   const handleStartEditOI = () => {
-    if (readOnly) {
+    if (isReadOnly) {
       toast({ kind: "warning", title: "Solo lectura", message: "La OI está bloqueada por otro usuario." });
       return;
     }
@@ -522,6 +685,11 @@ export default function OiPage() {
     setIsEditingOI(true);
   };
 
+  const handleSwitchToEditMode = () => {
+    if (!oiId || isEditMode) return;
+    setModeParam("edit");
+  };
+
   const handleCancelEditOI = () => {
     if (originalOI) {
       reset(originalOI);
@@ -530,24 +698,30 @@ export default function OiPage() {
   };
 
 
-  const handleCloseOI = () => {
-    if (oiId && hasLock) {
-      unlockOi(oiId).catch(() => undefined);
-    }
+  const resetOiState = () => {
     clearCurrentOI();
     clearOpenOiId();
     setOiId(null);
     setBancadas([]);
+    originalBancadasRef.current = [];
     setBancadaDrafts({});
     setIsEditingOI(false);
     setOriginalOI(null);
     setOiVersion(null);
+    setOiSavedAt(null);
+    setOiCreatedAt(null);
     setReadOnly(false);
     setLockedByName(null);
     setLockedByUserId(null);
     setHasLock(false);
     setMedidoresUsuarioApi(null);
     setMedidoresTotalCode(0);
+    setShowModal(false);
+    setEditing(null);
+    setShowPwd(false);
+    setShowSavedAtModal(false);
+    setShowCancelModal(false);
+    setSavedAtInput("");
     // opcional: resetear a defaults
     reset({
       oi: `OI-0001-${new Date().getFullYear()}`,
@@ -556,10 +730,153 @@ export default function OiPage() {
       pma: 16,
       numeration_type: "correlativo",
     });
-    toast({ kind:"info", message:"OI cerrada"});
+  };
 
-    const target = location.search ? `/oi/list${location.search}` : "/oi/list";
-    navigate(target);
+  const handleBackToList = () => {
+    resetOiState();
+    navigate(getReturnTo());
+  };
+
+  const rollbackBancadas = async (): Promise<boolean> => {
+    if (!oiId) return true;
+    const original = originalBancadasRef.current ?? [];
+    if (original.length === 0 && bancadas.length === 0) return true;
+
+    const originalMap = new Map(original.map((b) => [b.id, b]));
+    const currentMap = new Map(bancadas.map((b) => [b.id, b]));
+
+    try {
+      // Eliminar bancadas nuevas
+      for (const current of bancadas) {
+        if (!originalMap.has(current.id)) {
+          await deleteBancada(current.id);
+        }
+      }
+
+      // Restaurar bancadas existentes modificadas
+      for (const current of bancadas) {
+        const orig = originalMap.get(current.id);
+        if (!orig) continue;
+        if (serializeBancada(orig) === serializeBancada(current)) continue;
+
+        const rowsData = getRowsDataForBancada(orig);
+        const rowsCount = rowsData.length || orig.rows || 1;
+        const expectedVersion =
+          current.updated_at ?? current.created_at ?? orig.updated_at ?? orig.created_at;
+        if (!expectedVersion) {
+          throw new Error("No se pudo determinar la version de la bancada para revertir cambios.");
+        }
+        await restoreBancada(current.id, {
+          medidor: orig.medidor ?? null,
+          estado: orig.estado ?? 0,
+          rows: rowsCount,
+          rows_data: rowsData,
+          current_updated_at: expectedVersion,
+          restore_updated_at: orig.updated_at ?? null,
+          restore_saved_at: orig.saved_at ?? null,
+        });
+      }
+
+      // Reponer bancadas eliminadas (item puede variar)
+      for (const orig of original) {
+        if (!currentMap.has(orig.id)) {
+          const rowsData = getRowsDataForBancada(orig);
+          const rowsCount = rowsData.length || orig.rows || 1;
+          await addBancada(oiId, {
+            estado: orig.estado ?? 0,
+            rows: rowsCount,
+            rows_data: rowsData,
+          });
+        }
+      }
+
+      const latest = await getOi(oiId);
+      const currentUpdatedAt = latest.updated_at ?? latest.created_at;
+      await restoreOiUpdatedAt(oiId, {
+        current_updated_at: currentUpdatedAt,
+        restore_updated_at: originalOiUpdatedAtRef.current,
+      });
+    } catch (e: any) {
+      toast({
+        kind: "error",
+        title: "Error",
+        message: e?.message ?? "No se pudo descartar los cambios en bancadas.",
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const handleCancelClick = () => {
+    if (busy) return;
+    setShowCancelModal(true);
+  };
+
+  const handleCancelOI = async () => {
+    if (busy) return;
+    setShowCancelModal(false);
+    setBusy(true);
+    try {
+      const ok = await rollbackBancadas();
+      if (!ok) return;
+      if (oiId && hasLock) {
+        await unlockOi(oiId, "cancel");
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBusy(false);
+    }
+    resetOiState();
+    toast({ kind: "info", message: "Edicion cancelada" });
+    navigate(getReturnTo());
+  };
+
+  const handleSaveAndReturn = async () => {
+    if (busy) return;
+    setShowCancelModal(false);
+
+    let ok = true;
+    if (isEditingOI || !oiId) {
+      ok = false;
+      const submit = handleSubmit(async (values) => {
+        ok = oiId ? await onSubmitUpdate(values) : await onSubmitCreate(values);
+      });
+      await submit();
+    }
+
+    if (!ok) return;
+
+    setBusy(true);
+    try {
+      if (oiId && hasLock) {
+        await unlockOi(oiId);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBusy(false);
+    }
+    resetOiState();
+    toast({ kind: "info", message: "Cambios guardados" });
+    navigate(getReturnTo());
+  };
+
+  const handleCloseOI = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (oiId && hasLock) {
+        await unlockOi(oiId);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBusy(false);
+    }
+    resetOiState();
+    toast({ kind:"info", message:"OI cerrada"});
+    navigate(getReturnTo());
   };
 
   const medidoresUsuarioLocal = useMemo(
@@ -589,12 +906,38 @@ export default function OiPage() {
   return (
     <div className="oi-page vi-oi-light">
        <Spinner show={busy} />
-      <h1 className="h3">Formulario OI</h1>
-      {readOnly && (
+      <div className="d-flex align-items-center justify-content-between">
+        <h1 className="h3">Formulario OI</h1>
+        <div className="d-flex gap-2">
+          {oiId && isAdmin && (
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm"
+              onClick={handleOpenSavedAt}
+              disabled={busy}
+            >
+              Editar fecha guardado
+            </button>
+          )}
+          {oiId && isViewMode && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={handleSwitchToEditMode}
+              disabled={busy}
+            >
+              Editar
+            </button>
+          )}
+        </div>
+      </div>
+      {isReadOnly && (
         <div className="alert alert-warning mt-2">
-          {lockedByName
-            ? `Esta OI está siendo editada por ${lockedByName}. Se abre en modo lectura.`
-            : "Esta OI está en modo lectura. No se pueden realizar cambios."}
+          {isViewMode
+            ? "Modo lectura. Use Editar para modificar."
+            : lockedByName
+              ? `Esta OI est? siendo editada por ${lockedByName}. Se abre en modo lectura.`
+              : "Esta OI est? en modo lectura. No se pueden realizar cambios."}
         </div>
       )}
 
@@ -615,21 +958,21 @@ export default function OiPage() {
 
         <div className="col-md-4">
           <label htmlFor="q3" className="form-label">Q3 (m³/h)</label>
-          <select id="q3" className="form-select" {...register("q3",{valueAsNumber:true})} disabled={(!!oiId && !isEditingOI) || readOnly}>
+          <select id="q3" className="form-select" {...register("q3",{valueAsNumber:true})} disabled={(!!oiId && !isEditingOI) || isReadOnly}>
             {data?.q3.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
 
         <div className="col-md-4">
           <label htmlFor="alcance" className="form-label">Alcance Q3/Q1</label>
-          <select id="alcance" className="form-select" {...register("alcance",{valueAsNumber:true})} disabled={(!!oiId && !isEditingOI) || readOnly}>
+          <select id="alcance" className="form-select" {...register("alcance",{valueAsNumber:true})} disabled={(!!oiId && !isEditingOI) || isReadOnly}>
             {data?.alcance.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
 
         <div className="col-md-4">
           <label htmlFor="pma" className="form-label">PMA (bar)</label>
-          <select id="pma" className="form-select" {...register("pma",{valueAsNumber:true})} disabled={(!!oiId && !isEditingOI) || readOnly}>
+          <select id="pma" className="form-select" {...register("pma",{valueAsNumber:true})} disabled={(!!oiId && !isEditingOI) || isReadOnly}>
             {data?.pma.map(v => <option key={v} value={v}>{v}</option>)}
           </select>
           <div className="form-text">Solo en formulario; calcula Presión (bar).</div>
@@ -648,7 +991,7 @@ export default function OiPage() {
             id="numeration_type"
             className="form-select"
             {...register("numeration_type")}
-            disabled={(!!oiId && !isEditingOI) || readOnly}
+            disabled={(!!oiId && !isEditingOI) || isReadOnly}
           >
             <option value="correlativo">Correlativo</option>
             <option value="no correlativo">No Correlativo</option>
@@ -662,7 +1005,7 @@ export default function OiPage() {
         <div className="col-12 d-flex align-items-center gap-2">
           <button
             className="btn btn-primary"
-            disabled={busy || (!!oiId && (!isEditingOI || readOnly))}
+            disabled={busy || (!!oiId && (!isEditingOI || isReadOnly))}
           >
             {!oiId
               ? "Guardar OI"
@@ -671,28 +1014,41 @@ export default function OiPage() {
                 : "OI guardada"}
           </button>
 
-          {oiId && !isEditingOI && (
+          {oiId && !isEditingOI && isEditMode && (
             <button
               type="button"
               className="btn btn-outline-warning"
               onClick={handleStartEditOI}
-              disabled={busy || readOnly}
+              disabled={busy || isReadOnly}
             >
               Editar OI
             </button>
           )}
-          {oiId && isEditingOI && (
+          {oiId && isEditingOI && isEditMode && (
             <button type="button" className="btn btn-outline-warning" onClick={handleCancelEditOI} disabled={busy}>
               Cancelar edicion
+            </button>
+          )}
+
+          {isViewMode && (
+            <button type="button" className="btn btn-outline-secondary" onClick={handleBackToList} disabled={busy}>
+              Volver al listado
             </button>
           )}
 
           <button type="button" className="btn btn-outline-success" onClick={handleExcelClick} disabled={!oiId || busy || isEditingOI}>
             Generar Excel
           </button>
-          <button type="button" className="btn btn-outline-danger" onClick={handleCloseOI} disabled={!oiId || isEditingOI || busy}>
-            Cerrar OI
-          </button>
+          {isEditMode && (
+            <button type="button" className="btn btn-outline-danger" onClick={handleCloseOI} disabled={!oiId || isEditingOI || busy}>
+              Cerrar OI
+            </button>
+          )}
+          {isEditMode && (
+            <button type="button" className="btn btn-outline-secondary" onClick={handleCancelClick} disabled={busy}>
+              Cancelar
+            </button>
+          )}
         </div>
       </form>
 
@@ -707,7 +1063,7 @@ export default function OiPage() {
               Medidores (mi registro): {medidoresUsuarioDisplay} | Total OI: {medidoresTotalCode}
             </small>
           </div>
-          <button className="btn btn-primary" onClick={openNew} disabled={!oiId || busy || isEditingOI || readOnly}>Agregar Bancada</button>
+          <button className="btn btn-primary" onClick={openNew} disabled={!oiId || busy || isEditingOI || isReadOnly}>Agregar Bancada</button>
         </div>
         <div className="card-body p-0">
           <div className="table-responsive">
@@ -752,16 +1108,16 @@ export default function OiPage() {
                         <button
                           className="btn btn-sm btn-outline-primary me-2"
                           onClick={() => openEdit(b)}
-                          disabled={busy || isEditingOI || readOnly}
-                          aria-label={`Editar bancada #${b.item}`}
-                          title="Editar"
+                          disabled={busy || isEditingOI || (!isViewMode && isReadOnly)}
+                          aria-label={`${isViewMode ? "Ver" : "Editar"} bancada #${b.item}`}
+                          title={isViewMode ? "Ver" : "Editar"}
                         >
-                          ✏️
+                          {isViewMode ? "Ver" : "Editar"}
                         </button>
                         <button
                           className="btn btn-sm btn-outline-danger"
                           onClick={() => handleDelete(b)}
-                          disabled={busy || isEditingOI || readOnly}
+                          disabled={busy || isEditingOI || isReadOnly}
                           aria-label={`Eliminar bancada #${b.item}`}
                           title="Eliminar"
                         > 
@@ -785,9 +1141,128 @@ export default function OiPage() {
         onSubmit={handleSaveBancada}
         onCancelWithDraft={handleBancadaCancel}
         numerationType={numerationType}
-        readOnly={readOnly}
+        readOnly={isReadOnly}
       />
        )}
+
+
+      {showCancelModal && (
+        <div
+          className="modal fade show"
+          style={{ display: "block" }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cancelTitle"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowCancelModal(false);
+          }}
+        >
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 id="cancelTitle" className="modal-title">
+                  Confirmar cancelacion
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  aria-label="Cerrar"
+                  onClick={() => setShowCancelModal(false)}
+                />
+              </div>
+              <div className="modal-body">
+                <p>Estas seguro de descartar cambios?</p>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={handleCancelOI}
+                  disabled={busy}
+                >
+                  Descartar cambios
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSaveAndReturn}
+                  disabled={busy}
+                >
+                  Guardar cambios y volver al listado
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showSavedAtModal && (
+        <div
+          className="modal fade show"
+          style={{ display: "block" }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="savedAtTitle"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowSavedAtModal(false);
+          }}
+        >
+          <div className="modal-dialog">
+            <form
+              className="modal-content"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSaveSavedAt();
+              }}
+            >
+              <div className="modal-header">
+                <h5 id="savedAtTitle" className="modal-title">
+                  Editar fecha guardado
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  aria-label="Cerrar"
+                  onClick={() => setShowSavedAtModal(false)}
+                />
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label htmlFor="savedAtInput" className="form-label">
+                    Fecha guardado
+                  </label>
+                  <input
+                    id="savedAtInput"
+                    type="datetime-local"
+                    className="form-control"
+                    value={savedAtInput}
+                    onChange={(e) => setSavedAtInput(e.target.value)}
+                    required
+                  />
+                  <div className="form-text">
+                    Se aplicara a todas las bancadas de la OI.
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() => setShowSavedAtModal(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={busy || !savedAtInput}
+                >
+                  Guardar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <PasswordModal
         show={showPwd}

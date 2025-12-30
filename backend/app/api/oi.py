@@ -238,7 +238,15 @@ def _ensure_lock_allows_write(oi: OI, sess: dict, session: Session) -> dict:
     return lock_state
 
 
-def _apply_saved_at_on_close(oi: OI, session: Session, current_user_id: int | None) -> None:
+def _apply_saved_at_on_close(
+    oi: OI,
+    session: Session,
+    current_user_id: int | None,
+    *,
+    skip_saved_at: bool = False,
+) -> None:
+    if skip_saved_at:
+        return
     if oi.id is None:
         return
     if oi.locked_by_user_id is None:
@@ -249,10 +257,12 @@ def _apply_saved_at_on_close(oi: OI, session: Session, current_user_id: int | No
         return
     now = datetime.utcnow()
     oi.saved_at = now
+    oi_id_col = cast(ColumnElement, Bancada.oi_id)
+    saved_at_col = cast(ColumnElement, Bancada.saved_at)
     session.exec(
         update(Bancada)
-        .where(Bancada.oi_id == oi.id)
-        .where(Bancada.saved_at.is_(None))
+        .where(oi_id_col == oi.id)
+        .where(saved_at_col.is_(None))
         .values(saved_at=now)
     )
 
@@ -532,6 +542,7 @@ def release_lock(
     oi_id: int,
     session: Session = Depends(get_session),
     authorization: str | None = Header(default=None),
+    reason: str | None = None,
 ):
     oi = session.get(OI, oi_id)
     if not oi:
@@ -548,7 +559,13 @@ def release_lock(
     if not is_admin and oi.locked_by_user_id != current_user_id:
         raise HTTPException(status_code=403, detail="No puede liberar el lock de otro usuario")
 
-    _apply_saved_at_on_close(oi, session, current_user_id)
+    normalized_reason = (reason or "").strip().lower()
+    _apply_saved_at_on_close(
+        oi,
+        session,
+        current_user_id,
+        skip_saved_at=normalized_reason == "cancel",
+    )
 
     oi.locked_by_user_id = None
     oi.locked_at = None
@@ -594,6 +611,84 @@ def close_oi(
 class ResponsableOut(BaseModel):
     tech_number: int
     full_name: str
+
+class BancadaRestorePayload(BaseModel):
+    medidor: str | None = None
+    estado: int = 0
+    rows: int
+    rows_data: List[dict] | None = None
+    current_updated_at: datetime
+    restore_updated_at: datetime | None = None
+    restore_saved_at: datetime | None = None
+
+class OISavedAtUpdate(BaseModel):
+    saved_at: datetime
+    propagate_to_bancadas: bool = True
+
+class OIRestoreUpdatedAtPayload(BaseModel):
+    current_updated_at: datetime
+    restore_updated_at: datetime | None = None
+
+
+@router.patch("/{oi_id:int}/saved_at", response_model=OIRead)
+def update_oi_saved_at(
+    oi_id: int,
+    payload: OISavedAtUpdate,
+    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+):
+    oi = session.get(OI, oi_id)
+    if not oi:
+        raise HTTPException(status_code=404, detail="OI no encontrada")
+
+    sess = _get_session_from_header(authorization)
+    if not _is_admin(sess):
+        raise HTTPException(status_code=403, detail="Solo admin puede editar la fecha de guardado")
+
+    oi.saved_at = payload.saved_at
+    oi.updated_at = datetime.utcnow()
+
+    if payload.propagate_to_bancadas:
+        oi_id_col = cast(ColumnElement, Bancada.oi_id)
+        session.exec(
+            update(Bancada)
+            .where(oi_id_col == oi_id)
+            .values(saved_at=payload.saved_at)
+        )
+
+    session.add(oi)
+    session.commit()
+    session.refresh(oi)
+    return _build_oi_read(oi, session, sess)
+
+@router.patch("/{oi_id:int}/restore-updated-at", response_model=OIRead)
+def restore_oi_updated_at(
+    oi_id: int,
+    payload: OIRestoreUpdatedAtPayload,
+    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+):
+    oi = session.get(OI, oi_id)
+    if not oi:
+        raise HTTPException(status_code=404, detail="OI no encontrada")
+
+    sess = _get_session_from_header(authorization)
+    _ensure_oi_access(oi, sess)
+    _ensure_lock_allows_write(oi, sess, session)
+
+    current_version = _normalize_dt(oi.updated_at or oi.created_at)
+    payload_version = _normalize_dt(payload.current_updated_at)
+    if current_version is not None and payload_version != current_version:
+        raise HTTPException(
+            status_code=409,
+            detail="La OI fue modificada por otro usuario. Recargue antes de guardar.",
+        )
+
+    oi.updated_at = payload.restore_updated_at
+    session.add(oi)
+    session.commit()
+    session.refresh(oi)
+    return _build_oi_read(oi, session, sess)
 
 
 @router.get("/responsables", response_model=List[ResponsableOut])
@@ -1010,6 +1105,44 @@ def update_bancada(
     _touch_or_take_lock(oi, sess, lock_state)
     session.add(oi)
         
+    session.commit()
+    session.refresh(b)
+    return BancadaRead.model_validate(b)
+
+@router.put("/bancadas/{bancada_id}/restore", response_model=BancadaRead)
+def restore_bancada(
+    bancada_id: int,
+    payload: BancadaRestorePayload,
+    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+):
+    b = session.get(Bancada, bancada_id)
+    if not b:
+        raise HTTPException(status_code=404, detail="Bancada no encontrada")
+
+    oi = session.get(OI, b.oi_id)
+    if not oi:
+        raise HTTPException(status_code=404, detail="OI no encontrada")
+
+    sess = _get_session_from_header(authorization)
+    _ensure_oi_access(oi, sess)
+    _ensure_lock_allows_write(oi, sess, session)
+
+    current_version = _normalize_dt(b.updated_at or b.created_at)
+    payload_version = _normalize_dt(payload.current_updated_at)
+    if current_version is not None and payload_version != current_version:
+        raise HTTPException(
+            status_code=409,
+            detail="La bancada fue modificada por otro usuario. Recargue la OI y vuelva a intentar.",
+        )
+
+    b.medidor = payload.medidor
+    b.estado = payload.estado or 0
+    b.rows = payload.rows
+    b.rows_data = _dump_rows_data(payload.rows_data)
+    b.updated_at = payload.restore_updated_at
+    b.saved_at = payload.restore_saved_at
+    session.add(b)
     session.commit()
     session.refresh(b)
     return BancadaRead.model_validate(b)

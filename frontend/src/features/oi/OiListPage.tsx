@@ -165,11 +165,27 @@ export default function OiListPage() {
 
   const busy = isLoading || isFetching || generating;
 
-  const handleOpen = (id: number, code: string) => {
+  const buildReturnTo = () => `${location.pathname}${location.search}`;
+
+  const handleView = (id: number, code: string) => {
     try {
       saveCurrentOI({ id, code });
       toast({ kind: "success", message: `OI ${code} cargada` });
-      navigate(`/oi${location.search}`);
+      navigate(`/oi/${id}?mode=view`, { state: { returnTo: buildReturnTo() } });
+    } catch (e: any) {
+      toast({
+        kind: "error",
+        title: "Error",
+        message: e?.message ?? "No se pudo abrir el OI",
+      });
+    }
+  };
+
+  const handleEdit = (id: number, code: string) => {
+    try {
+      saveCurrentOI({ id, code });
+      toast({ kind: "success", message: `OI ${code} cargada` });
+      navigate(`/oi/${id}?mode=edit`, { state: { returnTo: buildReturnTo() } });
     } catch (e: any) {
       toast({
         kind: "error",
@@ -184,7 +200,7 @@ export default function OiListPage() {
       await closeOpenOiIfAny();
     } finally {
       clearCurrentOI();
-      navigate(`/oi${location.search}`);
+      navigate(`/oi?mode=edit`, { state: { returnTo: buildReturnTo() } });
     }
   };
 
@@ -420,12 +436,21 @@ export default function OiListPage() {
                     <td className="text-end">
                       <button
                         className="btn btn-sm btn-outline-primary me-2"
-                        onClick={() => handleOpen(r.id, r.code)}
+                        onClick={() => handleView(r.id, r.code)}
                         disabled={busy}
-                        title="Abrir OI"
-                        aria-label={`Abrir OI ${r.code}`}
+                        title="Ver OI"
+                        aria-label={`Ver OI ${r.code}`}
                       >
-                        Abrir
+                        Ver
+                      </button>
+                      <button
+                        className="btn btn-sm btn-outline-warning me-2"
+                        onClick={() => handleEdit(r.id, r.code)}
+                        disabled={busy}
+                        title="Editar OI"
+                        aria-label={`Editar OI ${r.code}`}
+                      >
+                        Editar
                       </button>
                       <button
                         className="btn btn-sm btn-outline-success"

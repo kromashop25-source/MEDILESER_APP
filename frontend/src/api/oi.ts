@@ -57,12 +57,32 @@ export type OIUpdatePayload = {
   updated_at: string;
 };
 
+export type OIRestoreUpdatedAtPayload = {
+  current_updated_at: string;
+  restore_updated_at: string | null;
+};
+
 export async function updateOI(id: number, payload: OIUpdatePayload): Promise<OIRead> {
   try {
     const { data } = await api.put<OIRead>(`/oi/${id}`, payload);
     return data;
   } catch (e: any) {
     const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo actualizar la OI";
+    const err = new Error(msg) as Error & { status?: number };
+    err.status = e?.response?.status;
+    throw err;
+  }
+}
+
+export async function restoreOiUpdatedAt(
+  oiId: number,
+  payload: OIRestoreUpdatedAtPayload
+): Promise<OIRead> {
+  try {
+    const { data } = await api.patch<OIRead>(`/oi/${oiId}/restore-updated-at`, payload);
+    return data;
+  } catch (e: any) {
+    const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo restaurar la fecha de la OI";
     const err = new Error(msg) as Error & { status?: number };
     err.status = e?.response?.status;
     throw err;
@@ -99,6 +119,12 @@ export type BancadaCreate = {
   rows_data?: BancadaRow[];
 };
 export type BancadaUpdatePayload = BancadaCreate & { updated_at: string };
+export type BancadaRestorePayload = BancadaCreate & {
+  current_updated_at: string;
+  restore_updated_at: string | null;
+  restore_saved_at?: string | null;
+  medidor?: string | null;
+};
 export type BancadaRead = {
   id: number;
   item: number;
@@ -150,6 +176,21 @@ export async function updateBancada(bancadaId: number, payload: BancadaUpdatePay
     return data;
   } catch (e: any) {
     const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo actualizar la bancada";
+    const err = new Error(msg) as Error & { status?: number };
+    err.status = e?.response?.status;
+    throw err;
+  }
+}
+
+export async function restoreBancada(
+  bancadaId: number,
+  payload: BancadaRestorePayload
+): Promise<BancadaRead> {
+  try {
+    const { data } = await api.put<BancadaRead>(`/oi/bancadas/${bancadaId}/restore`, payload);
+    return data;
+  } catch (e: any) {
+    const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo restaurar la bancada";
     const err = new Error(msg) as Error & { status?: number };
     err.status = e?.response?.status;
     throw err;
@@ -232,12 +273,36 @@ export async function lockOi(oiId: number): Promise<OIRead> {
   }
 }
 
-export async function unlockOi(oiId: number): Promise<{ ok: boolean }> {
+export async function unlockOi(
+  oiId: number,
+  reason?: string
+): Promise<{ ok: boolean }> {
   try {
-    const { data } = await api.delete<{ ok: boolean }>(`/oi/${oiId}/lock`);
+    const config = reason ? { params: { reason } } : undefined;
+    const { data } = await api.delete<{ ok: boolean }>(`/oi/${oiId}/lock`, config);
     return data;
   } catch (e: any) {
     const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo liberar la OI";
+    const err = new Error(msg) as Error & { status?: number };
+    err.status = e?.response?.status;
+    throw err;
+  }
+}
+
+export type OISavedAtPayload = {
+  saved_at: string;
+  propagate_to_bancadas?: boolean;
+};
+
+export async function updateOiSavedAt(
+  oiId: number,
+  payload: OISavedAtPayload
+): Promise<OIRead> {
+  try {
+    const { data } = await api.patch<OIRead>(`/oi/${oiId}/saved_at`, payload);
+    return data;
+  } catch (e: any) {
+    const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo actualizar la fecha de guardado";
     const err = new Error(msg) as Error & { status?: number };
     err.status = e?.response?.status;
     throw err;

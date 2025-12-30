@@ -36,6 +36,7 @@ export default function AppRouter() {
             <Route path="/" element={<Navigate to="/home" replace />} />
             <Route path="/home" element={<HomePage />} />
             <Route path="/oi" element={<OiPage />} />
+            <Route path="/oi/:oiId" element={<OiPage />} />
             <Route path="/oi/list" element={<OiListPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/password" element={<ChangePasswordPage />} />
