@@ -75,6 +75,8 @@ export default function Log01ExcelPage() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [resultReady, setResultReady] = useState<boolean>(false);
   const [resultOperationId, setResultOperationId] = useState<string | null>(null);
+  const [auditSummary, setAuditSummary] = useState<any | null>(null);
+  const [showTechAudit, setShowTechAudit] = useState(false);
 
   const uploadAbortRef = useRef<AbortController | null>(null);
   const progressAbortRef = useRef<AbortController | null>(null);
@@ -101,6 +103,13 @@ export default function Log01ExcelPage() {
     )}`;
     setProgressLabel(label);
     setEvents((prev) => [...prev, ev]);
+
+    // Capturar resumen de auditoría al completar
+    if (ev.type === "complete") {
+      const res = (ev as any).result ?? null;
+      setAuditSummary(res);
+    }
+
     if (typeof (ev as any).progress === "number") setProgressPct((ev as any).progress);
     if (typeof (ev as any).percent === "number") setProgressPct(Math.round((ev as any).percent));
     if (!terminalEventRef.current && (ev.type === "complete" || ev.stage === "cancelled" || ev.stage === "failed")) {
@@ -240,6 +249,7 @@ export default function Log01ExcelPage() {
   async function run() {
     setErrorMsg("");
     setEvents([]);
+    setAuditSummary(null);
     setProgressPct(0);
     setProgressLabel("Listo para procesar");
     setResultReady(false);
@@ -439,6 +449,112 @@ export default function Log01ExcelPage() {
               </div>
               <div className="mT-10 text-muted">{progressLabel}</div>
             </div>
+
+            {!running && auditSummary ? (
+              <div className="mT-20">
+                <h6 className="c-grey-900">Reporte de auditoría</h6>
+                <div className="bd p-10">
+                  <div className="row">
+                    <div className="col-md-6">
+                      <div className="small text-muted">Archivos</div>
+                      <div className="small">
+                        Total: <strong>{auditSummary.files_total ?? "N/D"}</strong> · OK:{" "}
+                        <strong>{auditSummary.files_ok ?? "N/D"}</strong> · Rechazados:{" "}
+                        <strong>{auditSummary.files_error ?? "N/D"}</strong>
+                      </div>
+
+                      <div className="mT-10 small text-muted">No conformes por OI (origen)</div>
+
+                      {Array.isArray(auditSummary.audit_by_oi) && auditSummary.audit_by_oi.length > 0 ? (
+                        <div className="table-responsive">
+                          <table className="table table-sm mB-0">
+                            <thead>
+                              <tr className="small">
+                                <th style={{ whiteSpace: "nowrap" }}>OI</th>
+                                <th style={{ whiteSpace: "nowrap" }}>Leídos</th>
+                                <th style={{ whiteSpace: "nowrap" }}>Conformes</th>
+                                <th style={{ whiteSpace: "nowrap" }}>No conformes</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {auditSummary.audit_by_oi
+                                .filter((x: any) => x?.status === "OK")
+                                .map((x: any, i: number) => (
+                                  <tr key={i} className="small">
+                                    <td style={{ whiteSpace: "nowrap" }}>
+                                      {x?.oi_num ? `OI-${x.oi_num}` : "N/D"}
+                                    </td>
+                                    <td style={{ whiteSpace: "nowrap" }}>
+                                      <strong>{x?.rows_read ?? 0}</strong>
+                                    </td>
+                                    <td style={{ whiteSpace: "nowrap" }}>
+                                      <strong>{x?.conformes ?? 0}</strong>
+                                    </td>
+                                    <td style={{ whiteSpace: "nowrap" }}>
+                                      <strong>{x?.no_conformes ?? 0}</strong>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="small text-muted">N/D</div>
+                      )}
+
+                      <div className="col-12 mT-10 p-0">
+                        <div className="small text-muted">Totales (origen)</div>
+                        <div className="small">
+                          Registros leídos:{" "}
+                          <strong>{auditSummary.totals_input?.rows_read ?? "N/D"}</strong> · Conformes:{" "}
+                          <strong>{auditSummary.totals_input?.conformes ?? "N/D"}</strong> · No conformes:{" "}
+                          <strong>{auditSummary.totals_input?.no_conformes ?? "N/D"}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-md-6 mT-10 mT-md-0">
+                      <div className="small text-muted">Resultado final (post-dedupe)</div>
+                      <div className="small">
+                        Únicas (post-dedupe):{" "}
+                        <strong>{auditSummary.series_total_dedup ?? "N/D"}</strong> · Conformes finales:{" "}
+                        <strong>{auditSummary.series_conformes ?? "N/D"}</strong> · No conformes finales:{" "}
+                        <strong>{auditSummary.series_no_conformes_final ?? "N/D"}</strong>
+                      </div>
+
+                      <div className="mT-10">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => setShowTechAudit((v) => !v)}
+                        >
+                          {showTechAudit ? "Ocultar detalle técnico" : "Ver detalle técnico"}
+                        </button>
+                      </div>
+
+                      {showTechAudit ? (
+                        <div className="mT-10">
+                          <div className="small text-muted">Detalle técnico (soporte)</div>
+                          <div className="small">
+                            Registros leídos (total):{" "}
+                            <strong>
+                              {auditSummary.technical?.rows_total_read ?? auditSummary.rows_total_read ?? "N/D"}
+                            </strong>{" "}
+                            · Duplicados eliminados:{" "}
+                            <strong>
+                              {auditSummary.technical?.series_duplicates_eliminated ??
+                                auditSummary.series_duplicates_eliminated ??
+                                "N/D"}
+                            </strong>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
 
             {events.length > 0 && (
               <div className="mT-20">

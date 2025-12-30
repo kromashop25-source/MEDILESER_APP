@@ -17,6 +17,7 @@ from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import TypedDict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -286,6 +287,12 @@ def _process_log01_files(
     total_files = len(file_items)
     ok_files = 0
     bad_files = 0
+    rows_total_read = 0
+
+    # Auditoría "de origen" (por archivo/OI), NO depende del dedupe
+    audit_by_oi: List[Dict[str, Any]] = []
+    input_conformes_total = 0
+    input_no_conformes_total = 0
 
     for idx, item in enumerate(file_items, start=1):
         _raise_cancelled()
@@ -301,6 +308,7 @@ def _process_log01_files(
             },
         )
 
+        oi_num: Optional[int] = None
         try:
             oi_num = _parse_oi_number_from_filename(fname)
             data = _read_input_bytes(item)
@@ -351,6 +359,8 @@ def _process_log01_files(
 
             required_cols_for_empty_check: List[int] = [cast(int, input_cols[k]) for k in _OUTPUT_KEYS]
             extracted = 0
+            file_conformes = 0
+            file_no_conformes = 0
             for r in range(data_start, ws.max_row + 1):
                 if r % 200 == 0:
                     _raise_cancelled()
@@ -375,6 +385,13 @@ def _process_log01_files(
                 if estado not in ("CONFORME", "NO CONFORME"):
                     continue
 
+                if estado == "CONFORME":
+                    file_conformes += 1
+                else:
+                    file_no_conformes += 1
+
+
+
                 row_values: Dict[str, Any] = {"medidor": serie, "estado": estado}
                 for key in _OUTPUT_KEYS:
                     if key in ("medidor", "estado"):
@@ -387,8 +404,22 @@ def _process_log01_files(
                 if prev is None or oi_num > prev.oi_num:
                     series[serie] = SerieInfo(oi_num=oi_num, estado=estado, values=row_values)
 
-
+            rows_total_read += extracted
             ok_files += 1
+
+            input_conformes_total += file_conformes
+            input_no_conformes_total += file_no_conformes
+            audit_by_oi.append(
+                {
+                    "filename": fname,
+                    "oi_num": oi_num,
+                    "status": "OK",
+                    "rows_read": extracted,
+                    "conformes": file_conformes,
+                    "no_conformes": file_no_conformes,
+                }
+            )
+
             _emit(
                 operation_id,
                 {
@@ -401,6 +432,17 @@ def _process_log01_files(
 
         except Exception as e:
             bad_files += 1
+            audit_by_oi.append(
+                {
+                    "filename": fname,
+                    "oi_num": oi_num,
+                    "status": "ERROR",
+                    "rows_read": 0,
+                    "conformes": 0,
+                    "no_conformes": 0,
+                    "error": str(e),
+                    }
+            )
             _emit(
                 operation_id,
                 {
@@ -417,6 +459,11 @@ def _process_log01_files(
     # 2) Filtrar solo CONFORME
     conformes = [s for s, info in series.items() if info.estado == "CONFORME"]
     conformes.sort(key=_natural_key)
+
+    series_total_dedup = len(series)
+    series_conformes = len(conformes)
+    series_no_conformes_final = series_total_dedup - series_conformes
+    series_duplicates_eliminated = max(rows_total_read - series_total_dedup, 0)
 
     # 3) Render a plantilla LOG01 (fila 2+, item desde 1)
     st = get_settings()
@@ -504,8 +551,24 @@ def _process_log01_files(
         "files_total": total_files,
         "files_ok": ok_files,
         "files_error": bad_files,
-        "series_total_dedup": len(series),
-        "series_conformes": len(conformes),
+        "series_total_dedup": series_total_dedup,
+        "series_conformes": series_conformes,
+        "series_no_conformes_final": series_no_conformes_final,
+        # Auditoría "de origen"
+        "audit_by_oi": audit_by_oi,
+        "totals_input": {
+            "rowss_read": rows_total_read,
+            "conformes": input_conformes_total,
+            "no_conformes": input_no_conformes_total,
+        },
+        # Detalle técnico
+        "technical": {
+            "rows_total_read": rows_total_read,
+            "series_duplicates_eliminated": series_duplicates_eliminated,
+        },
+        # (Compatibilidad hacia atrás si ya lo consumes en UI actual)
+        "series_duplicates_eliminated": series_duplicates_eliminated,
+        "rows_total_read": rows_total_read,
     }
 
     _emit(
