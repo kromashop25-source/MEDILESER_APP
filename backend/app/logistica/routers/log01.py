@@ -22,6 +22,7 @@ from typing import TypedDict
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from openpyxl import load_workbook
+from openpyxl.utils.datetime import WINDOWS_EPOCH, from_excel
 from openpyxl.cell.cell import Cell
 from openpyxl.styles import Alignment, Font
 from openpyxl.worksheet.worksheet import Worksheet
@@ -77,6 +78,7 @@ def _parse_oi_number_from_filename(filename: str) -> int:
     if not m:
         raise ValueError(f"Nombre inválido: no se encontró patrón OI-####-YYYY en '{filename}'")
     return int(m.group(1))
+    
 
 def _norm_str(v: Any) -> str:
     return str(v).strip() if v is not None else ""
@@ -89,6 +91,19 @@ def _norm_header(v: Any) -> str:
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
     s = re.sub(r"[^a-z0-9]+", " ", s).strip()
     return s
+
+def _classify_file_error(e: Exception) -> str:
+    """Clasifica errores por archivo para auditoría/soporte (S1-T11)."""
+    msg = str(e or "").lower()
+    if "no se encontró ña cabecera 'item'" in msg or "cabecera 'item'" in msg:
+        return "NO_ITEM_HEADER"
+    if "faltan cabeceras requeridas" in msg:
+        return "MISSING_HEADERS"
+    if "nombre inválido no se encontró patron oi" in msg or "patrón oi-" in msg:
+        return "INVALID_OI_FILENAME"
+    if "archivo vacío" in msg:
+        return "EMPTY_FILE"
+    return "FILE_INVALID"
 
 def _normalize_estado_literal(v: Any) -> Optional[str]:
     """
@@ -241,11 +256,16 @@ def _normalize_output_date(value: Any) -> Any:
             pass
         for fmt in (
             "%d/%m/%Y",
+            "%d-%m-%Y",
+            "%d.%m.%Y",
             "%d/%m/%Y %H:%M:%S",
             "%d/%m/%Y %H:%M",
             "%Y-%m-%d",
             "%Y-%m-%d %H:%M:%S",
             "%Y-%m-%d %H:%M",
+            "%Y/%m/%d",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y/%m/%d %H:%M",
         ):
             try:
                 return datetime.strptime(s, fmt).date()
@@ -253,6 +273,34 @@ def _normalize_output_date(value: Any) -> Any:
                 continue
     return value
 
+def _normalize_input_date(value: Any, *, epoch: datetime = WINDOWS_EPOCH) -> Any:
+    """
+    Normaliza fechas de entrada para exportarlas como date (sin hora).
+    - Soporta datetime/date
+    - Soporta strings en formatos comunes.
+    - Soporta serial Excel (int/float) usando epoch del workbook.
+    """
+    if value is None:
+        return None
+
+    # Evitar que bool (subclase de int) se trate como serial Excel
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        # 0 suele equivaler a vacío / no aplica
+        if value == 0:
+            return None
+        try:
+            dtv = from_excel(value, epoch=epoch)
+            if isinstance(dtv, datetime):
+                return dtv.date()
+            if isinstance(dtv, date):
+                return dtv
+        except ValueError:
+            pass
+
+    return _normalize_output_date(value)
+
+
+                
 
 def _cleanup_log01_job_files(job: Log01Job) -> None:
     if job.work_dir and os.path.isdir(job.work_dir):
@@ -435,6 +483,12 @@ def _process_log01_files(
                     col = input_cols.get(key)
                     row_values[key] = ws.cell(row=r, column=col).value if col else None
 
+                # Normalizar fecha para exportar estrictamente dd/mm/yyyy (sin hora)
+                row_values["fecha"] = _normalize_input_date(
+                    row_values.get("fecha"),
+                    epoch=wb.epoch
+                )
+
                 extracted += 1
                 prev = series.get(serie)
                 if prev is None or oi_num > prev.oi_num:
@@ -468,6 +522,7 @@ def _process_log01_files(
 
         except Exception as e:
             bad_files += 1
+            err_code = _classify_file_error(e)
             audit_by_oi.append(
                 {
                     "filename": fname,
@@ -477,6 +532,7 @@ def _process_log01_files(
                     "conformes": 0,
                     "no_conformes": 0,
                     "error": str(e),
+                    "error_code": err_code,
                     }
             )
             _emit(
@@ -486,7 +542,7 @@ def _process_log01_files(
                     "stage": "file_error",
                     "message": f"Error en {fname}",
                     "detail": str(e),
-                    "code": "FILE_INVALID",
+                    "code": err_code,
                 },
             )
             # Importante: continuar con el lote

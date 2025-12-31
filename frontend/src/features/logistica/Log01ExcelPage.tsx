@@ -581,13 +581,24 @@ export default function Log01ExcelPage() {
               <div className="mT-20">
                 <h6 className="c-grey-900">Eventos</h6>
                 <div className="bd p-10" style={{ maxHeight: 240, overflow: "auto" }}>
-                  {events.map((ev, i) => (
-                    <div key={i} className="small">
-                      {translateProgressType(ev.type)} · {translateProgressStage(ev.stage)} ·{" "}
-                      {translateProgressMessage((ev as any).message ?? (ev as any).detail ?? "")}
+                  {events.map((ev, i) => {
+                    const baseMsg = ev.message ?? ev.detail ?? "";
+                    const extraParts: string[] = [];
+                    if (ev.type === "error") {
+                      if (ev.code) extraParts.push(String(ev.code));
+                      // Evitar duplicar el mismo texto si ya fue usado como mensaje base
+                      if (ev.detail && ev.detail !== baseMsg) extraParts.push(ev.detail);
+                    }
+                    const extra = extraParts.join(" · ");
 
-                    </div>
-                  ))}
+                    return (
+                      <div key={i} className="small">
+                        {translateProgressType(ev.type)} · {translateProgressStage(ev.stage)} ·{" "}
+                        {translateProgressMessage(baseMsg)}
+                        {extra ? <span className="text-muted"> ({extra})</span> : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
