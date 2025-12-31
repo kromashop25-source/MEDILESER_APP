@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo,useRef, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
@@ -77,6 +77,27 @@ export default function Log01ExcelPage() {
   const [resultOperationId, setResultOperationId] = useState<string | null>(null);
   const [auditSummary, setAuditSummary] = useState<any | null>(null);
   const [showTechAudit, setShowTechAudit] = useState(false);
+
+  // Ordenar auditoria por OI (asc) para visualización consistente
+  const auditByOiOkSorted = useMemo(() => {
+    const list = Array.isArray(auditSummary?.audit_by_oi) ? auditSummary.audit_by_oi : [];
+    return list
+      .filter((x: any) => x?.status === "OK")
+      .slice() // IMPORTANTE: evitar mutar auditSummary.audit_by_oi con sort()
+      .sort((a: any, b: any) => {
+        const aNum = Number(a?.oi_num);
+        const bNum = Number(b?.oi_num);
+        const aHas = Number.isFinite(aNum);
+        const bHas = Number.isFinite(bNum);
+        if (aHas && bHas) return aNum - bNum;
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+        // fallback estable por texto si faltara oi_num
+        const aKey = String(a?.oi_num ?? a?.oi ?? "").toUpperCase();
+        const bKey = String(b?.oi_num ?? b?.oi ?? "").toUpperCase();
+        return aKey.localeCompare(bKey);
+      })
+  }, [auditSummary]);
 
   const uploadAbortRef = useRef<AbortController | null>(null);
   const progressAbortRef = useRef<AbortController | null>(null);
@@ -363,6 +384,8 @@ export default function Log01ExcelPage() {
     }
   }
 
+  
+
   return (
     <div className="container-fluid">
       <div className="row">
@@ -465,7 +488,7 @@ export default function Log01ExcelPage() {
 
                       <div className="mT-10 small text-muted">No conformes por OI (origen)</div>
 
-                      {Array.isArray(auditSummary.audit_by_oi) && auditSummary.audit_by_oi.length > 0 ? (
+                      {auditByOiOkSorted.length > 0 ? (
                         <div className="table-responsive">
                           <table className="table table-sm mB-0">
                             <thead>
@@ -477,9 +500,7 @@ export default function Log01ExcelPage() {
                               </tr>
                             </thead>
                             <tbody>
-                              {auditSummary.audit_by_oi
-                                .filter((x: any) => x?.status === "OK")
-                                .map((x: any, i: number) => (
+                                {auditByOiOkSorted.map((x: any, i: number) => (
                                   <tr key={i} className="small">
                                     <td style={{ whiteSpace: "nowrap" }}>
                                       {x?.oi_num ? `OI-${x.oi_num}` : "N/D"}

@@ -107,9 +107,8 @@ const getRowsDataForBancada = (row: BancadaRead): BancadaRow[] => {
 };
 
 const resolveMode = (raw: string | null, hasExisting: boolean) => {
-  if (!hasExisting) return "edit";
-  if (raw === "edit") return "edit";
-  return "view";
+  if (raw === "view" && hasExisting) return "view";
+  return "edit";
 };
 
 const toDatetimeLocal = (iso?: string | null) => {

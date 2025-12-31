@@ -90,6 +90,41 @@ def _norm_header(v: Any) -> str:
     s = re.sub(r"[^a-z0-9]+", " ", s).strip()
     return s
 
+def _normalize_estado_literal(v: Any) -> Optional[str]:
+    """
+    Normaliza y valida el estado SOLO por texto literal:
+    - "CONFORME"
+    - "NO CONFORME"
+    Sin reglas numéricas. Valores numéricos se rechazan.
+    Tolera variaciones comunes: espacios dobles, guiones, puntuación, saltos de línea.
+    """
+    if v is None:
+        return None
+    # Rechazar números (0/1/2...) explícitamente: no hay reglas numéricas en LOG-01
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return None
+    
+    s = _norm_str(v)
+    if not s:
+        return None
+    
+    # Quitar tíldes/diacríticos
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    
+    s = s.upper()
+    s = s.replace("-", " ")
+    # Mantener solo letras A-Z y espacios (eliminar puntuación y otros símbolos)
+    s = re.sub(r"[^A-Z\s]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+
+    if s == "CONFORME":
+        return "CONFORME"
+    if s == "NO CONFORME":
+        return "NO CONFORME"    
+    return None
+        
+
 def _natural_key(s: str):
     # Natural sort: divide digitos y texto
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', s)]
@@ -381,8 +416,9 @@ def _process_log01_files(
                 if not serie:
                     continue
 
-                estado = _norm_str(ws.cell(row=r, column=col_estado).value).upper()
-                if estado not in ("CONFORME", "NO CONFORME"):
+                estado = _normalize_estado_literal(ws.cell(row=r, column=col_estado).value)
+                if not estado:
+                    # si viene vacío/ruido/variación no válida, se ignora
                     continue
 
                 if estado == "CONFORME":
@@ -557,7 +593,7 @@ def _process_log01_files(
         # Auditoría "de origen"
         "audit_by_oi": audit_by_oi,
         "totals_input": {
-            "rowss_read": rows_total_read,
+            "rows_read": rows_total_read,
             "conformes": input_conformes_total,
             "no_conformes": input_no_conformes_total,
         },
