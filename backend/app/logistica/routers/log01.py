@@ -76,7 +76,9 @@ _OI_RE = re.compile(r"OI-(\d{4})-(\d{4})", re.IGNORECASE)
 def _parse_oi_number_from_filename(filename: str) -> int:
     m = _OI_RE.search(filename or "")
     if not m:
-        raise ValueError(f"Nombre inválido: no se encontró patrón OI-####-YYYY en '{filename}'")
+        raise ValueError(
+            f"INVALID_OI_FILENAME · Nombre inválido: no se encontró patrón OI-####-YYYY en '{filename}'"
+        )
     return int(m.group(1))
     
 
@@ -104,6 +106,20 @@ def _classify_file_error(e: Exception) -> str:
     if "archivo vacío" in msg:
         return "EMPTY_FILE"
     return "FILE_INVALID"
+
+def _parse_oi_tag_from_filename(filename: str) -> Optional[str]:
+    m = _OI_RE.search(filename or "")
+    if not m:
+        return None
+    return f"OI-{m.group(1)}-{m.group(2)}"
+
+def _split_error_code_detail(raw: str) -> tuple[str | None, str | None]:
+    if "·" not in raw:
+        return None, raw
+    code, detail = raw.split("·", 1)
+    code = code.strip() or None
+    detail = detail.strip() or None
+    return code, detail
 
 def _normalize_estado_literal(v: Any) -> Optional[str]:
     """
@@ -374,6 +390,7 @@ def _process_log01_files(
 
     # Auditoría "de origen" (por archivo/OI), NO depende del dedupe
     audit_by_oi: List[Dict[str, Any]] = []
+    files_rejected: List[Dict[str, Any]] = []
     input_conformes_total = 0
     input_no_conformes_total = 0
 
@@ -396,14 +413,14 @@ def _process_log01_files(
             oi_num = _parse_oi_number_from_filename(fname)
             data = _read_input_bytes(item)
             if not data:
-                raise ValueError("Archivo vacío.")
+                raise ValueError("EMPTY_FILE · Archivo vacío.")
 
             wb = load_workbook(BytesIO(data), data_only=True)
             ws: Worksheet = wb.worksheets[0]
 
             item_pos = _find_item_header_cell(ws)
             if item_pos is None:
-                raise ValueError("No se encontró la cabecera 'Item' en la primera hoja.")
+                raise ValueError("NO_ITEM_HEADER · No se encontró la cabecera 'Item' en la primera hoja.")
             header_row, _item_col = item_pos
 
 
@@ -424,7 +441,7 @@ def _process_log01_files(
 
             missing = [k for k in _OUTPUT_KEYS if not input_cols.get(k)]
             if missing:
-                raise ValueError("Faltan cabeceras requeridas: " + ", ".join(missing))
+                raise ValueError("MISSING_HEADERS · Faltan cabeceras requeridas: " + ", ".join(missing))
 
             # Forzar tipo (Pylance): desde aquí son int, no Optional[int]
             col_serie = cast(int, input_cols["medidor"])
@@ -522,7 +539,15 @@ def _process_log01_files(
 
         except Exception as e:
             bad_files += 1
-            err_code = _classify_file_error(e)
+            raw = str(e).strip()
+            err_code, err_detail = _split_error_code_detail(raw)
+            if not err_code:
+                err_code = "FILE_INVALID"
+            if not err_detail:
+                err_detail = "Error no especificado"
+            oi_tag = None
+            if err_code != "INVALID_OI_FILENAME":
+                oi_tag = _parse_oi_tag_from_filename(fname)
             audit_by_oi.append(
                 {
                     "filename": fname,
@@ -531,9 +556,17 @@ def _process_log01_files(
                     "rows_read": 0,
                     "conformes": 0,
                     "no_conformes": 0,
-                    "error": str(e),
+                    "error": raw,
                     "error_code": err_code,
                     }
+            )
+            files_rejected.append(
+                {
+                    "filename": fname,
+                    "oi": oi_tag,
+                    "code": err_code,
+                    "detail": err_detail,
+                }
             )
             _emit(
                 operation_id,
@@ -541,7 +574,7 @@ def _process_log01_files(
                     "type": "error",
                     "stage": "file_error",
                     "message": f"Error en {fname}",
-                    "detail": str(e),
+                    "detail": err_detail,
                     "code": err_code,
                 },
             )
@@ -648,6 +681,7 @@ def _process_log01_files(
         "series_no_conformes_final": series_no_conformes_final,
         # Auditoría "de origen"
         "audit_by_oi": audit_by_oi,
+        "files_rejected": files_rejected,
         "totals_input": {
             "rows_read": rows_total_read,
             "conformes": input_conformes_total,

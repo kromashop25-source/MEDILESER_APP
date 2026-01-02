@@ -99,6 +99,15 @@ export default function Log01ExcelPage() {
       })
   }, [auditSummary]);
 
+  const auditRejectedSorted = useMemo(() => {
+    const list = Array.isArray(auditSummary?.files_rejected) ? auditSummary.files_rejected : [];
+    return list.slice().sort((a: any, b: any) => {
+      const aKey = String(a?.oi ?? a?.filename ?? "").toUpperCase();
+      const bKey = String(b?.oi ?? b?.filename ?? "").toUpperCase();
+      return aKey.localeCompare(bKey);
+    });
+  }, [auditSummary]);
+
   const uploadAbortRef = useRef<AbortController | null>(null);
   const progressAbortRef = useRef<AbortController | null>(null);
   const progressAbortReasonRef = useRef<string | null>(null);
@@ -523,6 +532,39 @@ export default function Log01ExcelPage() {
                         <div className="small text-muted">N/D</div>
                       )}
 
+                      {auditRejectedSorted.length > 0 ? (
+                        <div className="mT-15">
+                          <div className="small text-muted">Archivos rechazados</div>
+                          <div className="table-responsive">
+                            <table className="table table-sm mB-0">
+                              <thead>
+                                <tr className="small">
+                                  <th style={{ whiteSpace: "nowrap" }}>OI / Archivo</th>
+                                  <th style={{ whiteSpace: "nowrap" }}>Motivo</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {auditRejectedSorted.map((r: any, i: number) => {
+                                  const code = String(r?.code ?? "");
+                                  const detail = String(r?.detail ?? "");
+                                  let motivo = "";
+                                  if (code && detail) motivo = `(${code}) ${detail}`;
+                                  else if (code) motivo = `(${code})`;
+                                  else motivo = detail || "N/D";
+                                  const oiOrFile = r?.oi ?? r?.filename ?? "N/D";
+                                  return (
+                                    <tr key={i} className="small">
+                                      <td style={{ whiteSpace: "nowrap" }}>{oiOrFile}</td>
+                                      <td>{motivo}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : null}
+
                       <div className="col-12 mT-10 p-0">
                         <div className="small text-muted">Totales (origen)</div>
                         <div className="small">
@@ -582,20 +624,22 @@ export default function Log01ExcelPage() {
                 <h6 className="c-grey-900">Eventos</h6>
                 <div className="bd p-10" style={{ maxHeight: 240, overflow: "auto" }}>
                   {events.map((ev, i) => {
-                    const baseMsg = ev.message ?? ev.detail ?? "";
-                    const extraParts: string[] = [];
-                    if (ev.type === "error") {
-                      if (ev.code) extraParts.push(String(ev.code));
-                      // Evitar duplicar el mismo texto si ya fue usado como mensaje base
-                      if (ev.detail && ev.detail !== baseMsg) extraParts.push(ev.detail);
+                    const msg = (ev as any).message ?? "";
+                    const code = (ev as any).code ?? "";
+                    const detail = (ev as any).detail ?? "";
+                    const baseText = translateProgressMessage(msg || detail || "");
+                    let suffix = "";
+                    if (code) {
+                      suffix = `${code}${detail ? ` · ${detail}` : ""}`;
+                    } else if (detail && msg) {
+                      suffix = detail;
                     }
-                    const extra = extraParts.join(" · ");
 
                     return (
                       <div key={i} className="small">
                         {translateProgressType(ev.type)} · {translateProgressStage(ev.stage)} ·{" "}
-                        {translateProgressMessage(baseMsg)}
-                        {extra ? <span className="text-muted"> ({extra})</span> : null}
+                        {baseText}
+                        {suffix ? <span className="text-muted"> ({suffix})</span> : null}
                       </div>
                     );
                   })}
