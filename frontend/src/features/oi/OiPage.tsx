@@ -198,8 +198,66 @@ export default function OiPage() {
     setSearchParams(next, { replace: true });
   };
 
+  const NEW_BANCADA_DRAFT_KEY = "new";
+  const DEFAULT_BANCADA_ROWS = 15;
   const getDraftKey = (row: BancadaRead | null) =>
-  row ? `bancada-${row.id}` : "new";
+  row ? `bancada-${row.id}` : NEW_BANCADA_DRAFT_KEY;
+
+  const buildEmptyRows = (count = DEFAULT_BANCADA_ROWS): BancadaRowForm[] =>
+    Array.from({ length: count }).map(() => ({
+      medidor: "",
+      estado: 0,
+      q3: {},
+      q2: {},
+      q1: {},
+    }));
+
+  const makeDraftId = () => {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `draft-${Date.now()}`;
+  };
+
+  const createNewBancadaDraft = (createdAt?: string): BancadaForm => ({
+    draftId: makeDraftId(),
+    draftCreatedAt: createdAt ?? new Date().toISOString(),
+    estado: 0,
+    rows: DEFAULT_BANCADA_ROWS,
+    rowsData: buildEmptyRows(),
+    version: null,
+  });
+
+  const getNewDraftStorageKey = (id: number | null) =>
+    id ? `oi:${id}:new_bancada_draft` : null;
+
+  const loadNewBancadaDraft = (id: number | null): BancadaForm | null => {
+    const key = getNewDraftStorageKey(id);
+    if (!key) return null;
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as BancadaForm;
+      if (!parsed || !Array.isArray(parsed.rowsData)) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistNewBancadaDraft = (id: number | null, draft: BancadaForm | null) => {
+    const key = getNewDraftStorageKey(id);
+    if (!key) return;
+    try {
+      if (!draft) {
+        sessionStorage.removeItem(key);
+        return;
+      }
+      sessionStorage.setItem(key, JSON.stringify(draft));
+    } catch {
+      // ignore
+    }
+  };
 
 
   // Set defaults de selects al cargar catálogos
@@ -264,6 +322,16 @@ export default function OiPage() {
       }
     })();
   }, [reset, authUserId, oiIdFromRoute]);
+
+  useEffect(() => {
+    if (!oiId) return;
+    setBancadaDrafts((prev) => {
+      if (prev[NEW_BANCADA_DRAFT_KEY]) return prev;
+      const storedDraft = loadNewBancadaDraft(oiId);
+      if (!storedDraft) return prev;
+      return { ...prev, [NEW_BANCADA_DRAFT_KEY]: storedDraft };
+    });
+  }, [oiId]);
 
   // Lock de OI para t?cnicos: intenta tomar o refrescar lock al abrir la pantalla
   useEffect(() => {
@@ -431,6 +499,14 @@ export default function OiPage() {
       toast({ kind: "warning", title: "Solo lectura", message: "No puede agregar bancadas mientras la OI está bloqueada." });
       return;
     }
+    if (!oiId) return;
+    setBancadaDrafts((prev) => {
+      if (prev[NEW_BANCADA_DRAFT_KEY]) return prev;
+      const stored = loadNewBancadaDraft(oiId);
+      const draft = stored ?? createNewBancadaDraft();
+      persistNewBancadaDraft(oiId, draft);
+      return { ...prev, [NEW_BANCADA_DRAFT_KEY]: draft };
+    });
     setEditing(null);
     setShowModal(true);
   };
@@ -477,6 +553,7 @@ export default function OiPage() {
     try {
       setBusy(true);
 
+      const draftCreatedAt = form.draftCreatedAt ?? bancadaDrafts[NEW_BANCADA_DRAFT_KEY]?.draftCreatedAt;
       // Normalizamos las filas antes de enviarlas a la API
       const payload: BancadaCreate = {
         estado: Number(form.estado ?? 0),
@@ -502,6 +579,9 @@ export default function OiPage() {
         });
         toast({ kind: "success", message: "Bancada actualizada" });
       } else {
+        if (draftCreatedAt) {
+          payload.draft_created_at = draftCreatedAt;
+        }
         const created = await addBancada(oiId, payload);
         setBancadas(prev => [...prev, created]);
         setOiVersion(created.updated_at ?? created.created_at ?? oiVersion);
@@ -511,6 +591,7 @@ export default function OiPage() {
           const { new: _, ...rest } = prev;
           return rest;
         });
+        persistNewBancadaDraft(oiId, null);
         toast({ kind: "success", message: "Bancada agregada" });
       }
 
@@ -684,7 +765,20 @@ export default function OiPage() {
 
   const handleBancadaCancel = (draft: BancadaForm) => {
   const key = getDraftKey(editing);
-  setBancadaDrafts(prev => ({ ...prev, [key]: draft }));
+  let nextDraft = { ...draft };
+  if (!editing) {
+    const existingDraft = bancadaDrafts[NEW_BANCADA_DRAFT_KEY];
+    if (!nextDraft.draftCreatedAt) {
+      nextDraft.draftCreatedAt = existingDraft?.draftCreatedAt ?? new Date().toISOString();
+    }
+    if (!nextDraft.draftId) {
+      nextDraft.draftId = existingDraft?.draftId ?? makeDraftId();
+    }
+  }
+  setBancadaDrafts(prev => ({ ...prev, [key]: nextDraft }));
+  if (!editing) {
+    persistNewBancadaDraft(oiId, nextDraft);
+  }
   setShowModal(false);
 };
 
@@ -716,6 +810,9 @@ export default function OiPage() {
 
 
   const resetOiState = () => {
+    if (oiId) {
+      persistNewBancadaDraft(oiId, null);
+    }
     clearCurrentOI();
     clearOpenOiId();
     setOiId(null);

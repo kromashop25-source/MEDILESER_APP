@@ -80,7 +80,7 @@ class BancadaBase(BaseModel):
 
 
 class BancadaCreate(BancadaBase):
-    pass
+    draft_created_at: Optional[datetime] = None
 
 class BancadaUpdate(BancadaBase):
     updated_at: datetime

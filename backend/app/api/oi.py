@@ -34,6 +34,8 @@ router = APIRouter()
 
 LOCK_EXPIRATION_MINUTES = 60
 LOCK_EXPIRATION_DELTA = timedelta(minutes=LOCK_EXPIRATION_MINUTES)
+DRAFT_CREATED_AT_MAX_AGE = timedelta(hours=48)
+DRAFT_CREATED_AT_FUTURE_SKEW = timedelta(minutes=5)
 
 def _get_session_from_header(authorization: str | None, *, allow_expired: bool = False) -> dict:
     """Recupera la sesión (usuario logueado) a partir del header Authorization."""
@@ -144,6 +146,19 @@ def _normalize_dt(dt: datetime | None) -> datetime | None:
     if dt.tzinfo is not None:
         return dt.replace(tzinfo=None)
     return dt
+
+def _resolve_bancada_created_at(draft_dt: datetime | None) -> datetime:
+    now = datetime.utcnow()
+    if not draft_dt:
+        return now
+    normalized = _normalize_dt(draft_dt)
+    if normalized is None:
+        return now
+    if normalized > now + DRAFT_CREATED_AT_FUTURE_SKEW:
+        return now
+    if normalized < now - DRAFT_CREATED_AT_MAX_AGE:
+        return now
+    return normalized
 
 
 def _is_lock_active(oi: OI, now: datetime | None = None) -> bool:
@@ -989,6 +1004,7 @@ def add_bancada(
     next_item = (max([x or 0 for x in existing_items]) if existing_items else 0) + 1
     rows_data = _dump_rows_data(payload.rows_data)
     now = datetime.utcnow()
+    created_at = _resolve_bancada_created_at(payload.draft_created_at)
     b = Bancada(
         oi_id=oi_id,
         item=next_item,
@@ -997,7 +1013,7 @@ def add_bancada(
         rows=payload.rows,
         # Mini-planilla completa de la bancada (si el frontend la envía)
         rows_data=rows_data,
-        created_at=now,
+        created_at=created_at,
         updated_at=now,
         saved_at=now,
     )

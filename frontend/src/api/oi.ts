@@ -117,6 +117,7 @@ export type BancadaCreate = {
   rows: number;
   // Ahora enviamos la data completa de las filas
   rows_data?: BancadaRow[];
+  draft_created_at?: string;
 };
 export type BancadaUpdatePayload = BancadaCreate & { updated_at: string };
 export type BancadaRestorePayload = BancadaCreate & {

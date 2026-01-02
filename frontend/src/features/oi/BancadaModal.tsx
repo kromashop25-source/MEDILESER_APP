@@ -30,6 +30,8 @@ export type BancadaForm = {
   rows: number;
   version?: string | null;
   rowsData: BancadaRowForm[];
+  draftCreatedAt?: string | null;
+  draftId?: string | null;
 };
 
 // Orden lógico de las columnas del Grid para la navegación con Enter
@@ -294,6 +296,8 @@ export default function BancadaModal({
     estado: initial?.estado ?? 0,
     rows: initial?.rows ?? 15,
     version: initial?.version ?? null,
+    draftCreatedAt: initial?.draftCreatedAt ?? null,
+    draftId: initial?.draftId ?? null,
     rowsData:
     initial?.rowsData ??
     Array.from({ length: 15 }).map<BancadaRowForm>(() => ({
@@ -340,7 +344,7 @@ const handleDecreaseFont = () => {
 
   const saveButtonRef = useRef<HTMLButtonElement | null>(null);
   const [rowConstraintErrors, setRowConstraintErrors] = useState<RowConstraintErrors[]>([]);
-  const isEditingExisting = Boolean(initial && (initial.rowsData?.length ?? 0) > 0);
+  const isEditingExisting = Boolean(initial?.version);
   const lastFocusRef = useRef<"rows" | "grid">("rows");
   const lastFocusFieldRef = useRef<string | null>(null);
 
@@ -643,6 +647,8 @@ const handleGridKeyDown = (
       rowsData: normalizedRows,
       version: initial?.version ?? null,
       estado: initial?.estado ?? 0,
+      draftCreatedAt: initial?.draftCreatedAt ?? null,
+      draftId: initial?.draftId ?? null,
     };
   };
 
