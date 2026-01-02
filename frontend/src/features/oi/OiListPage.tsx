@@ -6,6 +6,7 @@ import {
   saveCurrentOI,
   clearCurrentOI,
   deleteOI,
+  exportOiCsv,
 } from "../../api/oi";
 
 import type { OIListResponse, OIRead } from "../../api/oi";
@@ -162,8 +163,9 @@ export default function OiListPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
-  const busy = isLoading || isFetching || generating;
+  const busy = isLoading || isFetching || generating || exportingCsv;
 
   const buildReturnTo = () => `${location.pathname}${location.search}`;
 
@@ -253,6 +255,36 @@ export default function OiListPage() {
     }
   };
 
+  const handleExportCsv = async () => {
+    try {
+      setExportingCsv(true);
+      const { blob, filename } = await exportOiCsv({
+        q: search || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        responsableTechNumber: responsableTech ? Number(responsableTech) : undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      a.remove();
+    } catch (e: any) {
+      const status = e?.status;
+      const message = e?.message ?? "No se pudo exportar el CSV";
+      if (status === 403) {
+        toast({ kind: "error", title: "No autorizado", message });
+      } else {
+        toast({ kind: "error", title: "Error", message });
+      }
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
   const handleClearFilters = () => {
     setSearchRaw("");
     setSearch("");
@@ -277,6 +309,15 @@ export default function OiListPage() {
           <h1 className="h3 mb-0">Listado de OI</h1>
         </div>
         <div className="d-flex gap-2">
+          {isAdmin && (
+            <button
+              className="btn btn-outline-secondary"
+              onClick={handleExportCsv}
+              disabled={busy}
+            >
+              {exportingCsv ? "Exportando..." : "Exportar CSV"}
+            </button>
+          )}
           <button
             className="btn btn-outline-secondary"
             onClick={handleClearFilters}

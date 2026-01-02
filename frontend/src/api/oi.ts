@@ -369,6 +369,59 @@ export async function listOI(params: OIListQuery): Promise<OIListResponse> {
   }
 }
 
+export async function exportOiCsv(
+  params: OIListQuery
+): Promise<{ blob: Blob; filename: string }> {
+  let res: any;
+  try {
+    res = await api.get("/oi/export/csv", {
+      params: {
+        q: params.q || undefined,
+        date_from: params.dateFrom || undefined,
+        date_to: params.dateTo || undefined,
+        responsable_tech_number: params.responsableTechNumber || undefined,
+      },
+      responseType: "blob",
+    });
+  } catch (e: any) {
+    let msg = e?.message ?? "No se pudo exportar el CSV";
+    const data = e?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const text = await data.text();
+        try {
+          const parsed = JSON.parse(text) as any;
+          const detail = parsed?.detail;
+          if (typeof detail === "string") msg = detail;
+          else if (Array.isArray(detail) && detail.length > 0) {
+            msg = detail
+              .map((d: any) => String(d?.msg ?? ""))
+              .filter(Boolean)
+              .join(", ");
+          } else if (text) {
+            msg = text;
+          }
+        } catch {
+          if (text) msg = text;
+        }
+      } catch {
+        // ignore
+      }
+    } else {
+      msg = e?.response?.data?.detail ?? msg;
+    }
+    const err = new Error(msg) as Error & { status?: number };
+    err.status = e?.response?.status;
+    throw err;
+  }
+
+  const blob = res.data as Blob;
+  const cd = res.headers["content-disposition"] as string | undefined;
+  const match = cd?.match(/filename="(.+?)"/i);
+  const filename = match?.[1] ?? "oi_list.csv";
+  return { blob, filename };
+}
+
 export type ResponsableOption = {
   tech_number: number;
   full_name: string;

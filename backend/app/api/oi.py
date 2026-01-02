@@ -1,5 +1,6 @@
+import csv
 import re
-from io import BytesIO
+from io import BytesIO, StringIO
 from typing import List, Sequence, cast
 from datetime import datetime, timedelta, timezone
 
@@ -312,6 +313,72 @@ def _parse_date(date_str: str | None) -> datetime | None:
             status_code=400,
             detail="Formato de fecha inválido; use YYYY-MM-DD",
         )
+
+def _build_oi_filters(
+    session: Session,
+    sess: dict,
+    q: str | None,
+    date_from: str | None,
+    date_to: str | None,
+    responsable_tech_number: int | None,
+) -> tuple[list[ColumnElement], set[int] | None]:
+    conditions: list[ColumnElement] = []
+    oi_id_col: ColumnElement = cast(ColumnElement, OI.id)
+    oi_code_col: ColumnElement = cast(ColumnElement, OI.code)
+    oi_tech_number_col: ColumnElement = cast(ColumnElement, OI.tech_number)
+    oi_banco_id_col: ColumnElement = cast(ColumnElement, OI.banco_id)
+
+    tech_number = sess.get("techNumber")
+    banco_id = sess.get("bancoId")
+    is_admin = _is_admin(sess)
+
+    if not is_admin:
+        if tech_number is not None:
+            conditions.append(oi_tech_number_col == tech_number)
+        if banco_id is not None:
+            conditions.append(oi_banco_id_col == banco_id)
+
+    start_dt = _parse_date(date_from)
+    end_dt = _parse_date(date_to)
+    if start_dt:
+        conditions.append(OI.created_at >= start_dt)  # type: ignore[arg-type]
+    if end_dt:
+        end_dt_plus = end_dt + timedelta(days=1)
+        conditions.append(OI.created_at < end_dt_plus)  # type: ignore[arg-type]
+
+    if responsable_tech_number is not None:
+        try:
+            resp_tech = int(responsable_tech_number)
+        except Exception:
+            raise HTTPException(status_code=400, detail="responsable_tech_number inválido")
+        if resp_tech > 0:
+            conditions.append(oi_tech_number_col == resp_tech)
+
+    search = (q or "").strip()
+    if not search:
+        return conditions, None
+
+    code_conditions = list(conditions)
+    code_conditions.append(oi_code_col.ilike(f"%{search}%"))
+    code_stmt = select(OI.id)
+    if code_conditions:
+        code_stmt = code_stmt.where(*code_conditions)
+    code_ids = set(session.exec(code_stmt).all())
+
+    medidor_ids: set[int] = set()
+    search_lc = search.lower()
+    medidor_stmt = (
+        select(Bancada.oi_id, Bancada.medidor, Bancada.rows_data)
+        .join(OI, _oi_bancada_onclause())
+    )
+    if conditions:
+        medidor_stmt = medidor_stmt.where(*conditions)
+    for oi_id, medidor, rows_data in session.exec(medidor_stmt).all():
+        if _medidor_matches(search_lc, medidor, rows_data):
+            medidor_ids.add(int(oi_id))
+
+    matched_ids = code_ids | medidor_ids
+    return conditions, matched_ids
 
 
 def _row_medidor_value(row: object) -> str:
@@ -781,8 +848,6 @@ def list_oi(
     - limit / offset, devolviendo también el total de registros.
     """
     sess = _get_session_from_header(authorization)
-    tech_number = sess.get("techNumber")
-    banco_id = sess.get("bancoId")
     is_admin = _is_admin(sess)
 
     # Normalizar y acotar limit
@@ -791,64 +856,18 @@ def list_oi(
     if limit > 100:
         limit = 100
 
-    # Construir condiciones comunes (rol, búsqueda, rango de fechas)
-    conditions: list[ColumnElement] = []
     oi_id_col: ColumnElement = cast(ColumnElement, OI.id)
     oi_code_col: ColumnElement = cast(ColumnElement, OI.code)
-    oi_tech_number_col: ColumnElement = cast(ColumnElement, OI.tech_number)
-    oi_banco_id_col: ColumnElement = cast(ColumnElement, OI.banco_id)
     bancada_oi_id_col: ColumnElement = cast(ColumnElement, Bancada.oi_id)
-
-    if not is_admin:
-        if tech_number is not None:
-            conditions.append(oi_tech_number_col == tech_number)
-        if banco_id is not None:
-            conditions.append(oi_banco_id_col == banco_id)
-
-    # Búsqueda por código de OI (parcial, insensitive)
-    search = (q or "").strip()
-
-    # Filtro por rango de fechas (creación)
-    start_dt = _parse_date(date_from)
-    end_dt = _parse_date(date_to)
-    if start_dt:
-        conditions.append(OI.created_at >= start_dt)  # type: ignore[arg-type]
-    if end_dt:
-        # incluir todo el día date_to → < date_to + 1 día
-        end_dt_plus = end_dt + timedelta(days=1)
-        conditions.append(OI.created_at < end_dt_plus)  # type: ignore[arg-type]
-
-    # Filtro por Responsable (tech_number)
-    if responsable_tech_number is not None:
-        try:
-            resp_tech = int(responsable_tech_number)
-        except Exception:
-            raise HTTPException(status_code=400, detail="responsable_tech_number inválido")
-        if resp_tech > 0:
-            conditions.append(oi_tech_number_col == resp_tech)
-
-    # Filtro por busqueda: codigo OI o medidor (parcial, insensitive)
-    if search:
-        code_conditions = list(conditions)
-        code_conditions.append(oi_code_col.ilike(f"%{search}%"))
-        code_stmt = select(OI.id)
-        if code_conditions:
-            code_stmt = code_stmt.where(*code_conditions)
-        code_ids = set(session.exec(code_stmt).all())
-
-        medidor_ids: set[int] = set()
-        search_lc = search.lower()
-        medidor_stmt = (
-            select(Bancada.oi_id, Bancada.medidor, Bancada.rows_data)
-            .join(OI, _oi_bancada_onclause())
-        )
-        if conditions:
-            medidor_stmt = medidor_stmt.where(*conditions)
-        for oi_id, medidor, rows_data in session.exec(medidor_stmt).all():
-            if _medidor_matches(search_lc, medidor, rows_data):
-                medidor_ids.add(int(oi_id))
-
-        matched_ids = code_ids | medidor_ids
+    conditions, matched_ids = _build_oi_filters(
+        session,
+        sess,
+        q,
+        date_from,
+        date_to,
+        responsable_tech_number,
+    )
+    if matched_ids is not None:
         if not matched_ids:
             return OIListResponse(
                 items=[],
@@ -964,6 +983,152 @@ def list_oi(
         summary=summary,
     )
 
+
+@router.get("/export/csv")
+def export_oi_csv(
+    q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    responsable_tech_number: int | None = None,
+    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+):
+    sess = _get_session_from_header(authorization)
+    if not _is_admin(sess):
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    def format_dt(value: datetime | None) -> str:
+        if not value:
+            return ""
+        return value.strftime("%d/%m/%Y %H:%M")
+
+    oi_id_col: ColumnElement = cast(ColumnElement, OI.id)
+    oi_code_col: ColumnElement = cast(ColumnElement, OI.code)
+    bancada_oi_id_col: ColumnElement = cast(ColumnElement, Bancada.oi_id)
+
+    conditions, matched_ids = _build_oi_filters(
+        session,
+        sess,
+        q,
+        date_from,
+        date_to,
+        responsable_tech_number,
+    )
+    if matched_ids is not None:
+        if not matched_ids:
+            output = StringIO()
+            writer = csv.writer(output)
+            writer.writerow(
+                [
+                    "ID",
+                    "OI",
+                    "Medidores",
+                    "Q3",
+                    "Alcance",
+                    "PMA",
+                    "Banco",
+                    "Técnico",
+                    "Responsable",
+                    "Creación",
+                    "Guardado",
+                    "Últ. mod.",
+                ]
+            )
+            csv_bytes = output.getvalue().encode("utf-8-sig")
+            output.close()
+            headers = {
+                "Content-Disposition": f'attachment; filename="oi_list_{datetime.utcnow().strftime("%Y%m%d_%H%M")}.csv"'
+            }
+            return StreamingResponse(
+                BytesIO(csv_bytes),
+                media_type="text/csv; charset=utf-8",
+                headers=headers,
+            )
+        conditions = conditions + [oi_id_col.in_(list(matched_ids))]
+
+    base_stmt = select(OI)
+    if conditions:
+        base_stmt = base_stmt.where(*conditions)
+
+    sort_expr = func.coalesce(OI.updated_at, OI.created_at).desc()
+    data_stmt = base_stmt.order_by(sort_expr, desc(oi_id_col))
+    rows = session.exec(data_stmt).all()
+
+    oi_ids = [cast(int, oi.id) for oi in rows if oi.id is not None]
+    codes = list({oi.code for oi in rows if oi.code})
+
+    medidores_usuario_by_id: dict[int, int] = {}
+    if oi_ids:
+        user_stmt = (
+            select(Bancada.oi_id, func.coalesce(func.sum(Bancada.rows), 0))
+            .where(bancada_oi_id_col.in_(oi_ids))
+            .group_by(bancada_oi_id_col)
+        )
+        for oi_id, total_rows in session.exec(user_stmt).all():
+            medidores_usuario_by_id[int(oi_id)] = int(total_rows or 0)
+
+    medidores_total_by_code: dict[str, int] = {}
+    if codes:
+        total_stmt = (
+            select(OI.code, func.coalesce(func.sum(Bancada.rows), 0))
+            .select_from(OI)
+            .join(Bancada, _oi_bancada_onclause(), isouter=True)
+            .where(oi_code_col.in_(codes))
+            .group_by(oi_code_col)
+        )
+        for code, total_rows in session.exec(total_stmt).all():
+            medidores_total_by_code[str(code)] = int(total_rows or 0)
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "ID",
+            "OI",
+            "Medidores",
+            "Q3",
+            "Alcance",
+            "PMA",
+            "Banco",
+            "Técnico",
+            "Responsable",
+            "Creación",
+            "Guardado",
+            "Últ. mod.",
+        ]
+    )
+    for oi in rows:
+        medidores_usuario = medidores_usuario_by_id.get(cast(int, oi.id), 0)
+        medidores_total = medidores_total_by_code.get(oi.code, 0)
+        medidores_display = f"{medidores_usuario} / {medidores_total}"
+        responsable = get_full_name_by_tech_number(oi.tech_number) or ""
+        writer.writerow(
+            [
+                oi.id or "",
+                oi.code or "",
+                medidores_display,
+                oi.q3 or "",
+                oi.alcance or "",
+                oi.pma or "",
+                oi.banco_id or "",
+                oi.tech_number or "",
+                responsable,
+                format_dt(oi.created_at),
+                format_dt(oi.saved_at),
+                format_dt(oi.updated_at),
+            ]
+        )
+    csv_bytes = output.getvalue().encode("utf-8-sig")
+    output.close()
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="oi_list_{datetime.utcnow().strftime("%Y%m%d_%H%M")}.csv"'
+    }
+    return StreamingResponse(
+        BytesIO(csv_bytes),
+        media_type="text/csv; charset=utf-8",
+        headers=headers,
+    )
 
 
 @router.delete("/{oi_id:int}")
