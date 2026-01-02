@@ -453,6 +453,27 @@ def update_oi(
             detail="La OI fue modificada por otro usuario. Recargue antes de guardar.",
         )
 
+    code_payload = payload.code.strip() if payload.code else None
+    if code_payload and code_payload != oi.code:
+        if not _is_admin(sess):
+            raise HTTPException(
+                status_code=403,
+                detail="Solo administradores pueden modificar el código de OI.",
+            )
+        if not OI_CODE_RE.match(code_payload):
+            raise HTTPException(
+                status_code=422,
+                detail="Código OI inválido (formato OI-####-YYYY).",
+            )
+        existing_id = session.exec(
+            select(OI.id)
+            .where(OI.code == code_payload)
+            .where(OI.id != oi_id)
+        ).first()
+        if existing_id is not None:
+            raise HTTPException(status_code=409, detail="OI ya existe.")
+        oi.code = code_payload
+
     presion = pma_to_pressure(payload.pma)
     if presion is None:
         raise HTTPException(status_code=422, detail="PMA inválido (solo se aceptan 10 o 16).")

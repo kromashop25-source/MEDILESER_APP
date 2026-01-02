@@ -50,6 +50,7 @@ export type OIListResponse = {
 
 // Payload mínimo para actualizar los valores técnicos de la OI
 export type OIUpdatePayload = {
+  code?: string;
   q3: number;
   alcance: number;
   pma: number;

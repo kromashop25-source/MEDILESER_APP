@@ -43,6 +43,7 @@ class OICreate(BaseModel):
 
 class OIUpdate(BaseModel):
     """Payload para actualizar solo los valores técnicos de la OI."""
+    code: Optional[str] = None
     q3: float
     alcance: int
     pma: Literal[10, 16]

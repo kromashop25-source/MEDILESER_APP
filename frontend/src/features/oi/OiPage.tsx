@@ -18,7 +18,8 @@ import {
   type BancadaRead,
   type BancadaRow,
   type BancadaCreate,
-  type BancadaUpdatePayload
+  type BancadaUpdatePayload,
+  type OIUpdatePayload
 } from "../../api/oi";
 
 const apiBlockToForm = (block?: BancadaRow["q3"]): BancadaRowForm["q3"] => {
@@ -455,18 +456,26 @@ export default function OiPage() {
         throw new Error("No se pudo determinar la versión actual de la OI. Recargue la página e inténtelo de nuevo.");
       }
 
-      const updated = await updateOI(oiId, {
+      const trimmedCode = v.oi?.trim();
+      const updatePayload: OIUpdatePayload = {
         q3: Number(v.q3),
         alcance: Number(v.alcance),
         pma: Number(v.pma),
         numeration_type: v.numeration_type ?? "correlativo",
         updated_at: oiVersion,
-      });
+      };
+      if (isAdmin && trimmedCode && trimmedCode !== (originalOI?.oi ?? "")) {
+        updatePayload.code = trimmedCode;
+      }
+      const updated = await updateOI(oiId, updatePayload);
       setOriginalOI(v);
       // Actualizamos la versión local con lo que devuelve el backend
       setOiVersion(updated.updated_at ?? updated.created_at)
       setOiSavedAt(updated.saved_at ?? null);
       setOiCreatedAt(updated.created_at ?? null);
+      if (updated.code) {
+        saveCurrentOI({ id: updated.id, code: updated.code });
+      }
       setLockedByUserId(updated.locked_by_user_id ?? null);
       setLockedByName(updated.locked_by_full_name ?? null);
       setReadOnly(updated.read_only_for_current_user ?? false);
@@ -1067,9 +1076,12 @@ export default function OiPage() {
             id="oi"
             className={`form-control ${oiId ? "vi-locked" : ""}`}
             {...register("oi")}
-            disabled={!!oiId}
+            disabled={!!oiId ? !(isAdmin && isEditingOI && !isReadOnly) : false}
           />
           {errors.oi && <div className="text-danger small">{errors.oi.message}</div>}
+          {isAdmin ? (
+            <div className="form-text">Solo administradores pueden cambiar el código de OI.</div>
+          ) : null}
         </div>
 
         <div className="col-md-4">
