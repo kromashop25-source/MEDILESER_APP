@@ -32,7 +32,7 @@ from .auth import _SESSIONS, get_full_name_by_tech_number
 
 router = APIRouter()
 
-LOCK_EXPIRATION_MINUTES = 15
+LOCK_EXPIRATION_MINUTES = 60
 LOCK_EXPIRATION_DELTA = timedelta(minutes=LOCK_EXPIRATION_MINUTES)
 
 def _get_session_from_header(authorization: str | None, *, allow_expired: bool = False) -> dict:
@@ -157,6 +157,16 @@ def _is_lock_active(oi: OI, now: datetime | None = None) -> bool:
     return locked_at > current - LOCK_EXPIRATION_DELTA
 
 
+def _clear_expired_lock(oi: OI, session: Session, now: datetime | None = None) -> None:
+    if oi.locked_by_user_id is None or oi.locked_at is None:
+        return
+    if _is_lock_active(oi, now):
+        return
+    oi.locked_by_user_id = None
+    oi.locked_at = None
+    session.add(oi)
+
+
 def _get_lock_state(
     oi: OI,
     session: Session,
@@ -210,6 +220,7 @@ def _ensure_lock_allows_write(oi: OI, sess: dict, session: Session) -> dict:
     - Admin en lock de tЁ©cnico: 423 (solo lectura).
     Devuelve el lock_state calculado para reutilizar.
     """
+    _clear_expired_lock(oi, session)
     lock_state = _get_lock_state(oi, session, sess)
     if not lock_state["active"]:
         return lock_state
@@ -238,35 +249,6 @@ def _ensure_lock_allows_write(oi: OI, sess: dict, session: Session) -> dict:
     return lock_state
 
 
-def _apply_saved_at_on_close(
-    oi: OI,
-    session: Session,
-    current_user_id: int | None,
-    *,
-    skip_saved_at: bool = False,
-) -> None:
-    if skip_saved_at:
-        return
-    if oi.id is None:
-        return
-    if oi.locked_by_user_id is None:
-        return
-    if current_user_id is None or oi.locked_by_user_id != current_user_id:
-        return
-    if oi.saved_at is not None:
-        return
-    now = datetime.utcnow()
-    oi.saved_at = now
-    oi_id_col = cast(ColumnElement, Bancada.oi_id)
-    saved_at_col = cast(ColumnElement, Bancada.saved_at)
-    session.exec(
-        update(Bancada)
-        .where(oi_id_col == oi.id)
-        .where(saved_at_col.is_(None))
-        .values(saved_at=now)
-    )
-
-
 def _touch_or_take_lock(oi: OI, sess: dict, lock_state: dict | None = None) -> None:
     """
     Refresca el lock si pertenece al usuario actual o lo toma si estaba libre/expirado.
@@ -282,6 +264,24 @@ def _touch_or_take_lock(oi: OI, sess: dict, lock_state: dict | None = None) -> N
     elif not state.get("active"):
         oi.locked_by_user_id = current_user_id
         oi.locked_at = now
+
+def _recalc_oi_saved_at(session: Session, oi: OI) -> None:
+    if oi.id is None:
+        return
+    oi_id_col = cast(ColumnElement, Bancada.oi_id)
+    max_saved_at = session.exec(
+        select(func.max(Bancada.saved_at)).where(oi_id_col == oi.id)
+    ).one()
+    oi.saved_at = max_saved_at
+
+def _release_user_locks(session: Session, user_id: int | None) -> None:
+    if user_id is None:
+        return
+    session.exec(
+        update(OI)
+        .where(cast(ColumnElement, OI.locked_by_user_id) == user_id)
+        .values(locked_by_user_id=None, locked_at=None)
+    )
 
 def _parse_date(date_str: str | None) -> datetime | None:
     """
@@ -388,6 +388,7 @@ def create_oi(
     if presion is None:
         raise HTTPException(status_code=422, detail="PMA inválido (solo se aceptan 10 o 16).")
     numeration_type = _normalize_numeration_type(payload.numeration_type)
+    _release_user_locks(session, sess.get("userId"))
     now = datetime.utcnow()
     oi = OI(
         code=payload.code,
@@ -505,6 +506,7 @@ def acquire_lock(
 
     sess = _get_session_from_header(authorization)
     _ensure_oi_access(oi, sess)
+    _clear_expired_lock(oi, session)
     lock_state = _get_lock_state(oi, session, sess)
     is_admin = _is_admin(sess)
     current_user_id = sess.get("userId")
@@ -559,14 +561,6 @@ def release_lock(
     if not is_admin and oi.locked_by_user_id != current_user_id:
         raise HTTPException(status_code=403, detail="No puede liberar el lock de otro usuario")
 
-    normalized_reason = (reason or "").strip().lower()
-    _apply_saved_at_on_close(
-        oi,
-        session,
-        current_user_id,
-        skip_saved_at=normalized_reason == "cancel",
-    )
-
     oi.locked_by_user_id = None
     oi.locked_at = None
     session.add(oi)
@@ -600,8 +594,6 @@ def close_oi(
     if not is_admin and oi.locked_by_user_id != current_user_id:
         raise HTTPException(status_code=403, detail="No puede liberar el lock de otro usuario")
 
-    _apply_saved_at_on_close(oi, session, current_user_id)
-
     oi.locked_by_user_id = None
     oi.locked_at = None
     session.add(oi)
@@ -620,6 +612,9 @@ class BancadaRestorePayload(BaseModel):
     current_updated_at: datetime
     restore_updated_at: datetime | None = None
     restore_saved_at: datetime | None = None
+
+class BancadaSavedAtUpdate(BaseModel):
+    saved_at: datetime
 
 class OISavedAtUpdate(BaseModel):
     saved_at: datetime
@@ -645,9 +640,6 @@ def update_oi_saved_at(
     if not _is_admin(sess):
         raise HTTPException(status_code=403, detail="Solo admin puede editar la fecha de guardado")
 
-    oi.saved_at = payload.saved_at
-    oi.updated_at = datetime.utcnow()
-
     if payload.propagate_to_bancadas:
         oi_id_col = cast(ColumnElement, Bancada.oi_id)
         session.exec(
@@ -655,7 +647,10 @@ def update_oi_saved_at(
             .where(oi_id_col == oi_id)
             .values(saved_at=payload.saved_at)
         )
+        session.flush()
 
+    _recalc_oi_saved_at(session, oi)
+    oi.updated_at = datetime.utcnow()
     session.add(oi)
     session.commit()
     session.refresh(oi)
@@ -1004,12 +999,15 @@ def add_bancada(
         rows_data=rows_data,
         created_at=now,
         updated_at=now,
+        saved_at=now,
     )
     session.add(b)
     # marcar modificacion de la OI
     oi.updated_at = now
     _touch_or_take_lock(oi, sess, lock_state)
     session.add(oi)
+    session.flush()
+    _recalc_oi_saved_at(session, oi)
     session.commit()
     session.refresh(b)
     return BancadaRead.model_validate(b)
@@ -1090,6 +1088,7 @@ def update_bancada(
         )
 
     now = datetime.utcnow()
+    saved_at_was_null = b.saved_at is None
     b.medidor = payload.medidor
     b.estado = payload.estado or 0
     b.rows = payload.rows
@@ -1098,13 +1097,52 @@ def update_bancada(
     b.rows_data = _dump_rows_data(payload.rows_data)
     # Marcar fecha/hora de última modificación de la bancada
     b.updated_at = now
+    if saved_at_was_null:
+        b.saved_at = now
     session.add(b)
 
     # Actualizar también la OI padre
     oi.updated_at = now
     _touch_or_take_lock(oi, sess, lock_state)
     session.add(oi)
-        
+    session.flush()
+    if saved_at_was_null:
+        _recalc_oi_saved_at(session, oi)
+    session.commit()
+    session.refresh(b)
+    return BancadaRead.model_validate(b)
+
+@router.patch("/bancadas/{bancada_id}/saved_at", response_model=BancadaRead)
+def update_bancada_saved_at(
+    bancada_id: int,
+    payload: BancadaSavedAtUpdate,
+    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+):
+    b = session.get(Bancada, bancada_id)
+    if not b:
+        raise HTTPException(status_code=404, detail="Bancada no encontrada")
+
+    oi = session.get(OI, b.oi_id)
+    if not oi:
+        raise HTTPException(status_code=404, detail="OI no encontrada")
+
+    sess = _get_session_from_header(authorization)
+    if not _is_admin(sess):
+        raise HTTPException(status_code=403, detail="Solo admin puede editar la fecha de guardado")
+    _ensure_oi_access(oi, sess)
+    lock_state = _ensure_lock_allows_write(oi, sess, session)
+
+    now = datetime.utcnow()
+    b.saved_at = payload.saved_at
+    b.updated_at = now
+    session.add(b)
+
+    oi.updated_at = now
+    _touch_or_take_lock(oi, sess, lock_state)
+    session.add(oi)
+    session.flush()
+    _recalc_oi_saved_at(session, oi)
     session.commit()
     session.refresh(b)
     return BancadaRead.model_validate(b)
@@ -1143,6 +1181,9 @@ def restore_bancada(
     b.updated_at = payload.restore_updated_at
     b.saved_at = payload.restore_saved_at
     session.add(b)
+    session.flush()
+    _recalc_oi_saved_at(session, oi)
+    session.add(oi)
     session.commit()
     session.refresh(b)
     return BancadaRead.model_validate(b)
@@ -1168,6 +1209,8 @@ def delete_bancada(
     oi.updated_at = now
     _touch_or_take_lock(oi, sess, lock_state)
     session.add(oi)
+    session.flush()
+    _recalc_oi_saved_at(session, oi)
     session.commit()
     return {"ok": True}
 
@@ -1195,8 +1238,8 @@ def export_excel(
 
     # ----- Construcción del nombre de archivo según 18.1.4 -----
     # Patrón: OI-####-YYYY-nombre-apellido-YYYY-MM-DD.xlsx
-    # La fecha corresponde a la última modificación de la OI;
-    # si aún no tiene updated_at, se usa created_at.
+    # La fecha corresponde a la fecha operativa de la OI (saved_at);
+    # si aún no tiene saved_at, se usa created_at.
     if work_dt.tzinfo is None:
         dt_utc = work_dt.replace(tzinfo=timezone.utc)
     else:

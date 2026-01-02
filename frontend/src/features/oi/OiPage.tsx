@@ -14,7 +14,7 @@ import PasswordModal from "./PasswordModal";
 import {
   createOI, updateOI, generateExcel,
   addBancada, updateBancada, deleteBancada,
-  getOiFull, getOi, saveCurrentOI, loadCurrentOI, clearCurrentOI, lockOi, unlockOi, updateOiSavedAt, restoreBancada, restoreOiUpdatedAt,
+  getOiFull, getOi, saveCurrentOI, loadCurrentOI, clearCurrentOI, lockOi, unlockOi, updateBancadaSavedAt, updateOiSavedAt, restoreBancada, restoreOiUpdatedAt,
   type BancadaRead,
   type BancadaRow,
   type BancadaCreate,
@@ -169,6 +169,8 @@ export default function OiPage() {
   const [oiCreatedAt, setOiCreatedAt] = useState<string | null>(null);
   const [showSavedAtModal, setShowSavedAtModal] = useState(false);
   const [savedAtInput, setSavedAtInput] = useState("");
+  const [savedAtTarget, setSavedAtTarget] = useState<BancadaRead | null>(null);
+  const [savedAtScope, setSavedAtScope] = useState<"oi" | "bancada">("bancada");
   const [showCancelModal, setShowCancelModal] = useState(false);
   const originalBancadasRef = useRef<BancadaRead[]>([]);
   const originalOiUpdatedAtRef = useRef<string | null>(null);
@@ -610,9 +612,20 @@ export default function OiPage() {
     }
   };
 
-  const handleOpenSavedAt = () => {
+  const handleOpenOiSavedAt = () => {
     if (!oiId || !isAdmin) return;
     const seed = oiSavedAt ?? oiCreatedAt;
+    setSavedAtScope("oi");
+    setSavedAtTarget(null);
+    setSavedAtInput(toDatetimeLocal(seed));
+    setShowSavedAtModal(true);
+  };
+
+  const handleOpenBancadaSavedAt = (row: BancadaRead) => {
+    if (!isAdmin) return;
+    setSavedAtScope("bancada");
+    setSavedAtTarget(row);
+    const seed = row.saved_at ?? row.created_at ?? oiSavedAt ?? oiCreatedAt;
     setSavedAtInput(toDatetimeLocal(seed));
     setShowSavedAtModal(true);
   };
@@ -624,15 +637,17 @@ export default function OiPage() {
       toast({ kind: "warning", title: "Fecha", message: "Ingrese una fecha valida." });
       return;
     }
+    if (savedAtScope === "bancada" && !savedAtTarget) return;
     try {
       setBusy(true);
-      const updated = await updateOiSavedAt(oiId, {
-        saved_at: nextIso,
-        propagate_to_bancadas: true,
-      });
-      setOiSavedAt(updated.saved_at ?? null);
-      setOiCreatedAt(updated.created_at ?? null);
-      setOiVersion(updated.updated_at ?? updated.created_at);
+      if (savedAtScope === "oi") {
+        await updateOiSavedAt(oiId, {
+          saved_at: nextIso,
+          propagate_to_bancadas: true,
+        });
+      } else if (savedAtTarget) {
+        await updateBancadaSavedAt(savedAtTarget.id, { saved_at: nextIso });
+      }
       const refreshed = await getOiFull(oiId);
       setBancadas(refreshed.bancadas ?? []);
       setMedidoresUsuarioApi(refreshed.medidores_usuario ?? null);
@@ -656,6 +671,9 @@ export default function OiPage() {
         setOriginalOI(nextForm);
       }
       setShowSavedAtModal(false);
+      setSavedAtTarget(null);
+      setSavedAtInput("");
+      setSavedAtScope("bancada");
       toast({ kind: "success", message: "Fecha guardada actualizada" });
     } catch (e: any) {
       toast({ kind: "error", title: "Error", message: e?.message ?? "Error actualizando fecha" });
@@ -721,6 +739,8 @@ export default function OiPage() {
     setShowSavedAtModal(false);
     setShowCancelModal(false);
     setSavedAtInput("");
+    setSavedAtTarget(null);
+    setSavedAtScope("bancada");
     // opcional: resetear a defaults
     reset({
       oi: `OI-0001-${new Date().getFullYear()}`,
@@ -912,7 +932,7 @@ export default function OiPage() {
             <button
               type="button"
               className="btn btn-outline-secondary btn-sm"
-              onClick={handleOpenSavedAt}
+              onClick={handleOpenOiSavedAt}
               disabled={busy}
             >
               Editar fecha guardado
@@ -1104,6 +1124,17 @@ export default function OiPage() {
                     <td>{formatDateTime(b.updated_at ?? b.created_at)}</td>
                     <td className="text-end">
                       {/* botones Editar / Eliminar */}
+                        {isAdmin ? (
+                          <button
+                            className="btn btn-sm btn-outline-secondary me-2"
+                            onClick={() => handleOpenBancadaSavedAt(b)}
+                            disabled={busy || isEditingOI || readOnly}
+                            aria-label={`Editar fecha guardado bancada #${b.item}`}
+                            title="Editar fecha guardado"
+                          >
+                            Editar fecha guardado
+                          </button>
+                        ) : null}
                         <button
                           className="btn btn-sm btn-outline-primary me-2"
                           onClick={() => openEdit(b)}
@@ -1202,7 +1233,11 @@ export default function OiPage() {
           aria-modal="true"
           aria-labelledby="savedAtTitle"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setShowSavedAtModal(false);
+            if (e.target === e.currentTarget) {
+              setShowSavedAtModal(false);
+              setSavedAtTarget(null);
+              setSavedAtScope("bancada");
+            }
           }}
         >
           <div className="modal-dialog">
@@ -1221,7 +1256,11 @@ export default function OiPage() {
                   type="button"
                   className="btn-close"
                   aria-label="Cerrar"
-                  onClick={() => setShowSavedAtModal(false)}
+                  onClick={() => {
+                    setShowSavedAtModal(false);
+                    setSavedAtTarget(null);
+                    setSavedAtScope("bancada");
+                  }}
                 />
               </div>
               <div className="modal-body">
@@ -1238,7 +1277,9 @@ export default function OiPage() {
                     required
                   />
                   <div className="form-text">
-                    Se aplicara a todas las bancadas de la OI.
+                    {savedAtScope === "oi"
+                      ? "Se aplicará a todas las bancadas de la OI."
+                      : "Se aplica a la bancada seleccionada."}
                   </div>
                 </div>
               </div>
@@ -1246,7 +1287,11 @@ export default function OiPage() {
                 <button
                   type="button"
                   className="btn btn-outline-secondary"
-                  onClick={() => setShowSavedAtModal(false)}
+                  onClick={() => {
+                    setShowSavedAtModal(false);
+                    setSavedAtTarget(null);
+                    setSavedAtScope("bancada");
+                  }}
                 >
                   Cancelar
                 </button>

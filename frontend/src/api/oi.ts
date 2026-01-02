@@ -182,6 +182,25 @@ export async function updateBancada(bancadaId: number, payload: BancadaUpdatePay
   }
 }
 
+export type BancadaSavedAtPayload = {
+  saved_at: string;
+};
+
+export async function updateBancadaSavedAt(
+  bancadaId: number,
+  payload: BancadaSavedAtPayload
+): Promise<BancadaRead> {
+  try {
+    const { data } = await api.patch<BancadaRead>(`/oi/bancadas/${bancadaId}/saved_at`, payload);
+    return data;
+  } catch (e: any) {
+    const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo actualizar la fecha de la bancada";
+    const err = new Error(msg) as Error & { status?: number };
+    err.status = e?.response?.status;
+    throw err;
+  }
+}
+
 export async function restoreBancada(
   bancadaId: number,
   payload: BancadaRestorePayload
