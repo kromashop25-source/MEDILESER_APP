@@ -165,14 +165,27 @@ def _copy_row_styles(src_ws: Worksheet, src_row: int, dst_ws: Worksheet, dst_row
                 # si algo falla en una celda, continuar con la siguiente
                 continue
 
+def _with_bottom_border(cell, bottom_side: Side) -> None:
+    b = cell.border or Border()
+    cell.border = Border(
+        left=b.left,
+        right=b.right,
+        top=b.top,
+        bottom=bottom_side,
+        diagonal=b.diagonal,
+        diagonal_direction=b.diagonal_direction,
+        outline=b.outline,
+        vertical=b.vertical,
+        horizontal=b.horizontal,
+    )
+
 def _apply_thick_bottom_border(ws: Worksheet, row: int, start_col_letter: str, end_col_letter: str) -> None:
     start_col = column_index_from_string(start_col_letter)
     end_col = column_index_from_string(end_col_letter)
     thick = Side(style="thick")
     for c in range(start_col, end_col + 1):
         cell = ws.cell(row=row, column=c)
-        b = cell.border
-        cell.border = Border(left=b.left, right=b.right, top=b.top, bottom=thick)
+        _with_bottom_border(cell, thick)
 
 def _copy_formulas(ws: Worksheet, src_row: int, dst_row: int, start_col_letter: str, end_col_letter: str) -> None:
     start_col = column_index_from_string(start_col_letter)
@@ -281,6 +294,7 @@ def generate_excel(
     presion_val = pma_to_pressure(oi.pma) if oi.pma else None
 
     current_row = DATA_START_ROW
+    border_rows: list[int] = []
     for i, b in enumerate(rows, start=1):
         # 1. Detectar fuente de filas: ¿Tiene data del Grid (rows_data) o es legacy?
         rows_source = getattr(b, "rows_data", []) or []
@@ -426,7 +440,10 @@ def generate_excel(
         current_row += nrows
 
         # Borde inferior grueso
-        _apply_thick_bottom_border(ws, current_row - 1, "A", FORMULA_END_COL)
+        border_rows.append(current_row - 1)
+
+    for row_idx in border_rows:
+        _apply_thick_bottom_border(ws, row_idx, "A", FORMULA_END_COL)
 
     # --- Desbloquear celdas editables ---
     unlocked_protection = CellProtection(locked=False)
