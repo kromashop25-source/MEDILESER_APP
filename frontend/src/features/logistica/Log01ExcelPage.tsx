@@ -68,6 +68,7 @@ async function waitForHello(promise: Promise<void>, timeoutMs: number): Promise<
 
 export default function Log01ExcelPage() {
   const [files, setFiles] = useState<File[]>([]);
+  const [gaselagFiles, setGaselagFiles] = useState<File[]>([]);
   const [outputFilename, setOutputFilename] = useState<string>("");
 
   const [events, setEvents] = useState<ProgressEvent[]>([]);
@@ -462,6 +463,20 @@ export default function Log01ExcelPage() {
                   disabled={running}
                 />
               </div>
+              <div className="col-12 mB-15">
+                <MultiFilePicker
+                  label="GASELAG (xlsx)"
+                  title="Archivos GASELAG"
+                  accept=".xlsx"
+                  files={gaselagFiles}
+                  setFiles={setGaselagFiles}
+                  disabled={running}
+                />
+                <div className="small text-muted mT-5">
+                  Nota: El nombre del archivo no se valida (patrón variable). La validación real se hará por cabeceras/contenido al implementar backend GASELAG.
+                </div>
+              </div>
+
 
               <div className="col-md-6 mB-15">
                 <label className="form-label">Nombre de salida (opcional)</label>
