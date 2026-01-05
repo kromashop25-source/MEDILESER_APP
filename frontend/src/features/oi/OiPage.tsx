@@ -1074,7 +1074,7 @@ export default function OiPage() {
           <label htmlFor="oi" className="form-label">OI (OI-####-YYYY)</label>
           <input
             id="oi"
-            className={`form-control ${oiId ? "vi-locked" : ""}`}
+            className={`form-control ${oiId && !(isAdmin && isEditingOI && !isReadOnly) ? "vi-locked" : ""}`}
             {...register("oi")}
             disabled={!!oiId ? !(isAdmin && isEditingOI && !isReadOnly) : false}
           />

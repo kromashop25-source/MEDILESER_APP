@@ -408,7 +408,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
             <SidebarNavItem
               to="/logistica/log01/excel"
               icon="ti-files"
-              label="LOG-01 · Consolidación Excel"
+              label="Consolidación Excel"
               depth={1}
               collapsed={collapsed}
             />

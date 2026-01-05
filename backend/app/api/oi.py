@@ -363,7 +363,10 @@ def _build_oi_filters(
     code_stmt = select(OI.id)
     if code_conditions:
         code_stmt = code_stmt.where(*code_conditions)
-    code_ids = set(session.exec(code_stmt).all())
+    code_ids: set[int] = set()
+    for oi_id in session.exec(code_stmt).all():
+        if oi_id is not None:
+            code_ids.add(int(oi_id))
 
     medidor_ids: set[int] = set()
     search_lc = search.lower()
@@ -374,6 +377,8 @@ def _build_oi_filters(
     if conditions:
         medidor_stmt = medidor_stmt.where(*conditions)
     for oi_id, medidor, rows_data in session.exec(medidor_stmt).all():
+        if oi_id is None:
+            continue
         if _medidor_matches(search_lc, medidor, rows_data):
             medidor_ids.add(int(oi_id))
 

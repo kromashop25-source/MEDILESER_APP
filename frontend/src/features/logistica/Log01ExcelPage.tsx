@@ -400,7 +400,7 @@ export default function Log01ExcelPage() {
       <div className="row">
         <div className="col-12">
           <div className="bd bgc-white p-20 mB-20">
-            <h4 className="c-grey-900 mB-10">LOG-01 · Consolidación Excel</h4>
+            <h4 className="c-grey-900 mB-10">Consolidación Excel</h4>
 
             {errorMsg && (
               <div className="alert alert-danger" role="alert">
