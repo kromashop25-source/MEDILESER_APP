@@ -4,6 +4,8 @@ import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
 import {
   cancelLog01Operation,
+  log01Manifest,
+  log01NoConformeFinal,
   log01Result,
   log01Start,
   pollLog01Progress,
@@ -140,7 +142,9 @@ export default function Log01ExcelPage() {
       setAuditSummary(res);
     }
 
-    if (typeof (ev as any).progress === "number") setProgressPct((ev as any).progress);
+    if (typeof (ev as any).progress === "number") {
+      setProgressPct(Math.round((ev as any).progress));
+    }
     if (typeof (ev as any).percent === "number") setProgressPct(Math.round((ev as any).percent));
     if (!terminalEventRef.current && (ev.type === "complete" || ev.stage === "cancelled" || ev.stage === "failed")) {
       terminalEventRef.current = true;
@@ -382,9 +386,6 @@ export default function Log01ExcelPage() {
       const xf = res.headers["x-file-name"] as string | undefined;
       const filename = parseFilename(cd) ?? xf ?? "BD_CONSOLIDADO.xlsx";
       downloadBlob(res.data, filename);
-      setResultReady(false);
-      setResultOperationId(null);
-      operationIdRef.current = null;
     } catch (e) {
       const ax = e as AxiosError<any>;
       if (axios.isCancel(ax)) return;
@@ -393,7 +394,49 @@ export default function Log01ExcelPage() {
     }
   }
 
-  
+  async function downloadManifest() {
+    const operationId = resultOperationId ?? operationIdRef.current;
+    if (!operationId) {
+      setErrorMsg("No hay resultado disponible.");
+      return;
+    }
+    try {
+      setErrorMsg("");
+      logDev("[LOG01] operation_id(manifest) =", operationId);
+      const res = await log01Manifest(operationId);
+      const cd = res.headers["content-disposition"] as string | undefined;
+      const xf = res.headers["x-file-name"] as string | undefined;
+      const filename = parseFilename(cd) ?? xf ?? "MANIFIESTO.json";
+      downloadBlob(res.data, filename);
+    } catch (e) {
+      const ax = e as AxiosError<any>;
+      if (axios.isCancel(ax)) return;
+      const detail = (ax.response?.data?.detail as string) || ax.message || "No se pudo descargar.";
+      setErrorMsg(detail);
+    }
+  }
+
+  async function downloadNoConformeFinal() {
+    const operationId = resultOperationId ?? operationIdRef.current;
+    if (!operationId) {
+      setErrorMsg("No hay resultado disponible.");
+      return;
+    }
+    try {
+      setErrorMsg("");
+      logDev("[LOG01] operation_id(no_conforme) =", operationId);
+      const res = await log01NoConformeFinal(operationId);
+      const cd = res.headers["content-disposition"] as string | undefined;
+      const xf = res.headers["x-file-name"] as string | undefined;
+      const filename = parseFilename(cd) ?? xf ?? "NO_CONFORME_FINAL.json";
+      downloadBlob(res.data, filename);
+    } catch (e) {
+      const ax = e as AxiosError<any>;
+      if (axios.isCancel(ax)) return;
+      const detail = (ax.response?.data?.detail as string) || ax.message || "No se pudo descargar.";
+      setErrorMsg(detail);
+    }
+  }
 
   return (
     <div className="container-fluid">
@@ -445,12 +488,26 @@ export default function Log01ExcelPage() {
                     </button>
                   ) : null}
                   {!running && resultReady ? (
-                    <button
-                      className="btn btn-outline-primary"
-                      onClick={() => void downloadResult()}
-                    >
-                      Descargar
-                    </button>
+                    <>
+                      <button
+                        className="btn btn-outline-secondary"
+                        onClick={() => void downloadManifest()}
+                      >
+                        Manifiesto (JSON)
+                      </button>
+                      <button
+                        className="btn btn-outline-secondary"
+                        onClick={() => void downloadNoConformeFinal()}
+                      >
+                        No conforme (JSON)
+                      </button>
+                      <button
+                        className="btn btn-outline-primary"
+                        onClick={() => void downloadResult()}
+                      >
+                        Descargar
+                      </button>
+                    </>
                   ) : null}
                 </div>
               </div>

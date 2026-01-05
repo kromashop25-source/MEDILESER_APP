@@ -31,6 +31,7 @@ from app.api.auth import get_current_user_session
 from app.core.settings import get_settings
 from app.oi_tools.services.progress_manager import progress_manager, _SENTINEL as SENTINEL # mismo sentinel
 from app.oi_tools.services.cancel_manager import cancel_manager, CancelToken
+from app.logistica.services.log01_consolidate import process_log01_files, Log01InputFile, Log01Cancelled
 
 router = APIRouter(
     prefix="/logistica/log01",
@@ -41,17 +42,6 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 _LOG01_HELLO_PAD = " " * 2048
 
-class Log01Cancelled(Exception):
-    pass
-
-
-@dataclass
-class Log01InputFile:
-    name: str
-    data: Optional[bytes] = None
-    path: Optional[str] = None
-
-
 @dataclass
 class Log01Job:
     operation_id: str
@@ -61,6 +51,9 @@ class Log01Job:
     output_name: Optional[str] = None
     result_path: Optional[str] = None
     error: Optional[str] = None
+    no_conforme_path: Optional[str] = None
+    manifest_path: Optional[str] = None
+
 
 
 LOG01_JOBS: Dict[str, Log01Job] = {}
@@ -712,27 +705,49 @@ def _run_log01_job(
     operation_id = job.operation_id
     cancel_token = cancel_manager.get(operation_id)
     try:
-        xlsx_bytes, out_name, _summary = _process_log01_files(
-            file_items,
-            operation_id,
-            output_filename,
-            cancel_token,
+        # Import local para mantener el refactor acotado al router.
+        from app.logistica.services.log01_consolidate import process_log01_files
+
+        res = process_log01_files(
+            file_items=file_items,
+            operation_id=operation_id,
+            output_filename=output_filename,
+            cancel_token=cancel_token,
         )
+
+        # 1) Excel final (CONFORME)
         result_path = os.path.join(job.work_dir, "result.xlsx")
         with open(result_path, "wb") as out_f:
-            out_f.write(xlsx_bytes)
+            out_f.write(res.xlsx_bytes)
+
+        # 2) JSON técnico: NO CONFORME final (post-dedupe)
+        no_conforme_path = os.path.join(job.work_dir, "no_conforme_final.json")
+        with open(no_conforme_path, "wb") as out_f:
+            out_f.write(res.no_conforme_json)
+
+        # 3) JSON técnico: manifiesto por OI
+        manifest_path = os.path.join(job.work_dir, "manifiesto.json")
+        with open(manifest_path, "wb") as out_f:
+            out_f.write(res.manifest_json)
+
         with LOG01_JOBS_LOCK:
             current = LOG01_JOBS.get(operation_id)
             if current:
                 current.status = "complete"
-                current.output_name = out_name
+                current.output_name = res.out_name
                 current.result_path = result_path
+                current.no_conforme_path = no_conforme_path
+                current.manifest_path = manifest_path
+
+
     except Log01Cancelled:
+        # process_log01_files ya emite el evento "cancelled"
         with LOG01_JOBS_LOCK:
             current = LOG01_JOBS.get(operation_id)
             if current:
                 current.status = "cancelled"
-    except Exception as exc:  # noqa: BLE001
+                current.error = "Cancelado por el usuario"
+    except Exception as exc:
         logger.exception("LOG01 job failed operation_id=%s", operation_id)
         _emit(
             operation_id,
@@ -744,8 +759,8 @@ def _run_log01_job(
                 current.status = "error"
                 current.error = str(exc)
     finally:
-        progress_manager.finish(operation_id)
         cancel_manager.remove(operation_id)
+
 
 # ----------------------------
 # Progreso (NDJSON stream)
@@ -939,6 +954,40 @@ def log01_result(operation_id: str):
         headers=headers,
     )
 
+@router.get("/result/{operation_id}/no-conforme")
+def log01_result_no_conforme(operation_id: str):
+    _cleanup_log01_jobs()
+    with LOG01_JOBS_LOCK:
+        job = LOG01_JOBS.get(operation_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Operacion no encontrada.")
+    if job.status in ("started", "running"):
+        raise HTTPException(status_code=202, detail="Aun procesando. Intenta nuevamente.")
+    if job.status != "complete" or not job.no_conforme_path or not os.path.exists(job.no_conforme_path):
+        raise HTTPException(status_code=404, detail="No hay archivo NO CONFORME final disponible.")
+
+    filename = (job.output_name and f"{Path(job.output_name).stem}_NO_CONFORME_FINAL.json") or "NO_CONFORME_FINAL.json"
+    headers = {"X-File-Name": filename}
+    return FileResponse(job.no_conforme_path, filename=filename, media_type="application/json", headers=headers)
+
+
+@router.get("/result/{operation_id}/manifest")
+def log01_result_manifest(operation_id: str):
+    _cleanup_log01_jobs()
+    with LOG01_JOBS_LOCK:
+        job = LOG01_JOBS.get(operation_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Operacion no encontrada.")
+    if job.status in ("started", "running"):
+        raise HTTPException(status_code=202, detail="Aun procesando. Intenta nuevamente.")
+    if job.status != "complete" or not job.manifest_path or not os.path.exists(job.manifest_path):
+        raise HTTPException(status_code=404, detail="No hay manifiesto disponible.")
+
+    filename = (job.output_name and f"{Path(job.output_name).stem}_MANIFIESTO.json") or "MANIFIESTO.json"
+    headers = {"X-File-Name": filename}
+    return FileResponse(job.manifest_path, filename=filename, media_type="application/json", headers=headers)
+
+
 
 # ----------------------------
 # Upload + procesamiento + respuesta XLSX (sync)
@@ -962,12 +1011,14 @@ def log01_upload(
         file_items.append(Log01InputFile(name=name, data=data))
 
     try:
-        xlsx_bytes, out_name, _summary = _process_log01_files(
-            file_items,
-            operation_id,
-            output_filename,
-            cancel_token,
+        res = process_log01_files(
+            file_items=file_items,
+            operation_id=operation_id,
+            output_filename=output_filename,
+            cancel_token=cancel_token,
         )
+        xlsx_bytes = res.xlsx_bytes
+        out_name = res.out_name
     except Log01Cancelled:
         progress_manager.finish(operation_id)
         raise HTTPException(

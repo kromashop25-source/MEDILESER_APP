@@ -282,6 +282,28 @@ export async function log01Result(
   });
 }
 
+export async function log01NoConformeFinal(
+  operationId: string,
+  signal?: AbortSignal
+): Promise<AxiosResponse<Blob>> {
+  return api.get(`/logistica/log01/result/${encodeURIComponent(operationId)}/no-conforme`, {
+    responseType: "blob",
+    signal,
+    validateStatus: (status) => status === 200,
+  });
+}
+
+export async function log01Manifest(
+  operationId: string,
+  signal?: AbortSignal
+): Promise<AxiosResponse<Blob>> {
+  return api.get(`/logistica/log01/result/${encodeURIComponent(operationId)}/manifest`, {
+    responseType: "blob",
+    signal,
+    validateStatus: (status) => status === 200,
+  });
+}
+
 export async function cancelLog01Operation(operationId: string): Promise<void> {
   await api.post(`/logistica/log01/cancel/${encodeURIComponent(operationId)}`);
 }
