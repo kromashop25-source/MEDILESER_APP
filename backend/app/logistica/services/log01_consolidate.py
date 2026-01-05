@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, cast, Literal
 from typing import TypedDict
 
 from openpyxl import load_workbook
@@ -188,8 +188,8 @@ _OUTPUT_KEYS = [
     "organismo",
 ]
 
-# Cabeceras requeridas (por nombre lógico) y aliases aceptados (normalizados)
-_REQUIRED_INPUT_KEYS = [
+# Cabeceras requeridas BASES (por nombre lógico) y aliases aceptados (normalizados)
+_REQUIRED_INPUT_KEYS_BASES = [
     "medidor",
     "q3",
     "error_q3",
@@ -207,7 +207,7 @@ _REQUIRED_INPUT_KEYS = [
     "organismo",
 ]
 
-_INPUT_HEADER_ALIASES: Dict[str, List[str]] = {
+_INPUT_HEADER_ALIASES_BASES: Dict[str, List[str]] = {
     # Bases comerciales (cerrado)
     "medidor": ["serie del medidor"],
     "q3": ["q3 (litros/hora)"],
@@ -225,6 +225,43 @@ _INPUT_HEADER_ALIASES: Dict[str, List[str]] = {
     "certificado_banco": ["numero de certificado del banco de pruebas"],
     "organismo": ["organismo de inspeccion"],
 }
+
+_REQUIRED_INPUT_KEYS_GASELAG = [
+    # organismo es fijo OI-066 (NO viene del archivo)
+    "medidor",
+    "precinto",
+    "fecha",
+    "banco_numero",
+    "certificado",
+    "estado_pe",
+    "q3",
+    "error_q3",
+    "q2",
+    "error_q2",
+    "q1",
+    "error_q1",
+    "estado",
+    "certificado_banco",
+]
+
+_INPUT_HEADER_ALIASES_GASELAG: Dict[str, List[str]] = {
+    # GASELAG (cerrado)
+    "medidor": ["nro serie", "nro. serie", "numero serie", "número serie", "número de serie"],
+    "precinto": ["precinto"],
+    "fecha": ["fecha de ensayo presion estatica"],
+    "banco_numero": ["banco ensayo errores de indicacion"],
+    "certificado": ["cert verificacion inicial", "cert. verificacion inicial"],
+    "estado_pe": ["resultado de p estatica", "resultado de p. estatica", "resultado de p. estática"],
+    "q3": ["q3 (l/h)", "q3 (l h)"],
+    "error_q3": ["error q3 (%)", "error q3 (%) "],
+    "q2": ["q2 (l/h)", "q2 (l h)"],
+    "error_q2": ["error q2 (%)", "error q2 (%) "],
+    "q1": ["q1 (l/h)", "q1 (l h)"],
+    "error_q1": ["error q1 (%)", "error q1 (%) "],
+    "estado": ["conclusion", "conclusión"],
+    "certificado_banco": ["certificado banco", "certificado  banco"],
+}
+
 
 
 def _emit(operation_id: Optional[str], ev: Dict[str, Any]) -> None:
@@ -324,6 +361,7 @@ def process_log01_files(
     operation_id: Optional[str],
     output_filename: Optional[str],
     cancel_token: Optional["CancelToken"],
+    source: Literal["BASES", "GASELAG"] = "BASES",
 ) -> Log01ProcessResult:
     cancel_emitted = False
 
@@ -372,7 +410,11 @@ def process_log01_files(
 
         oi_num: Optional[int] = None
         try:
-            oi_num = _parse_oi_number_from_filename(fname)
+            # BASES: OI desde filename. GASELAG: no aplica.
+            if source == "BASES":
+                oi_num = _parse_oi_number_from_filename(fname)
+            else:
+                oi_num = None
             data = _read_input_bytes(item)
             if not data:
                 raise ValueError("EMPTY_FILE·El archivo está vacío o no se pudo leer.")
@@ -393,14 +435,18 @@ def process_log01_files(
                 if name and name not in input_header_map:
                     input_header_map[name] = c
 
+            required_keys = _REQUIRED_INPUT_KEYS_BASES if source == "BASES" else _REQUIRED_INPUT_KEYS_GASELAG
+            aliases = _INPUT_HEADER_ALIASES_BASES if source == "BASES" else _INPUT_HEADER_ALIASES_GASELAG
+
             def find_input_col(key: str) -> Optional[int]:
-                for alias in _INPUT_HEADER_ALIASES.get(key, []):
+                # primero aliases cerrados
+                for alias in aliases.get(key, []):
                     col = input_header_map.get(_norm_header(alias))
                     if col:
                         return col
                 return None
 
-            missing = [k for k in _REQUIRED_INPUT_KEYS if not find_input_col(k)]
+            missing = [k for k in required_keys if not find_input_col(k)]
             if missing:
                 raise ValueError(
                     "MISSING_HEADERS·Faltan cabeceras requeridas: " + ", ".join(missing)
@@ -411,7 +457,8 @@ def process_log01_files(
             file_no_conforme_series: list[str] = []
             extracted = 0
 
-            col_by_key = {key: find_input_col(key) for key in _REQUIRED_INPUT_KEYS}
+            # Construcción de columnas solo de las requeridas del modo
+            col_by_key = {key: find_input_col(key) for key in required_keys}
             missing = [key for key, col in col_by_key.items() if not col]
             if missing:
                 raise ValueError(
@@ -477,20 +524,32 @@ def process_log01_files(
 
                 # construir values para salida
                 row_values: Dict[str, Any] = {}
+                # inicializar todos los campos esperados en salida
                 for key in _OUTPUT_KEYS:
+                    if key == "estado":
+                        row_values[key] = estado
+                        continue
+                    if source == "GASELAG" and key == "organismo":
+                        row_values[key] = "OI-066"
+                        continue
                     col = col_by_key.get(key)
                     val = _row_value(row, col)
                     if key == "fecha":
                         row_values[key] = _normalize_input_date(val, epoch=wb.epoch)
-                    elif key == "estado":
-                        row_values[key] = estado
                     else:
                         row_values[key] = val
 
                 extracted += 1
                 prev = series.get(serie)
-                if prev is None or oi_num > prev.oi_num:
-                    series[serie] = SerieInfo(oi_num=oi_num, estado=estado, values=row_values)
+                if source == "BASES":
+                    # dedupe por OI mayor (regla vigente)
+                    if prev is None or (oi_num is not None and oi_num > prev.oi_num):
+                        series[serie] = SerieInfo(oi_num=oi_num or 0, estado=estado, values=row_values)
+                else:
+                    # GASELAG: sin OI, se preserva "último gana" por orden de archivo (idx)
+                    # guardamos oi_num como idx para mantener compatibilidad de estructura sin significado de OI.
+                    if prev is None or idx >= prev.oi_num:
+                        series[serie] = SerieInfo(oi_num=idx, estado=estado, values=row_values)
 
             file_no_conforme_series = sorted(set(file_no_conforme_series), key=_natural_key)
             rows_total_read += extracted
@@ -501,8 +560,9 @@ def process_log01_files(
             audit_by_oi.append(
                 {
                     "filename": fname,
-                    "oi_num": oi_num,
-                    "oi_tag": _parse_oi_tag_from_filename(fname),
+                    "oi_num": oi_num if source == "BASES" else None,
+                    "oi_tag": _parse_oi_tag_from_filename(fname) if source == "BASES" else None,
+                    "source": source,
                     "status": "OK",
                     "rows_read": extracted,
                     "conformes": file_conformes,
@@ -532,13 +592,14 @@ def process_log01_files(
             if not err_detail:
                 err_detail = "Error no especificado"
             oi_tag = None
-            if err_code != "INVALID_OI_FILENAME":
+            if source == "BASES" and err_code != "INVALID_OI_FILENAME":
                 oi_tag = _parse_oi_tag_from_filename(fname)
             audit_by_oi.append(
                 {
                     "filename": fname,
                     "oi_num": oi_num,
                     "oi_tag": oi_tag,
+                    "source": source,
                     "status": "ERROR",
                     "rows_read": 0,
                     "conformes": 0,
@@ -553,6 +614,7 @@ def process_log01_files(
                     "oi_tag": oi_tag,
                     "code": err_code,
                     "detail": err_detail,
+                    "source": source,
                 }
             )
             _emit(
@@ -771,6 +833,7 @@ def process_log01_files(
         "operation_id": operation_id,
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "output_excel": out_name,
+        "source": source,
         "totals": {
             "files_total": total_files,
             "files_ok": ok_files,
