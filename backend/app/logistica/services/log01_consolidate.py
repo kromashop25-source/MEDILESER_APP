@@ -132,11 +132,18 @@ def _normalize_estado_literal(v: Any) -> Optional[str]:
     # Rechazar números (0/1/2...) explícitamente: no hay reglas numéricas en LOG-01
     if isinstance(v, (int, float)) and not isinstance(v, bool):
         return None
-    s = str(v).strip().upper()
-    # normalizar separadores y espacios
-    s = s.replace("\n", " ").replace("\r", " ").replace("\t", " ")
-    s = re.sub(r"\s+", " ", s).strip()
+    s = str(v).strip()
+    if not s:
+        return None
+
+    # quitar diacríticos´
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+
+    s = s.upper()
     s = s.replace("-", " ")
+    # eliminar puntuación y síimbolos
+    s = re.sub(r"[^A-Z\s]+", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
 
     if s == "CONFORME":
@@ -361,7 +368,7 @@ def process_log01_files(
     operation_id: Optional[str],
     output_filename: Optional[str],
     cancel_token: Optional["CancelToken"],
-    source: Literal["BASES", "GASELAG"] = "BASES",
+    source: Literal["AUTO","BASES", "GASELAG"] = "AUTO",
 ) -> Log01ProcessResult:
     cancel_emitted = False
 
@@ -409,12 +416,9 @@ def process_log01_files(
         )
 
         oi_num: Optional[int] = None
+        oi_tag: Optional[str] = None
+        source_type: str = "BASES"
         try:
-            # BASES: OI desde filename. GASELAG: no aplica.
-            if source == "BASES":
-                oi_num = _parse_oi_number_from_filename(fname)
-            else:
-                oi_num = None
             data = _read_input_bytes(item)
             if not data:
                 raise ValueError("EMPTY_FILE·El archivo está vacío o no se pudo leer.")
@@ -435,20 +439,65 @@ def process_log01_files(
                 if name and name not in input_header_map:
                     input_header_map[name] = c
 
-            required_keys = _REQUIRED_INPUT_KEYS_BASES if source == "BASES" else _REQUIRED_INPUT_KEYS_GASELAG
-            aliases = _INPUT_HEADER_ALIASES_BASES if source == "BASES" else _INPUT_HEADER_ALIASES_GASELAG
+            # AUTO / BASES / GASELAG: se resuelve por archivo en source_type
 
-            def find_input_col(key: str) -> Optional[int]:
-                # primero aliases cerrados
-                for alias in aliases.get(key, []):
-                    col = input_header_map.get(_norm_header(alias))
+            def _make_find_input_col(aliases: Dict[str, List[str]]):
+                def find_input_col(key: str) -> Optional[int]:
+                    col = input_header_map.get(_norm_header(key))
                     if col:
                         return col
-                return None
+                    for alias in aliases.get(key, []):
+                        col2 = input_header_map.get(_norm_header(alias))
+                        if col2:
+                            return col2
+                    return None
+                return find_input_col
 
+            find_bases = _make_find_input_col(_INPUT_HEADER_ALIASES_BASES)
+            missing_bases = [k for k in _OUTPUT_KEYS if k != "organismo" and not find_bases(k)]
+            # BASES requiere además "organismo" desde input (comportamiento vigente)
+            if not find_bases("organismo"):
+                missing_bases.append("organismo")
+
+            find_gaselag = _make_find_input_col(_INPUT_HEADER_ALIASES_GASELAG)
+            missing_gaselag = [k for k in _REQUIRED_INPUT_KEYS_GASELAG if not find_gaselag(k)]
+
+            if source == "BASES":
+                if missing_bases:
+                    raise ValueError("MISSING_HEADERS·Faltan cabeceras requeridas (BASES): " + ", ".join(missing_bases))
+                source_type = "BASES"
+                find_input_col = find_bases
+            elif source == "GASELAG":
+                if missing_gaselag:
+                    raise ValueError("MISSING_HEADERS·Faltan cabeceras requeridas (GASELAG): " + ", ".join(missing_gaselag))
+                source_type = "GASELAG"
+                find_input_col = find_gaselag
+            else:
+                # AUTO: detectar por cabeceras
+                if not missing_bases:
+                    source_type = "BASES"
+                    find_input_col = find_bases
+                elif not missing_gaselag:
+                    source_type = "GASELAG"
+                    find_input_col = find_gaselag
+                else:
+                    # Reportar el set "más cercano" para debugging
+                    if len(missing_bases) <= len(missing_gaselag):
+                        raise ValueError("MISSING_HEADERS·Faltan cabeceras requeridas (BASES): " + ", ".join(missing_bases))
+                    raise ValueError("MISSING_HEADERS·Faltan cabeceras requeridas (GASELAG): " + ", ".join(missing_gaselag))
+
+            # Validación por nombre SOLO para BASES
+            if source_type == "BASES":
+                oi_num = _parse_oi_number_from_filename(fname)
+                oi_tag = _parse_oi_tag_from_filename(fname)
+            else:
+                oi_num = 0
+                oi_tag = "GASELAG"
+
+            required_keys = _REQUIRED_INPUT_KEYS_BASES if source_type == "BASES" else _REQUIRED_INPUT_KEYS_GASELAG
             missing = [k for k in required_keys if not find_input_col(k)]
             if missing:
-                raise ValueError(
+                 raise ValueError(
                     "MISSING_HEADERS·Faltan cabeceras requeridas: " + ", ".join(missing)
                 )
 
@@ -456,6 +505,8 @@ def process_log01_files(
             file_no_conformes = 0
             file_no_conforme_series: list[str] = []
             extracted = 0
+            ignored_invalid_estado = 0
+            invalid_estado_exmples: list[str] = []
 
             # Construcción de columnas solo de las requeridas del modo
             col_by_key = {key: find_input_col(key) for key in required_keys}
@@ -511,10 +562,15 @@ def process_log01_files(
                 if not serie:
                     continue
 
-                estado = _normalize_estado_literal(_row_value(row, estado_col))
+                raw_estado = _row_value(row, estado_col)
+                estado = _normalize_estado_literal(raw_estado)
                 if not estado:
-                    # comportamiento vigente: si no puede normalizar, ignora registro
+                    ignored_invalid_estado += 1
+                    if raw_estado is not None and str(raw_estado).strip():
+                        if len(invalid_estado_exmples) < 5:
+                            invalid_estado_exmples.append(str(raw_estado)[:80])
                     continue
+                    
 
                 if estado == "CONFORME":
                     file_conformes += 1
@@ -529,7 +585,7 @@ def process_log01_files(
                     if key == "estado":
                         row_values[key] = estado
                         continue
-                    if source == "GASELAG" and key == "organismo":
+                    if source_type == "GASELAG" and key == "organismo":
                         row_values[key] = "OI-066"
                         continue
                     col = col_by_key.get(key)
@@ -541,15 +597,16 @@ def process_log01_files(
 
                 extracted += 1
                 prev = series.get(serie)
-                if source == "BASES":
+                if source_type == "BASES":
                     # dedupe por OI mayor (regla vigente)
                     if prev is None or (oi_num is not None and oi_num > prev.oi_num):
                         series[serie] = SerieInfo(oi_num=oi_num or 0, estado=estado, values=row_values)
                 else:
-                    # GASELAG: sin OI, se preserva "último gana" por orden de archivo (idx)
-                    # guardamos oi_num como idx para mantener compatibilidad de estructura sin significado de OI.
-                    if prev is None or idx >= prev.oi_num:
-                        series[serie] = SerieInfo(oi_num=idx, estado=estado, values=row_values)
+                    # GASELAG baseline: NO puede ganarle a BASES (oi_num>0)
+                    if prev is None or prev.oi_num == 0:
+                        series[serie] = SerieInfo(oi_num=0, estado=estado, values=row_values)
+                    # si prev.oi_num>0 (BASES), se conserva prev y se ignora el registro GASELAG
+
 
             file_no_conforme_series = sorted(set(file_no_conforme_series), key=_natural_key)
             rows_total_read += extracted
@@ -560,13 +617,15 @@ def process_log01_files(
             audit_by_oi.append(
                 {
                     "filename": fname,
-                    "oi_num": oi_num if source == "BASES" else None,
-                    "oi_tag": _parse_oi_tag_from_filename(fname) if source == "BASES" else None,
-                    "source": source,
+                    "oi_num": oi_num if source_type == "BASES" else 0,
+                    "oi_tag": oi_tag,
+                    "source": source_type,
                     "status": "OK",
                     "rows_read": extracted,
                     "conformes": file_conformes,
                     "no_conformes": file_no_conformes,
+                    "ignored_invalid_estado": ignored_invalid_estado,
+                    "invalid_estado_examples": invalid_estado_exmples,
                     "series_no_conforme_origen": file_no_conforme_series,
                     "error": None,
                 }
@@ -591,15 +650,21 @@ def process_log01_files(
             err_code = err_code or _classify_file_error(raw)
             if not err_detail:
                 err_detail = "Error no especificado"
+            # En errores debemos registrar el tipo REAL del archivo si ya fue detectado
+            err_source = source_type if "source_type" in locals() else source
+
             oi_tag = None
-            if source == "BASES" and err_code != "INVALID_OI_FILENAME":
+            if err_source == "BASES" and err_code != "INVALID_OI_FILENAME":
                 oi_tag = _parse_oi_tag_from_filename(fname)
+            elif err_source == "GASELAG":
+                oi_tag = "GASELAG"
+
             audit_by_oi.append(
                 {
                     "filename": fname,
-                    "oi_num": oi_num,
+                    "oi_num": (oi_num if err_source == "BASES" else 0),
                     "oi_tag": oi_tag,
-                    "source": source,
+                    "source": err_source,
                     "status": "ERROR",
                     "rows_read": 0,
                     "conformes": 0,
@@ -610,11 +675,11 @@ def process_log01_files(
             files_rejected.append(
                 {
                     "filename": fname,
-                    "oi_num": oi_num,
+                    "oi_num": (oi_num if err_source == "BASES" else 0),
                     "oi_tag": oi_tag,
                     "code": err_code,
                     "detail": err_detail,
-                    "source": source,
+                    "source": err_source,
                 }
             )
             _emit(
@@ -649,35 +714,129 @@ def process_log01_files(
     wb_out = load_workbook(template_path)
     ws_out = next((w for w in wb_out.worksheets if w.title.strip().upper() == "BD"), wb_out.worksheets[0])
 
-    # detectar fila de inicio (la plantilla corporativa suele tener cabecera en fila 1)
-    out_row = 2
-    item_counter = 1
+    # --- Render por cabeceras (robusto ante cambios de plantilla) ---
+    # 1) Encontrar fila de cabecera: buscamos "item" en las primeras 30 filas
+    header_row = None
+    max_scan_rows = min(30, ws_out.max_row or 30)
+    max_scan_cols = min(ws_out.max_column or 50, 80)
+    for r in range(1, max_scan_rows + 1):
+        for c in range(1, max_scan_cols + 1):
+            if _norm_header(ws_out.cell(row=r, column=c).value) == "item":
+                header_row = r
+                break
+        if header_row:
+            break
+    if not header_row:
+        raise ValueError("TEMPLATE_INVALID·No se encontró la cabecera 'Item' en la hoja BD de la plantilla.")
 
+    data_start_row = header_row + 1
+
+    # 2) Construir mapa cabecera->columna según plantilla
+    header_map: Dict[str, int] = {}
+    for c in range(1, (ws_out.max_column or max_scan_cols) + 1):
+        h = _norm_header(ws_out.cell(row=header_row, column=c).value)
+        if h and h not in header_map:
+            header_map[h] = c
+
+    # Aliases mínimos de cabecera en plantilla (por si usan nombres distintos)
+    # Clave: key interno; valores: posibles headers en plantilla
+    template_aliases: Dict[str, List[str]] = {
+        "item": ["item"],
+        "medidor": ["medidor", "serie", "nro serie", "nro. serie", "nro de serie", "numero de serie", "número de serie"],
+        "q3": ["q3"],
+        "error_q3": ["error q3", "error q3 (%)", "error q3 %"],
+        "q2": ["q2"],
+        "error_q2": ["error q2", "error q2 (%)", "error q2 %"],
+        "q1": ["q1"],
+        "error_q1": ["error q1", "error q1 (%)", "error q1 %"],
+        "estado_pe": ["estado pe", "ensayo de presion estatica", "resultado p estatica", "resultado de p estatica"],        
+        "fecha": ["fecha", "fecha de ejecucion", "fecha de ejecución"],
+        "certificado": ["certificado", "numero de certificado", "número de certificado"],
+        "estado": ["estado", "conclusion", "conclusión"],
+        "precinto": ["precinto"],
+        "banco_numero": ["banco numero", "numero de banco", "número de banco", "numero de banco de ensayo"],
+        "certificado_banco": ["certificado banco", "numero de certificado del banco", "número de certificado del banco"],
+        "organismo": ["organismo", "organismo de inspeccion", "organismo de inspección"],
+    }
+
+    def _find_out_col(key: str) -> Optional[int]:
+        col = header_map.get(_norm_header(key))
+        if col:
+            return col
+        for alias in template_aliases.get(key, []):
+            col = header_map.get(_norm_header(alias))
+            if col:
+                return col
+        return None
+
+    col_item = _find_out_col("item") or 1
+    out_cols: Dict[str, int] = {}
+    missing_out: List[str] = []
+    for key in _OUTPUT_KEYS:
+        col = _find_out_col(key)
+        if col:
+            out_cols[key] = col
+        else:
+            missing_out.append(key)
+    # En plantilla corporativa podrían existir columnas extra; pero si faltan claves críticas, fallar claro
+    critical = {"medidor", "estado", "q3", "q2", "q1"}
+    if critical.intersection(set(missing_out)):
+        raise ValueError(
+            "TEMPLATE_INVALID·La plantilla BD no contiene cabeceras requeridas: " + ", ".join(sorted(critical.intersection(set(missing_out))))
+        )
+
+    # 3) Limpiar filas de datos previas (solo en columnas relevantes)
+    # Usar fila modelo = primera fila de datos (data_start_row) para copiar estilo
+    model_row = data_start_row
+    # determinar hasta dónde limpiar (si hay contenido anterior)
+    max_clear_row = ws_out.max_row or model_row
+    cols_to_clear = {col_item, *out_cols.values()}
+    for r in range(data_start_row, max_clear_row + 1):
+        for c in cols_to_clear:
+            ws_out.cell(row=r, column=c).value = None
+
+    # 4) Escribir datos
+    out_row = data_start_row
+    item_counter = 1
     for i, serie in enumerate(conformes, start=1):
         _raise_cancelled()
         info = series[serie]
-
-        # item en col 1; resto según _OUTPUT_KEYS en columnas sucesivas
-        cell = _writable_cell(ws_out, out_row, 1)
-        cell.value = item_counter
-        cell.font = Font(name="Arial", size=8)
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-        col = 2
         vals = info.values
-        for key in _OUTPUT_KEYS:
+
+        # copiar estilo desde model_row a la nueva fila (si la fila ya existe o se expande)
+        if out_row != model_row:
+            for c in cols_to_clear:
+                src = ws_out.cell(row=model_row, column=c)
+                dst = ws_out.cell(row=out_row, column=c)
+                dst._style = src._style
+                dst.number_format = src.number_format
+
+        # item
+        cell_item = _writable_cell(ws_out, out_row, col_item)
+        cell_item.value = item_counter
+        _apply_output_format(ws_out, out_row, col_item, "item")
+
+        for key, col in out_cols.items():
             v = vals.get(key)
-            # fecha a dd/mm/yyyy (sin hora)
             if key == "fecha":
-                d = _normalize_output_date(v)
-                cell = _writable_cell(ws_out, out_row, col)
-                cell.value = d
-            else:
+                v = _normalize_output_date(v)
                 cell = _writable_cell(ws_out, out_row, col)
                 cell.value = v
-
+                # asegurar formato dd/mm/yyyy si la celda existe
+                try:
+                    cell.number_format = "dd/mm/yyyy"
+                except Exception:
+                    pass
+            else:
+                if isinstance(v, float) and abs(v) < 1e-9:
+                    v = 0.0
+                if key in ("q3", "q2", "q1") and isinstance(v, (int, float)) and not isinstance(v, bool):
+                    v = round(float(v), 2)
+                elif key in ("error_q3", "error_q2", "error_q1") and isinstance(v, (int, float)) and not isinstance(v, bool):
+                    v = round(float(v), 1)
+                cell = _writable_cell(ws_out, out_row, col)
+                cell.value = v
             _apply_output_format(ws_out, out_row, col, key)
-            col += 1
 
         out_row += 1
         item_counter += 1
@@ -747,6 +906,8 @@ def process_log01_files(
             oi_num_to_tag.setdefault(oi, tag)
 
     def _tag_for(oi_num: int) -> str:
+        if oi_num == 0:
+            return "GASELAG"
         return oi_num_to_tag.get(oi_num) or f"OI-{oi_num:04d}"
 
     # NO CONFORME final (post-dedupe)
@@ -797,7 +958,7 @@ def process_log01_files(
         oi_tag = a.get("oi_tag")
         if not isinstance(oi_tag, str) or not oi_tag:
             if isinstance(oi_num, int):
-                oi_tag = f"OI-{oi_num:04d}"
+                oi_tag = _tag_for(oi_num)
             else:
                 continue
         bucket = by_oi_origen_map.setdefault(

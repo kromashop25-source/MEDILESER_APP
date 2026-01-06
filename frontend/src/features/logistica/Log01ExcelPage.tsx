@@ -178,11 +178,12 @@ export default function Log01ExcelPage() {
     pushEvent(ev);
   }
 
-  function buildForm(operationId: string) {
+  function buildForm(operationId: string, allFiles: File[]) {
     const form = new FormData();
     form.append("operation_id", operationId);
+    form.append("source", "AUTO");
     if (outputFilename.trim()) form.append("output_filename", outputFilename.trim());
-    for (const f of files) form.append("files", f);
+    for (const f of allFiles) form.append("files", f);
     return form;
   }
 
@@ -295,7 +296,8 @@ export default function Log01ExcelPage() {
     lastCursorRef.current = -1;
     stopPolling("reset");
 
-    if (!files.length) {
+    const allFiles = [...files, ...gaselagFiles];
+    if (!allFiles.length) {
       setErrorMsg("Debes seleccionar al menos 1 Excel.");
       return;
     }
@@ -355,7 +357,7 @@ export default function Log01ExcelPage() {
       } else {
         logDev("[LOG01] hello received");
       }
-      const form = buildForm(operationId);
+      const form = buildForm(operationId, allFiles);
       logDev("[LOG01] operation_id(start) =", operationId);
       await log01Start(form, uploadAbortRef.current!.signal);
     } catch (e) {

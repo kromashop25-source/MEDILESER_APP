@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, cast, Literal
 from typing import TypedDict
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -31,6 +31,7 @@ from app.api.auth import get_current_user_session
 from app.core.settings import get_settings
 from app.oi_tools.services.progress_manager import progress_manager, _SENTINEL as SENTINEL # mismo sentinel
 from app.oi_tools.services.cancel_manager import cancel_manager, CancelToken
+from app.logistica.services import log01_consolidate as log01svc
 from app.logistica.services.log01_consolidate import process_log01_files, Log01InputFile, Log01Cancelled
 
 router = APIRouter(
@@ -41,6 +42,8 @@ router = APIRouter(
 
 logger = logging.getLogger(__name__)
 _LOG01_HELLO_PAD = " " * 2048
+
+SourceLiteral = Literal["AUTO", "BASES", "GASELAG"]
 
 @dataclass
 class Log01Job:
@@ -53,6 +56,7 @@ class Log01Job:
     error: Optional[str] = None
     no_conforme_path: Optional[str] = None
     manifest_path: Optional[str] = None
+    source: SourceLiteral = "AUTO"
 
 
 
@@ -705,15 +709,16 @@ def _run_log01_job(
     operation_id = job.operation_id
     cancel_token = cancel_manager.get(operation_id)
     try:
-        # Import local para mantener el refactor acotado al router.
-        from app.logistica.services.log01_consolidate import process_log01_files
-
         res = process_log01_files(
             file_items=file_items,
             operation_id=operation_id,
             output_filename=output_filename,
             cancel_token=cancel_token,
+            source=job.source,
         )
+        xlsx_bytes = res.xlsx_bytes
+        out_name = res.out_name
+        _summary = res.summary
 
         # 1) Excel final (CONFORME)
         result_path = os.path.join(job.work_dir, "result.xlsx")
@@ -882,6 +887,7 @@ def log01_start(
     files: List[UploadFile] = File(...),
     operation_id: Optional[str] = Form(None),
     output_filename: Optional[str] = Form(None),
+    source: Optional[str] = Form(None),
 ):
     _cleanup_log01_jobs()
     op_id = (operation_id or "").strip() or str(uuid.uuid4())
@@ -889,6 +895,12 @@ def log01_start(
 
     if not files:
         raise HTTPException(status_code=400, detail="Debes seleccionar al menos 1 Excel.")
+    
+    src = (source or "AUTO").strip().upper()
+    if src not in ("AUTO", "BASES", "GASELAG"):
+        raise HTTPException(status_code=400, detail="source inválido. Use AUTO, BASES o GASELAG.")
+
+    src = cast(SourceLiteral, src)
 
     with LOG01_JOBS_LOCK:
         if op_id in LOG01_JOBS:
@@ -909,6 +921,7 @@ def log01_start(
         created_at=time.time(),
         status="running",
         work_dir=work_dir,
+        source=src,
     )
     with LOG01_JOBS_LOCK:
         LOG01_JOBS[op_id] = job
@@ -997,11 +1010,13 @@ def log01_upload(
     files: List[UploadFile] = File(...),
     operation_id: Optional[str] = Form(None),
     output_filename: Optional[str] = Form(None),
+    source: Optional[str] = Form(None),
 ):
     logger.info("LOG01 upload operation_id=%s", operation_id)
     cancel_token = cancel_manager.create(operation_id) if operation_id else None
     if operation_id:
         progress_manager.ensure(operation_id)
+        
 
     file_items: List[Log01InputFile] = []
     for idx, up in enumerate(files, start=1):
@@ -1010,12 +1025,19 @@ def log01_upload(
         up.file.close()
         file_items.append(Log01InputFile(name=name, data=data))
 
+    src = (source or "AUTO").strip().upper()
+    if src not in ("AUTO", "BASES", "GASELAG"):
+        raise HTTPException(status_code=400, detail="source inválido. Use AUTO, BASES o GASELAG.")
+
+    src = cast(SourceLiteral, src)
+
     try:
         res = process_log01_files(
             file_items=file_items,
             operation_id=operation_id,
             output_filename=output_filename,
             cancel_token=cancel_token,
+            source=src,
         )
         xlsx_bytes = res.xlsx_bytes
         out_name = res.out_name
