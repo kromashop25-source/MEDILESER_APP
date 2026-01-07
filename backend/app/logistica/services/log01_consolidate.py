@@ -399,6 +399,23 @@ def process_log01_files(
     input_conformes_total = 0
     input_no_conformes_total = 0
 
+    def _mew_source_bucket() ->  Dict[str, Any]:
+        return {
+            "files_total": 0,
+            "files_ok": 0,
+            "files_error": 0,
+            "rows_read": 0,
+            "conformes": 0,
+            "no_conformes": 0,
+            "rows_ignored_invalid_estado": 0, 
+        }
+    
+    # Auditoría agregada por tipo de origen
+    by_source: Dict[str, Dict[str, Any]] = {
+        "BASES": _mew_source_bucket(),
+        "GASELAG": _mew_source_bucket(),
+    }
+
     for idx, item in enumerate(file_items, start=1):
         _raise_cancelled()
 
@@ -612,6 +629,14 @@ def process_log01_files(
             rows_total_read += extracted
             ok_files += 1
 
+            # Agregado por tipo
+            b= by_source.setdefault(source_type, _mew_source_bucket())
+            b["files_ok"] += 1
+            b["rows_read"] += extracted
+            b["conformes"] += file_conformes
+            b["no_conformes"] += file_no_conformes
+            b["rows_ignored_invalid_estado"] += ignored_invalid_estado
+
             input_conformes_total += file_conformes
             input_no_conformes_total += file_no_conformes
             audit_by_oi.append(
@@ -653,12 +678,24 @@ def process_log01_files(
                 err_detail = "Error no especificado"
             # En errores debemos registrar el tipo REAL del archivo si ya fue detectado
             err_source = source_type if "source_type" in locals() else source
+            # Si el error ocurrió antes de determinar source_type y venimos en AUTO,
+            # inferir por texto para contabilizar el rechazo en el bucket correcto.
+            if err_source == "AUTO":
+                up = raw.upper()
+                if "(BASES)" in up:
+                    err_source = "BASES"
+                elif "(GASELAG)" in up:
+                    err_source = "GASELAG"
 
             oi_tag = None
             if err_source == "BASES" and err_code != "INVALID_OI_FILENAME":
                 oi_tag = _parse_oi_tag_from_filename(fname)
             elif err_source == "GASELAG":
                 oi_tag = "GASELAG"
+
+            # Agregado por tipo
+            b= by_source.setdefault(err_source, _mew_source_bucket())
+            b["files_error"] += 1
 
             audit_by_oi.append(
                 {
@@ -883,11 +920,17 @@ def process_log01_files(
             "conformes": input_conformes_total,
             "no_conformes": input_no_conformes_total,
         },
+        # Agregado por tipo
+        "by_source": by_source,
         # Detalle técnico
         "detail": {
             "series_duplicates_eliminated": series_duplicates_eliminated,
         },
     }
+
+    # Completar files_total por tipo (ok + error)
+    for _k, _v in by_source.items():
+        _v["files_total"] = int(_v.get("files_ok", 0)) + int(_v.get("files_error", 0))
 
     _emit(
         operation_id,

@@ -68,7 +68,6 @@ async function waitForHello(promise: Promise<void>, timeoutMs: number): Promise<
 
 export default function Log01ExcelPage() {
   const [files, setFiles] = useState<File[]>([]);
-  const [gaselagFiles, setGaselagFiles] = useState<File[]>([]);
   const [outputFilename, setOutputFilename] = useState<string>("");
 
   const [events, setEvents] = useState<ProgressEvent[]>([]);
@@ -85,7 +84,7 @@ export default function Log01ExcelPage() {
   const auditByOiOkSorted = useMemo(() => {
     const list = Array.isArray(auditSummary?.audit_by_oi) ? auditSummary.audit_by_oi : [];
     return list
-      .filter((x: any) => x?.status === "OK")
+      .filter((x: any) => x?.status === "OK" && String(x?.source ?? "").toUpperCase() === "BASES")
       .slice() // IMPORTANTE: evitar mutar auditSummary.audit_by_oi con sort()
       .sort((a: any, b: any) => {
         const aNum = Number(a?.oi_num);
@@ -109,6 +108,43 @@ export default function Log01ExcelPage() {
       const bKey = String(b?.oi ?? b?.filename ?? "").toUpperCase();
       return aKey.localeCompare(bKey);
     });
+  }, [auditSummary]);
+
+  const bySource = useMemo(() => {
+    const init = () => ({
+      files_total: 0,
+      files_ok: 0,
+      files_error: 0,
+      rows_read: 0,
+      conformes: 0,
+      no_conformes: 0,
+      rows_ignored_invalid_estado: 0,      
+    });
+
+    const bs = (auditSummary as any)?.by_source;
+    if (bs && typeof bs === "object") return bs;
+
+    // Fallback: derivar desde audit_by_oi + files_rejected
+    const out: any = { BASES: init(), GASELAG: init() };
+    const okList = Array.isArray((auditSummary as any)?.audit_by_oi) ? (auditSummary as any).audit_by_oi : [];
+    for (const x of okList) {
+      if (x?.status !== "OK") continue;
+      const src = String(x?.source ?? "").toUpperCase();
+      const k = src === "GASELAG" ? "GASELAG" : "BASES";
+      out[k].files_ok += 1;
+      out[k].rows_read += Number(x?.rows_read ?? 0) || 0;
+      out[k].conformes += Number(x?.conformes ?? 0) || 0;
+      out[k].no_conformes += Number(x?.no_conformes ?? 0) || 0;
+      out[k].rows_ignored_invalid_estado += Number(x?.rows_ignored_invalid_estado ?? 0) || 0;
+    }
+    const rejList = Array.isArray((auditSummary as any)?.files_rejected) ? (auditSummary as any).files_rejected : [];
+    for (const r of rejList) {
+      const src = String(r?.source ?? "").toUpperCase();
+      const k = src === "GASELAG" ? "GASELAG" : "BASES";
+      out[k].files_error += 1;
+    }
+    for (const k of ["BASES" , "GASELAG"]) out[k].files_total = out[k].files_ok + out[k].files_error;
+    return out;
   }, [auditSummary]);
 
   const uploadAbortRef = useRef<AbortController | null>(null);
@@ -321,7 +357,7 @@ export default function Log01ExcelPage() {
     lastCursorRef.current = -1;
     stopPolling("reset");
 
-    const allFiles = [...files, ...gaselagFiles];
+    const allFiles = [...files];
     if (!allFiles.length) {
       setErrorMsg("Debes seleccionar al menos 1 Excel.");
       return;
@@ -482,25 +518,17 @@ export default function Log01ExcelPage() {
             <div className="row">
               <div className="col-12 mB-15">
                 <MultiFilePicker
-                  label="Bases Comerciales (xlsx)"
-                  title="Archivos Base Comercial"
+                  label="Archivos Excel (Bases Comerciales / GASELAG) (xlsx)"
+                  title="Archivos Excel"
                   accept=".xlsx"
                   files={files}
                   setFiles={setFiles}
                   disabled={running}
                 />
+                <div className="small text-muted mT-5">
+                  Nota: el sistema identifica el tipo de archivo por cabeceras/contenido (AUTO). No depende del nombre.
+                </div>
               </div>
-              <div className="col-12 mB-15">
-                <MultiFilePicker
-                  label="GASELAG (xlsx)"
-                  title="Archivos GASELAG"
-                  accept=".xlsx"
-                  files={gaselagFiles}
-                  setFiles={setGaselagFiles}
-                  disabled={running}
-                />
-              </div>
-
 
               <div className="col-md-6 mB-15">
                 <label className="form-label mB-0">Nombre de salida (opcional)</label>
@@ -597,7 +625,44 @@ export default function Log01ExcelPage() {
                         <strong>{auditSummary.files_error ?? "N/D"}</strong>
                       </div>
 
-                      <div className="mT-10 small text-muted">No conformes por OI (origen)</div>
+                      <div className="mT-10 small text-muted">Totales por tipo (origen)</div>
+                      <div className="table-responsive">
+                        <table className="table table-sm mB-0">
+                          <thead>
+                            <tr className="small">
+                              <th style={{ whiteSpace: "nowrap" }}>Tipo</th>
+                              <th style={{ whiteSpace: "nowrap" }}>Archivos</th>
+                              <th style={{ whiteSpace: "nowrap" }}>Leídos</th>
+                              <th style={{ whiteSpace: "nowrap" }}>Conformes</th>
+                              <th style={{ whiteSpace: "nowrap" }}>No conformes</th>
+                              <th style={{ whiteSpace: "nowrap" }}>Ignorados</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {["BASES", "GASELAG"].map((k) => {
+                              const b = (bySource as any)?.[k] ?? {};
+                              const filesTotal = b?.files_total ?? (Number(b?.files_ok ?? 0) + Number(b?.files_error ?? 0));
+                              return (
+                                <tr key={k} className="small">
+                                  <td style={{ whiteSpace: "nowrap" }}><strong>{k}</strong></td>
+                                  <td style={{ whiteSpace: "nowrap" }}>
+                                    <strong>{filesTotal ?? 0}</strong>{" "}
+                                    <span className="text-muted">
+                                      (OK: {b?.files_ok ?? 0} · Rech: {b?.files_error ?? 0})
+                                    </span>
+                                  </td>
+                                  <td style={{ whiteSpace: "nowrap" }}><strong>{b?.rows_read ?? 0}</strong></td>
+                                  <td style={{ whiteSpace: "nowrap" }}><strong>{b?.conformes ?? 0}</strong></td>
+                                  <td style={{ whiteSpace: "nowrap" }}><strong>{b?.no_conformes ?? 0}</strong></td>
+                                  <td style={{ whiteSpace: "nowrap" }}><strong>{b?.rows_ignored_invalid_estado ?? 0}</strong></td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="mT-10 small text-muted">No conformes por OI (origen) — BASES</div>
 
                       {auditByOiOkSorted.length > 0 ? (
                         <div className="table-responsive">
@@ -634,6 +699,16 @@ export default function Log01ExcelPage() {
                         <div className="small text-muted">N/D</div>
                       )}
 
+                      {Number((bySource as any)?.GASELAG?.rows_read ?? 0) > 0 ? (
+                        <div className="mT-10 small">
+                          <span className="text-muted">GASELAG (origen):</span>{" "}
+                          Leídos: <strong>{(bySource as any).GASELAG.rows_read ?? 0}</strong> · Conformes:{" "}
+                          <strong>{(bySource as any).GASELAG.conformes ?? 0}</strong> · No conformes:{" "}
+                          <strong>{(bySource as any).GASELAG.no_conformes ?? 0}</strong> · Ignorados(estado):{" "}
+                          <strong>{(bySource as any).GASELAG.rows_ignored_invalid_estado ?? 0}</strong>
+                        </div>
+                      ) : null}
+
                       {auditRejectedSorted.length > 0 ? (
                         <div className="mT-15">
                           <div className="small text-muted">Archivos rechazados</div>
@@ -653,7 +728,14 @@ export default function Log01ExcelPage() {
                                   if (code && detail) motivo = `(${code}) ${detail}`;
                                   else if (code) motivo = `(${code})`;
                                   else motivo = detail || "N/D";
-                                  const oiOrFile = r?.oi ?? r?.filename ?? "N/D";
+                                  const src = String(r?.source ?? "").toUpperCase();
+                                  let oiOrFile = r?.filename ?? "N/D";
+                                  if (src === "BASES") {
+                                    const oiNum = Number(r?.oi_num);
+                                    if (Number.isFinite(oiNum) && oiNum > 0) oiOrFile = `OI-${oiNum} / ${oiOrFile}`;
+                                  } else if (src === "GASELAG") {
+                                    oiOrFile = `GASELAG / ${oiOrFile}`;
+                                  }
                                   return (
                                     <tr key={i} className="small">
                                       <td style={{ whiteSpace: "nowrap" }}>{oiOrFile}</td>
@@ -713,6 +795,23 @@ export default function Log01ExcelPage() {
                               {auditSummary.technical?.series_duplicates_eliminated ??
                                 auditSummary.detail?.series_duplicates_eliminated ??
                                 "N/D"}
+                            </strong>
+                          {" "}
+                            · Únicas = Leídos − Duplicados:{" "}
+                            <strong>
+                              {(() => {
+                                const rows =
+                                  auditSummary.technical?.rows_total_read ??
+                                  auditSummary.rows_total_read ??
+                                  auditSummary.totals_input?.rows_read;
+                                const dup =
+                                  auditSummary.technical?.series_duplicates_eliminated ??
+                                  auditSummary.detail?.series_duplicates_eliminated;
+                                if (typeof rows === "number" && typeof dup === "number") return rows - dup;
+                                // fallback: si backend ya trae series_total_dedup, úsalo
+                                const uniques = auditSummary.series_total_dedup;
+                                return typeof uniques === "number" ? uniques : "N/D";
+                              })()}
                             </strong>
                           </div>
                         </div>
