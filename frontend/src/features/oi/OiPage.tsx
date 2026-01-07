@@ -18,6 +18,7 @@ import {
   type BancadaRead,
   type BancadaRow,
   type BancadaCreate,
+  type BancadaDuplicateEntry,
   type BancadaUpdatePayload,
   type OIUpdatePayload
 } from "../../api/oi";
@@ -129,6 +130,48 @@ const toUtcNaiveIso = (value: string) => {
   return d.toISOString().replace("Z", "");
 };
 
+type DuplicateInfo = {
+  message: string;
+  bancadaItem?: number;
+  bancadaId?: number;
+};
+
+const normalizeMedidorKey = (value?: string | null) =>
+  (value ?? "").trim().toUpperCase();
+
+const buildDuplicateMap = (entries: BancadaDuplicateEntry[]) => {
+  const grouped: Record<string, { items: number[]; ids: number[] }> = {};
+  entries.forEach((entry) => {
+    const key = normalizeMedidorKey(entry.medidor);
+    if (!key) return;
+    if (!grouped[key]) {
+      grouped[key] = { items: [], ids: [] };
+    }
+    if (entry.bancada_item != null && !grouped[key].items.includes(entry.bancada_item)) {
+      grouped[key].items.push(entry.bancada_item);
+    }
+    if (entry.bancada_id != null && !grouped[key].ids.includes(entry.bancada_id)) {
+      grouped[key].ids.push(entry.bancada_id);
+    }
+  });
+
+  const result: Record<string, DuplicateInfo> = {};
+  Object.entries(grouped).forEach(([key, data]) => {
+    let message = "Este medidor existe en otra bancada de esta misma OI.";
+    if (data.items.length > 0) {
+      const items = [...data.items].sort((a, b) => a - b).join(", ");
+      message = `Este medidor existe en la bancada #${items} de esta misma OI.`;
+    }
+    result[key] = {
+      message,
+      bancadaItem: data.items[0],
+      bancadaId: data.ids[0],
+    };
+  });
+
+  return result;
+};
+
 export default function OiPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -186,6 +229,7 @@ export default function OiPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [medidoresUsuarioApi, setMedidoresUsuarioApi] = useState<number | null>(null);
   const [medidoresTotalCode, setMedidoresTotalCode] = useState(0);
+  const [duplicateMap, setDuplicateMap] = useState<Record<string, DuplicateInfo>>({});
 
   // Borradores temporales de bancadas (por id o "new")
   const [bancadaDrafts, setBancadaDrafts] = useState<Record<string, BancadaForm>>({});
@@ -501,6 +545,19 @@ export default function OiPage() {
   };
 
   const isEditingExisting = !!oiId && isEditingOI && !isReadOnly;
+
+  const clearDuplicateMap = () => setDuplicateMap({});
+  const clearDuplicateForMedidor = (value?: string | null) => {
+    const key = normalizeMedidorKey(value);
+    if (!key) return;
+    setDuplicateMap((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
   
 
   const openNew = () => {
@@ -509,6 +566,7 @@ export default function OiPage() {
       return;
     }
     if (!oiId) return;
+    clearDuplicateMap();
     setBancadaDrafts((prev) => {
       if (prev[NEW_BANCADA_DRAFT_KEY]) return prev;
       const stored = loadNewBancadaDraft(oiId);
@@ -524,6 +582,7 @@ export default function OiPage() {
       toast({ kind: "warning", title: "Solo lectura", message: "No puede editar bancadas mientras la OI est? bloqueada." });
       return;
     }
+    clearDuplicateMap();
     setEditing(row);
     setShowModal(true);
   };
@@ -559,6 +618,7 @@ export default function OiPage() {
       toast({ kind: "warning", title: "Solo lectura", message: "No puede guardar bancadas mientras la OI está bloqueada." });
       return;
     }
+    clearDuplicateMap();
     try {
       setBusy(true);
 
@@ -630,6 +690,20 @@ export default function OiPage() {
           kind: "error",
           title: "Conflicto",
           message: "La bancada fue modificada por otro usuario. Recargue la página y vuelva a intentar.",
+        });
+      } else if (status === 400) {
+        const duplicates = Array.isArray(e?.duplicates)
+          ? e.duplicates
+          : Array.isArray(e?.response?.data?.duplicates)
+            ? e.response.data.duplicates
+            : [];
+        if (duplicates.length > 0) {
+          setDuplicateMap(buildDuplicateMap(duplicates));
+        }
+        toast({
+          kind: "warning",
+          title: "Validacion",
+          message: e?.message ?? "Error guardando bancada",
         });
       } else {
         toast({
@@ -773,23 +847,24 @@ export default function OiPage() {
   };
 
   const handleBancadaCancel = (draft: BancadaForm) => {
-  const key = getDraftKey(editing);
-  let nextDraft = { ...draft };
-  if (!editing) {
-    const existingDraft = bancadaDrafts[NEW_BANCADA_DRAFT_KEY];
-    if (!nextDraft.draftCreatedAt) {
-      nextDraft.draftCreatedAt = existingDraft?.draftCreatedAt ?? new Date().toISOString();
+    clearDuplicateMap();
+    const key = getDraftKey(editing);
+    let nextDraft = { ...draft };
+    if (!editing) {
+      const existingDraft = bancadaDrafts[NEW_BANCADA_DRAFT_KEY];
+      if (!nextDraft.draftCreatedAt) {
+        nextDraft.draftCreatedAt = existingDraft?.draftCreatedAt ?? new Date().toISOString();
+      }
+      if (!nextDraft.draftId) {
+        nextDraft.draftId = existingDraft?.draftId ?? makeDraftId();
+      }
     }
-    if (!nextDraft.draftId) {
-      nextDraft.draftId = existingDraft?.draftId ?? makeDraftId();
+    setBancadaDrafts(prev => ({ ...prev, [key]: nextDraft }));
+    if (!editing) {
+      persistNewBancadaDraft(oiId, nextDraft);
     }
-  }
-  setBancadaDrafts(prev => ({ ...prev, [key]: nextDraft }));
-  if (!editing) {
-    persistNewBancadaDraft(oiId, nextDraft);
-  }
-  setShowModal(false);
-};
+    setShowModal(false);
+  };
 
   const handleStartEditOI = () => {
     if (isReadOnly) {
@@ -1276,11 +1351,16 @@ export default function OiPage() {
         show={showModal}
         title={editing ? `Editar bancada #${editing.item}` : "Nueva bancada"}
         initial={editingInitial}
-        onClose={() => setShowModal(false)}
+        onClose={() => {
+          clearDuplicateMap();
+          setShowModal(false);
+        }}
         onSubmit={handleSaveBancada}
         onCancelWithDraft={handleBancadaCancel}
         numerationType={numerationType}
         readOnly={isReadOnly}
+        duplicateMap={duplicateMap}
+        onClearDuplicate={clearDuplicateForMedidor}
       />
        )}
 

@@ -113,6 +113,12 @@ export type BancadaRow = {
   q1?: QBlock | null;
 };
 
+export type BancadaDuplicateEntry = {
+  medidor: string;
+  bancada_id?: number | null;
+  bancada_item?: number | null;
+};
+
 export type BancadaCreate = {
   estado: number;
   rows: number;
@@ -167,8 +173,22 @@ export async function addBancada(oiId: number, payload: BancadaCreate): Promise<
     const { data } = await api.post<BancadaRead>(`/oi/${oiId}/bancadas`, payload);
     return data;
   } catch (e: any) {
-    const msg = e?.response?.data?.detail ?? e?.message ?? "No se puedo agregar la bancada";
-    throw new Error(msg)
+    const detail = e?.response?.data?.detail;
+    let msg = e?.message ?? "No se puedo agregar la bancada";
+    if (typeof detail === "string") {
+      msg = detail;
+    } else if (detail && typeof detail === "object") {
+      msg = (detail as any).message ?? (detail as any).detail ?? msg;
+    }
+    const duplicates =
+      e?.response?.data?.duplicates ??
+      (detail && typeof detail === "object" ? (detail as any).duplicates : undefined);
+    const err = new Error(msg) as Error & { status?: number; duplicates?: BancadaDuplicateEntry[] };
+    err.status = e?.response?.status;
+    if (Array.isArray(duplicates)) {
+      err.duplicates = duplicates as BancadaDuplicateEntry[];
+    }
+    throw err;
   }
 }
 
@@ -177,9 +197,21 @@ export async function updateBancada(bancadaId: number, payload: BancadaUpdatePay
     const { data } = await api.put<BancadaRead>(`/oi/bancadas/${bancadaId}`, payload);
     return data;
   } catch (e: any) {
-    const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo actualizar la bancada";
-    const err = new Error(msg) as Error & { status?: number };
+    const detail = e?.response?.data?.detail;
+    let msg = e?.message ?? "No se pudo actualizar la bancada";
+    if (typeof detail === "string") {
+      msg = detail;
+    } else if (detail && typeof detail === "object") {
+      msg = (detail as any).message ?? (detail as any).detail ?? msg;
+    }
+    const duplicates =
+      e?.response?.data?.duplicates ??
+      (detail && typeof detail === "object" ? (detail as any).duplicates : undefined);
+    const err = new Error(msg) as Error & { status?: number; duplicates?: BancadaDuplicateEntry[] };
     err.status = e?.response?.status;
+    if (Array.isArray(duplicates)) {
+      err.duplicates = duplicates as BancadaDuplicateEntry[];
+    }
     throw err;
   }
 }

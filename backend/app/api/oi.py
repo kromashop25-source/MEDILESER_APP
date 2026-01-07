@@ -5,7 +5,7 @@ from typing import List, Sequence, cast
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Header
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from sqlmodel import Session, select, delete
 from sqlalchemy import func, desc, update
 from sqlalchemy.sql.elements import ColumnElement
@@ -409,6 +409,138 @@ def _medidor_matches(search_lc: str, medidor: str | None, rows_data: Sequence[ob
         if value and search_lc in value.lower():
             return True
     return False
+
+
+_MEDIDOR_SUFFIX_RE = re.compile(r"^(.*?)(\d+)$")
+
+def _normalize_medidor_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().upper()
+
+
+def _split_medidor_suffix(value: str) -> tuple[str, int, int] | None:
+    match = _MEDIDOR_SUFFIX_RE.match(value)
+    if not match:
+        return None
+    prefix, num_str = match.group(1), match.group(2)
+    try:
+        number = int(num_str)
+    except ValueError:
+        return None
+    return prefix, number, len(num_str)
+
+
+def _expand_correlativo_by_count(base: str, count: int) -> list[str]:
+    if count <= 1:
+        return [base]
+    parsed = _split_medidor_suffix(base)
+    if not parsed:
+        raise HTTPException(
+            status_code=400,
+            detail="Serie de medidor correlativa invalida; debe terminar en numeros.",
+        )
+    prefix, number, width = parsed
+    return [f"{prefix}{str(number + offset).zfill(width)}" for offset in range(count)]
+
+
+class DuplicateMedidoresError(Exception):
+    def __init__(self, message: str, duplicates: list[dict]):
+        super().__init__(message)
+        self.message = message
+        self.duplicates = duplicates
+
+
+def _bancada_to_medidor_set(
+    rows_data: Sequence[object] | None,
+    medidor: str | None,
+    rows: int | None,
+    numeration_type: NumerationType,
+) -> set[str]:
+    values: list[str] = []
+    if rows_data:
+        for row in rows_data:
+            normalized = _normalize_medidor_value(_row_medidor_value(row))
+            if normalized:
+                values.append(normalized)
+    if values:
+        return set(values)
+
+    base = _normalize_medidor_value(medidor)
+    if not base:
+        return set()
+
+    count = int(rows or 0)
+    if count <= 1:
+        return {base}
+    if numeration_type == NumerationType.correlativo:
+        return set(_expand_correlativo_by_count(base, count))
+    return {base}
+
+
+def _validate_no_duplicate_medidores(
+    session: Session,
+    oi: OI,
+    new_set: set[str],
+    exclude_bancada_id: int | None = None,
+) -> None:
+    if not new_set or oi.id is None:
+        return
+    numeration_type = _normalize_numeration_type(
+        oi.numeration_type.value if isinstance(oi.numeration_type, NumerationType) else str(oi.numeration_type)
+    )
+    stmt = select(Bancada).where(Bancada.oi_id == oi.id)
+    if exclude_bancada_id is not None:
+        stmt = stmt.where(Bancada.id != exclude_bancada_id)
+    duplicates: dict[str, set[str]] = {}
+    duplicates_entries: list[dict] = []
+    duplicates_seen: set[tuple[str, int | None]] = set()
+    duplicates_limit = 50
+    for existing in session.exec(stmt).all():
+        existing_set = _bancada_to_medidor_set(
+            existing.rows_data,
+            existing.medidor,
+            existing.rows,
+            numeration_type,
+        )
+        overlap = new_set & existing_set
+        if not overlap:
+            continue
+        label = f"#{existing.item}" if existing.item else (f"id {existing.id}" if existing.id else "")
+        for medidor in overlap:
+            if medidor not in duplicates:
+                duplicates[medidor] = set()
+            if label:
+                duplicates[medidor].add(label)
+            if len(duplicates_entries) < duplicates_limit:
+                key = (medidor, existing.id)
+                if key not in duplicates_seen:
+                    duplicates_seen.add(key)
+                    duplicates_entries.append(
+                        {
+                            "medidor": medidor,
+                            "bancada_id": existing.id,
+                            "bancada_item": existing.item,
+                        }
+                    )
+
+    if not duplicates:
+        return
+
+    limit = 10
+    items: list[str] = []
+    for medidor in sorted(duplicates):
+        if len(items) >= limit:
+            break
+        labels = duplicates[medidor]
+        if labels:
+            items.append(f"{medidor} (bancada {', '.join(sorted(labels))})")
+        else:
+            items.append(medidor)
+    detail = "Medidores repetidos dentro de la OI: " + ", ".join(items)
+    if len(duplicates) > limit:
+        detail += "..."
+    raise DuplicateMedidoresError(detail, duplicates_entries)
 
 
 def _build_oi_read(
@@ -1194,6 +1326,19 @@ def add_bancada(
     ).all()
     next_item = (max([x or 0 for x in existing_items]) if existing_items else 0) + 1
     rows_data = _dump_rows_data(payload.rows_data)
+    numeration_type = _normalize_numeration_type(
+        oi.numeration_type.value if isinstance(oi.numeration_type, NumerationType) else str(oi.numeration_type)
+    )
+    new_set = _bancada_to_medidor_set(
+        payload.rows_data,
+        payload.medidor,
+        payload.rows,
+        numeration_type,
+    )
+    try:
+        _validate_no_duplicate_medidores(session, oi, new_set)
+    except DuplicateMedidoresError as exc:
+        return JSONResponse(status_code=400, content={"detail": exc.message, "duplicates": exc.duplicates})
     now = datetime.utcnow()
     created_at = _resolve_bancada_created_at(payload.draft_created_at)
     b = Bancada(
@@ -1293,6 +1438,20 @@ def update_bancada(
             status_code=409,
             detail="La bancada fue modificada por otro usuario. Recargue la OI y vuelva a intentar.",
         )
+
+    numeration_type = _normalize_numeration_type(
+        oi.numeration_type.value if isinstance(oi.numeration_type, NumerationType) else str(oi.numeration_type)
+    )
+    new_set = _bancada_to_medidor_set(
+        payload.rows_data,
+        payload.medidor,
+        payload.rows,
+        numeration_type,
+    )
+    try:
+        _validate_no_duplicate_medidores(session, oi, new_set, exclude_bancada_id=b.id)
+    except DuplicateMedidoresError as exc:
+        return JSONResponse(status_code=400, content={"detail": exc.message, "duplicates": exc.duplicates})
 
     now = datetime.utcnow()
     saved_at_was_null = b.saved_at is None

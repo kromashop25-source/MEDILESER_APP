@@ -122,6 +122,7 @@ export default function Log01ExcelPage() {
   const pollingActiveRef = useRef<boolean>(false);
   const pollCursorRef = useRef<number>(-1);
   const lastCursorRef = useRef<number>(-1);
+  const cancelInfoPushedRef = useRef<boolean>(false);
 
   function getOrCreateOperationId() {
     if (!operationIdRef.current) {
@@ -135,7 +136,27 @@ export default function Log01ExcelPage() {
       (ev as any).message ?? (ev as any).detail ?? ""
     )}`;
     setProgressLabel(label);
-    setEvents((prev) => [...prev, ev]);
+    setEvents((prev) => {
+      const next = [...prev, ev];
+
+      // Matiz UX: al cancelar, agregar un evento final con resumen de avance
+      if (!cancelInfoPushedRef.current && ev.stage === "cancelled") {
+        cancelInfoPushedRef.current = true;
+        const processed = next.filter((e) => e.stage === "file_done" || e.stage === "file_error").length;
+        const ok = next.filter((e) => e.stage === "file_done").length;
+        const rejected = next.filter((e) => e.stage === "file_error").length;
+
+        const summaryEv = {
+          type: "status",
+          stage: "cancelled",
+          message: `Cancelación aplicada. Archivos procesados hasta el momento: ${processed} (OK: ${ok}, Rechazados: ${rejected}). No se generó resultado final.`,
+        } as unknown as ProgressEvent;
+
+        return [...next, summaryEv];
+      }
+
+      return next;
+    });
 
     // Capturar resumen de auditoría al completar
     if (ev.type === "complete") {
@@ -174,6 +195,9 @@ export default function Log01ExcelPage() {
   }
 
   function handleEvent(ev: ProgressEvent) {
+    // Si ya ocurrió un evento terminal (complete/cancelled/failed),
+    // ignorar cualquier evento posterior (race con polling o stream).
+    if (terminalEventRef.current) return;
     if (shouldSkipEvent(ev)) return;
     pushEvent(ev);
   }
@@ -292,6 +316,7 @@ export default function Log01ExcelPage() {
     setResultOperationId(null);
     progressAbortReasonRef.current = null;
     terminalEventRef.current = false;
+    cancelInfoPushedRef.current = false;
     pollCursorRef.current = -1;
     lastCursorRef.current = -1;
     stopPolling("reset");
@@ -474,14 +499,11 @@ export default function Log01ExcelPage() {
                   setFiles={setGaselagFiles}
                   disabled={running}
                 />
-                <div className="small text-muted mT-5">
-                  Nota: El nombre del archivo no se valida (patrón variable). La validación real se hará por cabeceras/contenido al implementar backend GASELAG.
-                </div>
               </div>
 
 
               <div className="col-md-6 mB-15">
-                <label className="form-label">Nombre de salida (opcional)</label>
+                <label className="form-label mB-0">Nombre de salida (opcional)</label>
                 <input
                   className="form-control"
                   value={outputFilename}
@@ -491,14 +513,20 @@ export default function Log01ExcelPage() {
                 />
               </div>
 
-              <div className="col-md-6 mB-15 d-flex align-items-end">
-                <div className="d-flex gap-10 w-100">
-                  <button className="btn btn-primary w-100" onClick={run} disabled={running}>
+              <div className="col-md-6 mB-15">
+                {/* label invisible para alinear visualmente con el bloque del input (label+control) */}                
+                <label className="form-label mB-0 invisible">Acciones</label>
+                <div className="vi-log01-actions">
+                  <button
+                    className="btn btn-primary btn-sm vi-log01-btn-primary"
+                    onClick={run}
+                    disabled={running}
+                  >
                     {running ? "Procesando..." : "Consolidar"}
                   </button>
                   {running ? (
                     <button
-                      className="btn btn-outline-danger"
+                      className="btn btn-outline-danger btn-sm"
                       onClick={() => void cancelOperation()}
                     >
                       Cancelar
@@ -507,19 +535,19 @@ export default function Log01ExcelPage() {
                   {!running && resultReady ? (
                     <>
                       <button
-                        className="btn btn-outline-secondary"
+                        className="btn btn-outline-secondary btn-sm"
                         onClick={() => void downloadManifest()}
                       >
                         Manifiesto (JSON)
                       </button>
                       <button
-                        className="btn btn-outline-secondary"
+                        className="btn btn-outline-secondary btn-sm"
                         onClick={() => void downloadNoConformeFinal()}
                       >
                         No conforme (JSON)
                       </button>
                       <button
-                        className="btn btn-outline-primary"
+                        className="btn btn-outline-success btn-sm"
                         onClick={() => void downloadResult()}
                       >
                         Descargar
@@ -675,12 +703,15 @@ export default function Log01ExcelPage() {
                           <div className="small">
                             Registros leídos (total):{" "}
                             <strong>
-                              {auditSummary.technical?.rows_total_read ?? auditSummary.rows_total_read ?? "N/D"}
+                              {auditSummary.technical?.rows_total_read ??
+                                auditSummary.rows_total_read ??
+                                auditSummary.totals_input?.rows_read ??
+                                "N/D"}
                             </strong>{" "}
                             · Duplicados eliminados:{" "}
                             <strong>
                               {auditSummary.technical?.series_duplicates_eliminated ??
-                                auditSummary.series_duplicates_eliminated ??
+                                auditSummary.detail?.series_duplicates_eliminated ??
                                 "N/D"}
                             </strong>
                           </div>
@@ -697,7 +728,11 @@ export default function Log01ExcelPage() {
               <div className="mT-20">
                 <h6 className="c-grey-900">Eventos</h6>
                 <div className="bd p-10" style={{ maxHeight: 240, overflow: "auto" }}>
-                  {events.map((ev, i) => {
+                  {events
+                    .slice()
+                    .reverse()
+                    .map((ev, i) => {
+                    const originalIndex = events.length - 1 - i;
                     const msg = (ev as any).message ?? "";
                     const code = (ev as any).code ?? "";
                     const detail = (ev as any).detail ?? "";
@@ -710,7 +745,7 @@ export default function Log01ExcelPage() {
                     }
 
                     return (
-                      <div key={i} className="small">
+                      <div key={originalIndex} className="small">
                         {translateProgressType(ev.type)} · {translateProgressStage(ev.stage)} ·{" "}
                         {baseText}
                         {suffix ? <span className="text-muted"> ({suffix})</span> : null}

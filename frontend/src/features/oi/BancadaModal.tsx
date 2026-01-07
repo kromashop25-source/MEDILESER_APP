@@ -16,6 +16,8 @@ type RowConstraintErrors = {
 };
 
 const MEDIDOR_SERIE_RE = /^[A-Za-z0-9]{10}$/;
+const normalizeMedidorKey = (value?: string | null) =>
+  (value ?? "").trim().toUpperCase();
 
 // Función para ajustar dinámicamente el ancho del input según su contenido
 const handleAutoResize = (e: React.FormEvent<HTMLInputElement>) => {
@@ -79,6 +81,8 @@ type Props = {
   onCancelWithDraft?: (draft: BancadaForm) => void;
   numerationType: NumerationType;
   readOnly?: boolean;
+  duplicateMap?: Record<string, { message: string }>;
+  onClearDuplicate?: (value?: string | null) => void;
 };
 
 // Normaliza los valores numéricos que el usuario escribe con punto (.) o coma (,)
@@ -290,6 +294,8 @@ export default function BancadaModal({
   onSubmit,
   onCancelWithDraft,
   numerationType,   // ?? NUEVO
+  duplicateMap,
+  onClearDuplicate,
   readOnly,
 }: Props) {
   const defaultValues: BancadaForm = {
@@ -1668,6 +1674,11 @@ useEffect(() => {
                         activeRow === index ? "table-active" : ""
                       ].filter(Boolean).join(" ");
                       const medidorField = register(`rowsData.${index}.medidor`);
+                      const medidorKey = normalizeMedidorKey(rowData.medidor ?? "");
+                      const backendDupMessage = medidorKey ? duplicateMap?.[medidorKey]?.message : "";
+                      const medidorErrorMessage =
+                        rowErr.medidor_format || rowErr.medidor_dup || backendDupMessage || "";
+                      const hasMedidorError = Boolean(medidorErrorMessage);
                       const conformidadUpper = (conformidad || "").toUpperCase();
                       const verdictClass =
                         conformidadUpper === "NO CONFORME"
@@ -1698,12 +1709,14 @@ useEffect(() => {
                               className={
                                 [
                                   "form-control form-control-sm p-1 text-center vi-medidor-input",
-                                  rowErr.medidor_dup || rowErr.medidor_format ? "vi-error-cell" : "",
+                                  hasMedidorError ? "vi-error-cell" : "",
                                 ].filter(Boolean).join(" ")
                               }
-                              title={rowErr.medidor_format || ""}
+                              title={medidorErrorMessage || ""}
                               onChange={(event) => {
+                                const prevValue = getValues(`rowsData.${index}.medidor`);
                                 medidorField.onChange(event);
+                                onClearDuplicate?.(prevValue);
                                 if (index === 0) return;
 
                               const value = event.currentTarget.value.trim();

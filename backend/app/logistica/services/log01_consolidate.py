@@ -125,8 +125,9 @@ def _normalize_estado_literal(v: Any) -> Optional[str]:
     - "CONFORME"
     - "NO CONFORME"
     Sin reglas numéricas. Valores numéricos se rechazan.
-    Tolera variaciones comunes: espacios dobles, guiones, puntuación, saltos de línea.
-    """
+    Regla operativa (Opción A): si el valor no normaliza, el registro se ignora.
+    Tolera variaciones comunes: espacios dobles, guiones, puntuación y diacríticos.
+     """
     if v is None:
         return None
     # Rechazar números (0/1/2...) explícitamente: no hay reglas numéricas en LOG-01
@@ -142,7 +143,7 @@ def _normalize_estado_literal(v: Any) -> Optional[str]:
 
     s = s.upper()
     s = s.replace("-", " ")
-    # eliminar puntuación y síimbolos
+    # eliminar puntuación y símbolos (mantener solo letras y espacios)
     s = re.sub(r"[^A-Z\s]+", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
 
@@ -602,11 +603,10 @@ def process_log01_files(
                     if prev is None or (oi_num is not None and oi_num > prev.oi_num):
                         series[serie] = SerieInfo(oi_num=oi_num or 0, estado=estado, values=row_values)
                 else:
-                    # GASELAG baseline: NO puede ganarle a BASES (oi_num>0)
+                    # GASELAG: no hay OI real; mantenemos oi_num=0 para no inventar OI-XXXX
                     if prev is None or prev.oi_num == 0:
+                        # baseline: solo registrar si no existe un registro BASES (oi_num>0)
                         series[serie] = SerieInfo(oi_num=0, estado=estado, values=row_values)
-                    # si prev.oi_num>0 (BASES), se conserva prev y se ignora el registro GASELAG
-
 
             file_no_conforme_series = sorted(set(file_no_conforme_series), key=_natural_key)
             rows_total_read += extracted
@@ -624,7 +624,7 @@ def process_log01_files(
                     "rows_read": extracted,
                     "conformes": file_conformes,
                     "no_conformes": file_no_conformes,
-                    "ignored_invalid_estado": ignored_invalid_estado,
+                    "rows_ignored_invalid_estado": ignored_invalid_estado,
                     "invalid_estado_examples": invalid_estado_exmples,
                     "series_no_conforme_origen": file_no_conforme_series,
                     "error": None,
@@ -635,11 +635,12 @@ def process_log01_files(
                 {
                     "type": "status",
                     "stage": "file_done",
-                    "message": f"{fname} | Leidos: {extracted} | Conformes: {file_conformes} | No conformes: {file_no_conformes}",
+                    "message": f"{fname} | Leidos: {extracted} | Conformes: {file_conformes} | No conformes: {file_no_conformes} | Ignorados(estado): {ignored_invalid_estado}",
                     "file": fname,
                     "rows_read": extracted,
                     "conformes": file_conformes,
                     "no_conformes": file_no_conformes,
+                    "rows_ignored_invalid_estado": ignored_invalid_estado,
                 },
             )
 

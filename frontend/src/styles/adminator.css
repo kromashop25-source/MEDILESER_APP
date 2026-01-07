@@ -420,3 +420,27 @@
   background-position: center;
   background-repeat: no-repeat;
 }
+
+/* ===== LOG-01: acciones (Consolidación Excel) ===== */
+.vi-log01-actions{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+/* El primario no debe expandirse y aplastar a los demás */
+.vi-log01-btn-primary{
+  min-width: 180px;
+}
+
+@media (max-width: 767.98px){
+  .vi-log01-actions{
+    justify-content: stretch;
+  }
+  .vi-log01-btn-primary{
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
