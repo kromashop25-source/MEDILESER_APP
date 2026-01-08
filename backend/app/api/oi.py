@@ -173,14 +173,15 @@ def _is_lock_active(oi: OI, now: datetime | None = None) -> bool:
     return locked_at > current - LOCK_EXPIRATION_DELTA
 
 
-def _clear_expired_lock(oi: OI, session: Session, now: datetime | None = None) -> None:
+def _clear_expired_lock(oi: OI, session: Session, now: datetime | None = None) -> bool:
     if oi.locked_by_user_id is None or oi.locked_at is None:
-        return
+        return False
     if _is_lock_active(oi, now):
-        return
+        return False
     oi.locked_by_user_id = None
     oi.locked_at = None
     session.add(oi)
+    return True
 
 
 def _get_lock_state(
@@ -709,6 +710,9 @@ def get_oi(
 
     sess = _get_session_from_header(authorization)
     _ensure_oi_access(oi, sess)
+    if _clear_expired_lock(oi, session):
+        session.commit()
+        session.refresh(oi)
     medidores_usuario_raw = session.exec(
         select(func.coalesce(func.sum(Bancada.rows), 0)).where(Bancada.oi_id == oi_id)
     ).one()
@@ -1376,6 +1380,9 @@ def get_oi_with_bancadas(
 
     sess = _get_session_from_header(authorization)
     _ensure_oi_access(oi, sess)
+    if _clear_expired_lock(oi, session):
+        session.commit()
+        session.refresh(oi)
     lock_state = _get_lock_state(oi, session, sess)
     rows = list(session.exec(select(Bancada).where(Bancada.oi_id == oi_id)))
     rows.sort(key=lambda x: (x.item or 0))

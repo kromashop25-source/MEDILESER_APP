@@ -254,6 +254,7 @@ export default function OiPage() {
   const originalBancadasRef = useRef<BancadaRead[]>([]);
   const originalOiUpdatedAtRef = useRef<string | null>(null);
   const skipExitWarnRef = useRef(false);
+  const didSendCloseRef = useRef(false);
 
   // Id del OI creado y lista local de bancadas
   const [oiId, setOiId] = useState<number | null>(null);
@@ -481,6 +482,10 @@ export default function OiPage() {
     setOpenOiId(oiId);
   }, [hasLock, oiId, isReadOnly, isEditMode]);
 
+  useEffect(() => {
+    didSendCloseRef.current = false;
+  }, [oiId]);
+
   const hasDrafts = useMemo(() => Object.keys(bancadaDrafts).length > 0, [bancadaDrafts]);
   const shouldWarnOnExit = isEditMode && !isReadOnly && (hasLock || isEditingOI || hasDrafts);
 
@@ -517,11 +522,12 @@ export default function OiPage() {
   useEffect(() => {
     if (!oiId || !hasLock || isReadOnly || !isEditMode) return;
     const releaseLockBestEffort = () => {
-      if (skipExitWarnRef.current) return;
+      if (skipExitWarnRef.current || didSendCloseRef.current) return;
+      didSendCloseRef.current = true;
       const token = getAuth()?.token;
-      const url = buildApiUrl(`/oi/${oiId}/lock`);
+      const url = buildApiUrl(`/oi/${oiId}/close`);
       fetch(url, {
-        method: "DELETE",
+        method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         keepalive: true,
       }).catch(() => undefined);
@@ -1021,6 +1027,7 @@ export default function OiPage() {
   };
 
   const handleBackToList = () => {
+    didSendCloseRef.current = true;
     skipExitWarnRef.current = true;
     resetOiState();
     navigate(getReturnTo());
@@ -1116,6 +1123,7 @@ export default function OiPage() {
     } finally {
       setBusy(false);
     }
+    didSendCloseRef.current = true;
     skipExitWarnRef.current = true;
     resetOiState();
     toast({ kind: "info", message: "Edicion cancelada" });
@@ -1147,6 +1155,7 @@ export default function OiPage() {
     } finally {
       setBusy(false);
     }
+    didSendCloseRef.current = true;
     skipExitWarnRef.current = true;
     resetOiState();
     toast({ kind: "info", message: "Cambios guardados" });
@@ -1165,6 +1174,7 @@ export default function OiPage() {
     } finally {
       setBusy(false);
     }
+    didSendCloseRef.current = true;
     skipExitWarnRef.current = true;
     resetOiState();
     toast({ kind:"info", message:"OI cerrada"});
