@@ -3,12 +3,12 @@ import { getCatalogs, type Catalogs } from "../../api/catalogs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { OISchema, pressureFromPMA, type OIForm, type OIFormInput, type BancadaRowForm } from "./schema"
-import { useMemo, useEffect, useState, useRef } from "react";
+import { useMemo, useEffect, useState, useRef, useContext } from "react";
 import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
 import { getAuth, normalizeRole } from "../../api/auth";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { clearOpenOiId, setOpenOiId } from "../../api/client";
+import { UNSAFE_NavigationContext, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { api, clearOpenOiId, setOpenOiId } from "../../api/client";
 import BancadaModal, { type BancadaForm } from "./BancadaModal";
 import PasswordModal from "./PasswordModal";
 import {
@@ -172,6 +172,41 @@ const buildDuplicateMap = (entries: BancadaDuplicateEntry[]) => {
   return result;
 };
 
+const EXIT_WARNING_MESSAGE =
+  "Tienes una OI abierta en edicion. Cierra la OI antes de salir. Deseas salir de todas formas?";
+
+type BlockerTx = {
+  retry: () => void;
+  location: { pathname: string; search?: string; hash?: string };
+};
+
+const useBlocker = (blocker: (tx: BlockerTx) => void, when = true) => {
+  const navigationContext = useContext(UNSAFE_NavigationContext) as { navigator?: any };
+  const navigator = navigationContext?.navigator;
+
+  useEffect(() => {
+    if (!when) return;
+    if (!navigator || typeof navigator.block !== "function") return;
+
+    const unblock = navigator.block((tx: BlockerTx) => {
+      const autoUnblockingTx = {
+        ...tx,
+        retry() {
+          unblock();
+          tx.retry();
+        },
+      };
+      blocker(autoUnblockingTx);
+    });
+    return unblock;
+  }, [navigator, blocker, when]);
+};
+
+const buildApiUrl = (path: string) => {
+  const base = api.defaults.baseURL ?? (typeof window !== "undefined" ? window.location.origin : "");
+  return `${String(base).replace(/\/$/, "")}${path.startsWith("/") ? "" : "/"}${path}`;
+};
+
 export default function OiPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -218,6 +253,7 @@ export default function OiPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const originalBancadasRef = useRef<BancadaRead[]>([]);
   const originalOiUpdatedAtRef = useRef<string | null>(null);
+  const skipExitWarnRef = useRef(false);
 
   // Id del OI creado y lista local de bancadas
   const [oiId, setOiId] = useState<number | null>(null);
@@ -444,6 +480,58 @@ export default function OiPage() {
     if (!hasLock || isReadOnly || !isEditMode) return;
     setOpenOiId(oiId);
   }, [hasLock, oiId, isReadOnly, isEditMode]);
+
+  const hasDrafts = useMemo(() => Object.keys(bancadaDrafts).length > 0, [bancadaDrafts]);
+  const shouldWarnOnExit = isEditMode && !isReadOnly && (hasLock || isEditingOI || hasDrafts);
+
+  useEffect(() => {
+    if (!shouldWarnOnExit) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      if (skipExitWarnRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [shouldWarnOnExit]);
+
+  useBlocker((tx) => {
+    if (!shouldWarnOnExit) {
+      tx.retry();
+      return;
+    }
+    if (skipExitWarnRef.current) {
+      tx.retry();
+      return;
+    }
+    if (tx.location.pathname === location.pathname) {
+      tx.retry();
+      return;
+    }
+    if (window.confirm(EXIT_WARNING_MESSAGE)) {
+      tx.retry();
+    }
+  }, shouldWarnOnExit);
+
+  useEffect(() => {
+    if (!oiId || !hasLock || isReadOnly || !isEditMode) return;
+    const releaseLockBestEffort = () => {
+      if (skipExitWarnRef.current) return;
+      const token = getAuth()?.token;
+      const url = buildApiUrl(`/oi/${oiId}/lock`);
+      fetch(url, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    const handlePageHide = () => {
+      releaseLockBestEffort();
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [oiId, hasLock, isReadOnly, isEditMode]);
 
   const pma = watch("pma");
   const presion = useMemo(() => pressureFromPMA(Number(pma)), [pma]);
@@ -933,6 +1021,7 @@ export default function OiPage() {
   };
 
   const handleBackToList = () => {
+    skipExitWarnRef.current = true;
     resetOiState();
     navigate(getReturnTo());
   };
@@ -1027,6 +1116,7 @@ export default function OiPage() {
     } finally {
       setBusy(false);
     }
+    skipExitWarnRef.current = true;
     resetOiState();
     toast({ kind: "info", message: "Edicion cancelada" });
     navigate(getReturnTo());
@@ -1057,6 +1147,7 @@ export default function OiPage() {
     } finally {
       setBusy(false);
     }
+    skipExitWarnRef.current = true;
     resetOiState();
     toast({ kind: "info", message: "Cambios guardados" });
     navigate(getReturnTo());
@@ -1074,6 +1165,7 @@ export default function OiPage() {
     } finally {
       setBusy(false);
     }
+    skipExitWarnRef.current = true;
     resetOiState();
     toast({ kind:"info", message:"OI cerrada"});
     navigate(getReturnTo());
