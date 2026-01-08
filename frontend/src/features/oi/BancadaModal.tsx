@@ -3,6 +3,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { BancadaRowForm } from "./schema";
 import type { NumerationType } from "../../api/oi";
+import { clearDraft, saveDraft, type DraftEnvelope, type RecoveryContext } from "../../utils/recoveryDraft";
 
 type RowConstraintErrors = {
   medidor_dup?: string;
@@ -84,6 +85,15 @@ type Props = {
   duplicateMap?: Record<string, { message: string }>;
   onClearDuplicate?: (value?: string | null) => void;
   draftStorageKey?: string | null;
+  draftMeta?: {
+    userId: number;
+    bankId: number;
+    oiId: number;
+    bancadaId?: number | null;
+    isNew?: boolean;
+    returnTo?: string;
+    oiCode?: string | null;
+  } | null;
   isOnline?: boolean;
   showRetry?: boolean;
 };
@@ -301,6 +311,7 @@ export default function BancadaModal({
   onClearDuplicate,
   readOnly,
   draftStorageKey,
+  draftMeta,
   isOnline,
   showRetry,
 }: Props) {
@@ -680,6 +691,39 @@ const handleGridKeyDown = (
     };
   }, [getValues, initial?.version, initial?.draftCreatedAt, initial?.draftId]);
 
+  const buildDraftEnvelope = (snapshot: BancadaForm): DraftEnvelope<BancadaForm> | null => {
+    if (!draftMeta) return null;
+    return {
+      version: 1,
+      ts: new Date().toISOString(),
+      userId: draftMeta.userId,
+      bankId: draftMeta.bankId,
+      oiId: draftMeta.oiId,
+      bancadaId: draftMeta.bancadaId ?? null,
+      isNew: draftMeta.isNew,
+      data: snapshot,
+    };
+  };
+
+  const buildRecoveryContextForDraft = (): RecoveryContext | null => {
+    if (!draftMeta) return null;
+    return {
+      version: 1,
+      ts: new Date().toISOString(),
+      userId: draftMeta.userId,
+      bankId: draftMeta.bankId,
+      oiId: draftMeta.oiId,
+      oiCode: draftMeta.oiCode ?? null,
+      returnTo: draftMeta.returnTo ?? `/oi/${draftMeta.oiId}?mode=edit`,
+      mode: "edit",
+      modal: {
+        type: "bancada",
+        bancadaId: draftMeta.bancadaId ?? null,
+        isNew: draftMeta.isNew,
+      },
+    };
+  };
+
   // Helpers de validación
   const isEmptyValue = (val: any): boolean =>
     val === undefined ||
@@ -700,6 +744,11 @@ const handleGridKeyDown = (
     if (row.medidor && row.medidor.toString().trim() !== "") return true;
 
     return hasAnyBlockData(row);
+  };
+
+  const hasDraftContent = (snapshot: BancadaForm): boolean => {
+    const rows = snapshot.rowsData ?? [];
+    return rows.some((row) => rowHasAnyValue(row));
   };
 
   const hasAnyBlockData = (row: BancadaRowForm): boolean => {
@@ -1186,13 +1235,17 @@ useEffect(() => {
       lastFocusFieldRef.current = null;
     }
     if (draftStorageKey) {
-      try {
-        const snapshot = buildDraftSnapshot();
-        const serialized = JSON.stringify({ version: 1, ts: new Date().toISOString(), data: snapshot });
-        sessionStorage.setItem(draftStorageKey, serialized);
-        lastDraftSnapshotRef.current = serialized;
-      } catch {
-        // ignore
+      const snapshot = buildDraftSnapshot();
+      if (!hasDraftContent(snapshot)) {
+        clearDraft(draftStorageKey);
+        lastDraftSnapshotRef.current = null;
+      } else {
+        const envelope = buildDraftEnvelope(snapshot);
+        if (envelope) {
+          const serialized = JSON.stringify(envelope);
+          saveDraft(draftStorageKey, envelope, buildRecoveryContextForDraft());
+          lastDraftSnapshotRef.current = serialized;
+        }
       }
     }
     if (onCancelWithDraft) {
@@ -1254,18 +1307,21 @@ useEffect(() => {
   useEffect(() => {
     if (!show || !draftStorageKey) return;
     const snapshot = buildDraftSnapshot();
-    const serialized = JSON.stringify({ version: 1, ts: new Date().toISOString(), data: snapshot });
+    if (!hasDraftContent(snapshot)) {
+      clearDraft(draftStorageKey);
+      lastDraftSnapshotRef.current = null;
+      return;
+    }
+    const envelope = buildDraftEnvelope(snapshot);
+    if (!envelope) return;
+    const serialized = JSON.stringify(envelope);
     if (serialized === lastDraftSnapshotRef.current) return;
     if (draftPersistTimerRef.current) {
       window.clearTimeout(draftPersistTimerRef.current);
     }
     draftPersistTimerRef.current = window.setTimeout(() => {
-      try {
-        sessionStorage.setItem(draftStorageKey, serialized);
-        lastDraftSnapshotRef.current = serialized;
-      } catch {
-        // ignore
-      }
+      saveDraft(draftStorageKey, envelope, buildRecoveryContextForDraft());
+      lastDraftSnapshotRef.current = serialized;
     }, 400);
     return () => {
       if (draftPersistTimerRef.current) {

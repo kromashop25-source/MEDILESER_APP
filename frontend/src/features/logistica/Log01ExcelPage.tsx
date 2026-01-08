@@ -173,7 +173,7 @@ export default function Log01ExcelPage() {
     )}`;
     setProgressLabel(label);
     setEvents((prev) => {
-      const next = [...prev, ev];
+      const next = [ev, ...prev];
 
       // Matiz UX: al cancelar, agregar un evento final con resumen de avance
       if (!cancelInfoPushedRef.current && ev.stage === "cancelled") {
@@ -188,7 +188,7 @@ export default function Log01ExcelPage() {
           message: `Cancelación aplicada. Archivos procesados hasta el momento: ${processed} (OK: ${ok}, Rechazados: ${rejected}). No se generó resultado final.`,
         } as unknown as ProgressEvent;
 
-        return [...next, summaryEv];
+        return [summaryEv, ...next];
       }
 
       return next;
@@ -785,14 +785,13 @@ export default function Log01ExcelPage() {
                           <div className="small">
                             Registros leídos (total):{" "}
                             <strong>
-                              {auditSummary.technical?.rows_total_read ??
-                                auditSummary.rows_total_read ??
+                              {auditSummary.rows_total_read ??
                                 auditSummary.totals_input?.rows_read ??
                                 "N/D"}
                             </strong>{" "}
                             · Duplicados eliminados:{" "}
                             <strong>
-                              {auditSummary.technical?.series_duplicates_eliminated ??
+                              {auditSummary.series_duplicates_eliminated ??
                                 auditSummary.detail?.series_duplicates_eliminated ??
                                 "N/D"}
                             </strong>
@@ -827,11 +826,7 @@ export default function Log01ExcelPage() {
               <div className="mT-20">
                 <h6 className="c-grey-900">Eventos</h6>
                 <div className="bd p-10" style={{ maxHeight: 240, overflow: "auto" }}>
-                  {events
-                    .slice()
-                    .reverse()
-                    .map((ev, i) => {
-                    const originalIndex = events.length - 1 - i;
+                  {events.map((ev, i) => {
                     const msg = (ev as any).message ?? "";
                     const code = (ev as any).code ?? "";
                     const detail = (ev as any).detail ?? "";
@@ -844,7 +839,7 @@ export default function Log01ExcelPage() {
                     }
 
                     return (
-                      <div key={originalIndex} className="small">
+                      <div key={i} className="small">
                         {translateProgressType(ev.type)} · {translateProgressStage(ev.stage)} ·{" "}
                         {baseText}
                         {suffix ? <span className="text-muted"> ({suffix})</span> : null}

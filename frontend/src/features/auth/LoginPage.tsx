@@ -4,7 +4,8 @@ import { useForm } from "react-hook-form";
 import { getCatalogs } from "../../api/catalogs";
 import type { Catalogs } from "../../api/catalogs";
 import { isTechnicianRole, login, logout, setSessionBank } from "../../api/auth";
-import { getSessionUserId, popPendingToast } from "../../api/client";
+import { getSessionBankId, getSessionUserId, popPendingToast } from "../../api/client";
+import { maybeRestoreRecovery } from "../../utils/recoveryDraft";
 import PasswordInput from "../../components/PasswordInput";
 import Spinner from "../../components/Spinner";
 import { useToast } from "../../components/Toast";
@@ -51,7 +52,12 @@ export default function LoginPage() {
       const prevUserId = getSessionUserId();
       const auth = await login(v);
       const switchedUser = prevUserId != null && auth.userId && prevUserId !== auth.userId;
-      postLoginTargetRef.current = switchedUser ? "/home" : returnTo;
+      const recoveryDecision = maybeRestoreRecovery(auth.userId, auth.bancoId ?? 0);
+      if (recoveryDecision.target) {
+        postLoginTargetRef.current = recoveryDecision.target;
+      } else {
+        postLoginTargetRef.current = switchedUser ? "/home" : returnTo;
+      }
       if (isTechnicianRole(auth.role)) {
         setShowBankModal(true);
         toast({ kind: "info", title: "Banco", message: "Seleccione el banco para continuar." });
@@ -75,7 +81,15 @@ export default function LoginPage() {
     if (!canConfirmBank) return;
     try {
       setSavingBank(true);
-      await setSessionBank(bankId);
+      const prevBankId = getSessionBankId();
+      const switchedBank = prevBankId != null && prevBankId !== bankId;
+      const auth = await setSessionBank(bankId);
+      const recoveryDecision = maybeRestoreRecovery(auth.userId, auth.bancoId ?? bankId);
+      if (recoveryDecision.target) {
+        postLoginTargetRef.current = recoveryDecision.target;
+      } else if (switchedBank) {
+        postLoginTargetRef.current = "/home";
+      }
       window.location.replace(postLoginTargetRef.current);
     } catch (e: any) {
       const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo guardar el banco.";

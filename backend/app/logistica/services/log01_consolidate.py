@@ -435,7 +435,7 @@ def process_log01_files(
 
         oi_num: Optional[int] = None
         oi_tag: Optional[str] = None
-        source_type: str = "BASES"
+        source_type: str = "AUTO"
         try:
             data = _read_input_bytes(item)
             if not data:
@@ -677,15 +677,17 @@ def process_log01_files(
             if not err_detail:
                 err_detail = "Error no especificado"
             # En errores debemos registrar el tipo REAL del archivo si ya fue detectado
-            err_source = source_type if "source_type" in locals() else source
-            # Si el error ocurrió antes de determinar source_type y venimos en AUTO,
-            # inferir por texto para contabilizar el rechazo en el bucket correcto.
+            # Si aún no se detectó, mantener AUTO e intentar inferir por el texto
+            err_source = source_type or "AUTO"
             if err_source == "AUTO":
                 up = raw.upper()
                 if "(BASES)" in up:
                     err_source = "BASES"
                 elif "(GASELAG)" in up:
                     err_source = "GASELAG"
+                else:
+                    # Si no hay pista, mantener AUTO para no falsear buckets
+                    err_source = "AUTO"
 
             oi_tag = None
             if err_source == "BASES" and err_code != "INVALID_OI_FILENAME":
@@ -909,6 +911,8 @@ def process_log01_files(
         "files_total": total_files,
         "files_ok": ok_files,
         "files_error": bad_files,
+        "rows_total_read": rows_total_read,
+        "series_duplcates_eliminated": series_duplicates_eliminated,
         "series_total_dedup": series_total_dedup,
         "series_conformes": series_conformes,
         "series_no_conformes_final": series_no_conformes_final,

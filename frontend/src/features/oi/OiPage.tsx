@@ -6,7 +6,7 @@ import { OISchema, pressureFromPMA, type OIForm, type OIFormInput, type BancadaR
 import { useMemo, useEffect, useState, useRef, useContext } from "react";
 import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
-import { getAuth, normalizeRole } from "../../api/auth";
+import { getAuth, getSelectedBank, normalizeRole } from "../../api/auth";
 import { UNSAFE_NavigationContext, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
@@ -17,6 +17,18 @@ import {
   isAuthExpiredError,
   type PendingAction,
 } from "../../api/client";
+import {
+  buildDraftKey,
+  clearDraft,
+  clearRecoveryContext,
+  clearRestoreIntent,
+  getRestoreIntent,
+  loadDraft,
+  saveDraft,
+  type RecoveryModal,
+  type DraftEnvelope,
+  type RecoveryContext,
+} from "../../utils/recoveryDraft";
 import BancadaModal, { type BancadaForm } from "./BancadaModal";
 import PasswordModal from "./PasswordModal";
 import {
@@ -262,6 +274,7 @@ export default function OiPage() {
   });
   const auth = useMemo(() => getAuth(), []);
   const authUserId = auth?.userId ?? null;
+  const bankId = auth?.bancoId ?? getSelectedBank();
   const isAdmin = normalizeRole(auth?.role, auth?.username) !== "technician";
   const storedCurrent = loadCurrentOI();
   const parsedOiId = oiIdParam ? Number(oiIdParam) : null;
@@ -298,6 +311,7 @@ export default function OiPage() {
   const headerDraftRestoredRef = useRef(false);
   const wasOnlineRef = useRef(isOnline);
   const pendingAuthNotifiedRef = useRef(false);
+  const restoreIntentHandledRef = useRef(false);
 
   // Id del OI creado y lista local de bancadas
   const [oiId, setOiId] = useState<number | null>(null);
@@ -328,6 +342,35 @@ export default function OiPage() {
   const getDraftKey = (row: BancadaRead | null) =>
   row ? `bancada-${row.id}` : NEW_BANCADA_DRAFT_KEY;
 
+  const isMeaningfulDraftValue = (value: unknown) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string") return value.trim() !== "";
+    if (typeof value === "number") return Number.isFinite(value);
+    if (typeof value === "boolean") return true;
+    return true;
+  };
+
+  const hasAnyBlockValue = (block?: Record<string, unknown> | null) => {
+    if (!block) return false;
+    return Object.values(block).some(isMeaningfulDraftValue);
+  };
+
+  const hasBancadaDraftContent = (draft: BancadaForm | null) => {
+    if (!draft || !Array.isArray(draft.rowsData)) return false;
+    return draft.rowsData.some((row) => {
+      if (!row) return false;
+      const estado = Number((row as any).estado ?? 0);
+      if (estado !== 0) return true;
+      const medidor = (row as any).medidor;
+      if (typeof medidor === "string" && medidor.trim() !== "") return true;
+      return (
+        hasAnyBlockValue((row as any).q3) ||
+        hasAnyBlockValue((row as any).q2) ||
+        hasAnyBlockValue((row as any).q1)
+      );
+    });
+  };
+
   const buildEmptyRows = (count = DEFAULT_BANCADA_ROWS): BancadaRowForm[] =>
     Array.from({ length: count }).map(() => ({
       medidor: "",
@@ -353,68 +396,122 @@ export default function OiPage() {
     version: null,
   });
 
+  const buildReturnTo = (targetId?: number | null) => {
+    const params = new URLSearchParams(location.search);
+    params.set("mode", "edit");
+    const basePath =
+      location.pathname === "/oi" || location.pathname === "/oi/"
+        ? targetId
+          ? `/oi/${targetId}`
+          : "/oi"
+        : location.pathname;
+    const qs = params.toString();
+    return qs ? `${basePath}?${qs}` : basePath;
+  };
+
+  const buildRecoveryContext = (targetId: number | null, modal?: RecoveryModal): RecoveryContext | null => {
+    if (!targetId || !authUserId || bankId == null) return null;
+    return {
+      version: 1,
+      ts: new Date().toISOString(),
+      userId: authUserId,
+      bankId,
+      oiId: targetId,
+      oiCode: getValues("oi") ?? null,
+      returnTo: buildReturnTo(targetId),
+      mode: "edit",
+      modal,
+    };
+  };
+
+  const resolveModalRecovery = (): RecoveryModal | undefined => {
+    if (!showModal) return undefined;
+    return editing
+      ? { type: "bancada", bancadaId: editing.id }
+      : { type: "bancada", isNew: true };
+  };
+
   const getNewDraftStorageKey = (id: number | null) =>
-    id ? `oi:${id}:new_bancada_draft` : null;
+    buildDraftKey({
+      userId: authUserId,
+      bankId,
+      oiId: id,
+      type: "bancada",
+      isNew: true,
+    });
 
   const loadNewBancadaDraft = (id: number | null): BancadaForm | null => {
     const key = getNewDraftStorageKey(id);
     if (!key) return null;
-    try {
-      const raw = sessionStorage.getItem(key);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as BancadaForm;
-      if (!parsed || !Array.isArray(parsed.rowsData)) return null;
-      return parsed;
-    } catch {
+    const envelope = loadDraft<BancadaForm>(key);
+    if (!envelope || !authUserId || bankId == null || !id) return null;
+    if (envelope.userId !== authUserId || envelope.bankId !== bankId || envelope.oiId !== id) {
       return null;
     }
+    const draft = envelope?.data ?? null;
+    if (!hasBancadaDraftContent(draft)) {
+      clearDraft(key);
+      return null;
+    }
+    return draft;
   };
 
   const persistNewBancadaDraft = (id: number | null, draft: BancadaForm | null) => {
     const key = getNewDraftStorageKey(id);
     if (!key) return;
-    try {
-      if (!draft) {
-        sessionStorage.removeItem(key);
-        return;
-      }
-      sessionStorage.setItem(key, JSON.stringify(draft));
-    } catch {
-      // ignore
+    if (!draft || !hasBancadaDraftContent(draft)) {
+      clearDraft(key);
+      return;
     }
+    if (!authUserId || bankId == null || !id) return;
+    const envelope: DraftEnvelope<BancadaForm> = {
+      version: 1,
+      ts: new Date().toISOString(),
+      userId: authUserId,
+      bankId,
+      oiId: id,
+      isNew: true,
+      data: draft,
+    };
+    const recovery = buildRecoveryContext(id, { type: "bancada", isNew: true });
+    saveDraft(key, envelope, recovery);
   };
 
   const getHeaderDraftStorageKey = (id: number | null) =>
-    id ? `oi:${id}:draft:header` : "oi:new:draft:header";
+    buildDraftKey({
+      userId: authUserId,
+      bankId,
+      oiId: id,
+      type: "header",
+    });
 
-  const loadHeaderDraft = (key: string) => {
-    try {
-      const raw = sessionStorage.getItem(key);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as { data?: Partial<OIFormInput> } | null;
-      return parsed?.data ?? null;
-    } catch {
-      return null;
-    }
+  const loadHeaderDraft = (key: string | null) => {
+    if (!key) return null;
+    const envelope = loadDraft<Partial<OIFormInput>>(key);
+    if (!envelope || !authUserId || bankId == null) return null;
+    if (envelope.userId !== authUserId || envelope.bankId !== bankId) return null;
+    if (oiId != null && envelope.oiId !== oiId) return null;
+    return envelope?.data ?? null;
   };
 
-  const persistHeaderDraft = (key: string, data: Partial<OIFormInput>) => {
-    try {
-      sessionStorage.setItem(
-        key,
-        JSON.stringify({ version: 1, ts: new Date().toISOString(), data })
-      );
-    } catch {
-      // ignore
-    }
+  const persistHeaderDraft = (key: string | null, data: Partial<OIFormInput>) => {
+    if (!key || !authUserId || bankId == null) return;
+    const oiIdValue = oiId ?? 0;
+    const envelope: DraftEnvelope<Partial<OIFormInput>> = {
+      version: 1,
+      ts: new Date().toISOString(),
+      userId: authUserId,
+      bankId,
+      oiId: oiIdValue,
+      data,
+    };
+    const recovery = buildRecoveryContext(oiId, resolveModalRecovery());
+    saveDraft(key, envelope, recovery);
   };
 
-  const clearHeaderDraft = (key: string) => {
-    try {
-      sessionStorage.removeItem(key);
-    } catch {
-      // ignore
-    }
+  const clearHeaderDraft = (key: string | null) => {
+    if (!key) return;
+    clearDraft(key);
   };
 
   const buildHeaderDraftData = (value: Partial<OIFormInput>) => {
@@ -427,42 +524,55 @@ export default function OiPage() {
   };
 
   const getBancadaDraftStorageKey = (id: number | null, bancadaId: number | null) =>
-    id && bancadaId ? `oi:${id}:bancada:${bancadaId}:draft` : null;
+    buildDraftKey({
+      userId: authUserId,
+      bankId,
+      oiId: id,
+      type: "bancada",
+      bancadaId,
+    });
 
   const loadBancadaDraft = (id: number | null, bancadaId: number | null) => {
     const key = getBancadaDraftStorageKey(id, bancadaId);
     if (!key) return null;
-    try {
-      const raw = sessionStorage.getItem(key);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as { data?: BancadaForm } | null;
-      return parsed?.data ?? null;
-    } catch {
+    const envelope = loadDraft<BancadaForm>(key);
+    if (!envelope || !authUserId || bankId == null || !id || !bancadaId) return null;
+    if (envelope.userId !== authUserId || envelope.bankId !== bankId || envelope.oiId !== id) {
       return null;
     }
+    const draft = envelope?.data ?? null;
+    if (!hasBancadaDraftContent(draft)) {
+      clearDraft(key);
+      return null;
+    }
+    return draft;
   };
 
   const persistBancadaDraft = (id: number | null, bancadaId: number | null, draft: BancadaForm) => {
     const key = getBancadaDraftStorageKey(id, bancadaId);
     if (!key) return;
-    try {
-      sessionStorage.setItem(
-        key,
-        JSON.stringify({ version: 1, ts: new Date().toISOString(), data: draft })
-      );
-    } catch {
-      // ignore
+    if (!hasBancadaDraftContent(draft)) {
+      clearDraft(key);
+      return;
     }
+    if (!authUserId || bankId == null || !id || !bancadaId) return;
+    const envelope: DraftEnvelope<BancadaForm> = {
+      version: 1,
+      ts: new Date().toISOString(),
+      userId: authUserId,
+      bankId,
+      oiId: id,
+      bancadaId,
+      data: draft,
+    };
+    const recovery = buildRecoveryContext(id, { type: "bancada", bancadaId });
+    saveDraft(key, envelope, recovery);
   };
 
   const clearBancadaDraft = (id: number | null, bancadaId: number | null) => {
     const key = getBancadaDraftStorageKey(id, bancadaId);
     if (!key) return;
-    try {
-      sessionStorage.removeItem(key);
-    } catch {
-      // ignore
-    }
+    clearDraft(key);
   };
 
   const headerDraftKey = getHeaderDraftStorageKey(oiId);
@@ -612,6 +722,7 @@ export default function OiPage() {
     pendingHeaderSaveRef.current = false;
     setPendingBancadaSave(false);
     headerDraftRestoredRef.current = false;
+    restoreIntentHandledRef.current = false;
   }, [oiId]);
 
   useEffect(() => {
@@ -927,9 +1038,7 @@ export default function OiPage() {
     setPendingBancadaSave(false);
     const stored = loadNewBancadaDraft(oiId);
     const draft = stored ?? createNewBancadaDraft();
-    setBancadaDrafts((prev) =>
-      prev[NEW_BANCADA_DRAFT_KEY] ? prev : { ...prev, [NEW_BANCADA_DRAFT_KEY]: draft }
-    );
+    setBancadaDrafts((prev) => ({ ...prev, [NEW_BANCADA_DRAFT_KEY]: draft }));
     persistNewBancadaDraft(oiId, draft);
     if (stored) {
       toast({ kind: "info", message: "Se restauro un borrador local." });
@@ -953,6 +1062,33 @@ export default function OiPage() {
     setEditing(row);
     setShowModal(true);
   };
+
+  useEffect(() => {
+    if (!oiId || restoreIntentHandledRef.current) return;
+    const intent = getRestoreIntent();
+    if (!intent) return;
+    if (!authUserId || bankId == null) return;
+    if (intent.userId !== authUserId || intent.bankId !== bankId) return;
+    if (intent.oiId !== oiId) return;
+    if (intent.modal?.type === "bancada") {
+      if (intent.modal.isNew) {
+        restoreIntentHandledRef.current = true;
+        clearRestoreIntent();
+        openNew();
+        return;
+      }
+      if (intent.modal.bancadaId) {
+        const row = bancadas.find((item) => item.id === intent.modal?.bancadaId);
+        if (!row) return;
+        restoreIntentHandledRef.current = true;
+        clearRestoreIntent();
+        openEdit(row);
+        return;
+      }
+    }
+    restoreIntentHandledRef.current = true;
+    clearRestoreIntent();
+  }, [authUserId, bankId, bancadas, oiId, openNew, openEdit]);
 
     const editingInitial = useMemo(() => {
     const key = getDraftKey(editing);
@@ -1309,6 +1445,7 @@ export default function OiPage() {
     }
     clearHeaderDraft(getHeaderDraftStorageKey(oiId));
     clearHeaderDraft(getHeaderDraftStorageKey(null));
+    clearRecoveryContext();
     pendingHeaderSaveRef.current = false;
     setPendingBancadaSave(false);
     clearPendingAction();
@@ -1530,6 +1667,18 @@ export default function OiPage() {
   const modalDraftStorageKey = editing
     ? getBancadaDraftStorageKey(oiId, editing.id)
     : getNewDraftStorageKey(oiId);
+  const modalDraftMeta =
+    authUserId && bankId != null && oiId
+      ? {
+          userId: authUserId,
+          bankId,
+          oiId,
+          bancadaId: editing?.id ?? null,
+          isNew: !editing,
+          returnTo: buildReturnTo(oiId),
+          oiCode: getValues("oi") ?? null,
+        }
+      : null;
 
   return (
     <div className="oi-page vi-oi-light">
@@ -1574,8 +1723,8 @@ export default function OiPage() {
           {isViewMode
             ? "Modo lectura. Use Editar para modificar."
             : lockedByName
-              ? `Esta OI est? siendo editada por ${lockedByName}. Se abre en modo lectura.`
-              : "Esta OI est? en modo lectura. No se pueden realizar cambios."}
+              ? `Esta OI está siendo editada por ${lockedByName}. Se abre en modo lectura.`
+              : "Esta OI está en modo lectura. No se pueden realizar cambios."}
         </div>
       )}
 
@@ -1800,6 +1949,7 @@ export default function OiPage() {
         duplicateMap={duplicateMap}
         onClearDuplicate={clearDuplicateForMedidor}
         draftStorageKey={modalDraftStorageKey}
+        draftMeta={modalDraftMeta}
         isOnline={isOnline}
         showRetry={pendingBancadaSave}
       />

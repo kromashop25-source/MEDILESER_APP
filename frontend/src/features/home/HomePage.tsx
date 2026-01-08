@@ -5,6 +5,7 @@ import { getCatalogs } from "../../api/catalogs";
 import type { Catalogs } from "../../api/catalogs";
 import { getAuth, getSelectedBank, isTechnicianRole, setSessionBank } from "../../api/auth";
 import { useToast } from "../../components/Toast";
+import { maybeRestoreRecovery } from "../../utils/recoveryDraft";
 
 type ToastState =
   | {
@@ -64,7 +65,12 @@ export default function HomePage() {
     if (!canConfirm) return;
     try {
       setSavingBank(true);
-      await setSessionBank(bankId);
+      const authResult = await setSessionBank(bankId);
+      const recoveryDecision = maybeRestoreRecovery(authResult.userId, authResult.bancoId ?? bankId);
+      if (recoveryDecision.target) {
+        navigate(recoveryDecision.target, { replace: true });
+        return;
+      }
       toast({
         kind: "success",
         title: "Banco",
