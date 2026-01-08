@@ -16,6 +16,9 @@ export default function LoginPage() {
     defaultValues: { username: "", password: "" },
   });
   const { toast } = useToast();
+  const params = new URLSearchParams(window.location.search);
+  const returnToRaw = params.get("returnTo") ?? "";
+  const returnTo = returnToRaw.startsWith("/") ? returnToRaw : "/home";
   const [loading, setLoading] = useState(false);
   const [showBankModal, setShowBankModal] = useState(false);
   const [bankId, setBankId] = useState<number>(0);
@@ -50,7 +53,7 @@ export default function LoginPage() {
         toast({ kind: "info", title: "Banco", message: "Seleccione el banco para continuar." });
         return;
       }
-      window.location.replace("/home");
+      window.location.replace(returnTo);
     } catch (e: any) {
       const msg =
         e?.message ??
@@ -69,7 +72,7 @@ export default function LoginPage() {
     try {
       setSavingBank(true);
       await setSessionBank(bankId);
-      window.location.replace("/home");
+      window.location.replace(returnTo);
     } catch (e: any) {
       const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo guardar el banco.";
       toast({ kind: "error", title: "Banco", message: String(msg) });

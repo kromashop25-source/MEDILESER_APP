@@ -8,7 +8,15 @@ import { useToast } from "../../components/Toast";
 import Spinner from "../../components/Spinner";
 import { getAuth, normalizeRole } from "../../api/auth";
 import { UNSAFE_NavigationContext, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { api, clearOpenOiId, setOpenOiId } from "../../api/client";
+import {
+  api,
+  clearOpenOiId,
+  setOpenOiId,
+  getPendingAction,
+  clearPendingAction,
+  isAuthExpiredError,
+  type PendingAction,
+} from "../../api/client";
 import BancadaModal, { type BancadaForm } from "./BancadaModal";
 import PasswordModal from "./PasswordModal";
 import {
@@ -280,6 +288,7 @@ export default function OiPage() {
   const [savedAtScope, setSavedAtScope] = useState<"oi" | "bancada">("bancada");
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [pendingBancadaSave, setPendingBancadaSave] = useState(false);
+  const [pendingAuthAction, setPendingAuthAction] = useState<PendingAction | null>(null);
   const originalBancadasRef = useRef<BancadaRead[]>([]);
   const originalOiUpdatedAtRef = useRef<string | null>(null);
   const skipExitWarnRef = useRef(false);
@@ -288,6 +297,7 @@ export default function OiPage() {
   const headerDraftTimerRef = useRef<number | null>(null);
   const headerDraftRestoredRef = useRef(false);
   const wasOnlineRef = useRef(isOnline);
+  const pendingAuthNotifiedRef = useRef(false);
 
   // Id del OI creado y lista local de bancadas
   const [oiId, setOiId] = useState<number | null>(null);
@@ -303,8 +313,6 @@ export default function OiPage() {
 
   // Borradores temporales de bancadas (por id o "new")
   const [bancadaDrafts, setBancadaDrafts] = useState<Record<string, BancadaForm>>({});
-
-  const headerDraftKey = getHeaderDraftStorageKey(oiId);
 
   const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
   const getReturnTo = () =>
@@ -457,6 +465,8 @@ export default function OiPage() {
     }
   };
 
+  const headerDraftKey = getHeaderDraftStorageKey(oiId);
+
 
   // Set defaults de selects al cargar catálogos
   useEffect(() => {
@@ -606,6 +616,15 @@ export default function OiPage() {
 
   useEffect(() => {
     if (!wasOnlineRef.current && isOnline) {
+      const hasToken = Boolean(getAuth()?.token);
+      if (!hasToken) {
+        toast({
+          kind: "warning",
+          message: "Conexion restablecida, pero debes iniciar sesion para guardar.",
+        });
+        wasOnlineRef.current = isOnline;
+        return;
+      }
       if (pendingHeaderSaveRef.current || pendingBancadaSave) {
         toast({
           kind: "info",
@@ -615,6 +634,45 @@ export default function OiPage() {
     }
     wasOnlineRef.current = isOnline;
   }, [isOnline, pendingBancadaSave, toast]);
+
+  useEffect(() => {
+    const handler = () => {
+      toast({
+        kind: "warning",
+        message: "Sesion expirada. Inicia sesion para guardar. Tu borrador esta guardado.",
+      });
+    };
+    window.addEventListener("medileser:auth-expired", handler);
+    return () => window.removeEventListener("medileser:auth-expired", handler);
+  }, [toast]);
+
+  useEffect(() => {
+    const pending = getPendingAction();
+    if (!pending) {
+      setPendingAuthAction(null);
+      pendingAuthNotifiedRef.current = false;
+      return;
+    }
+    const currentRoute = `${location.pathname}${location.search}`;
+    const matchesRoute = pending.route === currentRoute;
+    const matchesOi = pending.oiId == null || pending.oiId === oiId;
+    if (!matchesRoute && !matchesOi) {
+      setPendingAuthAction(null);
+      pendingAuthNotifiedRef.current = false;
+      return;
+    }
+    setPendingAuthAction(pending);
+    if (pending.type === "save_bancada") {
+      setPendingBancadaSave(true);
+    }
+    if (pending.type === "save_oi") {
+      pendingHeaderSaveRef.current = true;
+    }
+    if (!pendingAuthNotifiedRef.current) {
+      toast({ kind: "info", message: "Sesion restaurada. Reintenta guardar." });
+      pendingAuthNotifiedRef.current = true;
+    }
+  }, [location.pathname, location.search, oiId, toast]);
 
   const shouldPersistHeaderDraft = isEditMode && !isReadOnly && (isEditingOI || !oiId);
 
@@ -738,6 +796,8 @@ export default function OiPage() {
       pendingHeaderSaveRef.current = false;
       clearHeaderDraft(getHeaderDraftStorageKey(null));
       clearHeaderDraft(getHeaderDraftStorageKey(created.id));
+      clearPendingAction();
+      setPendingAuthAction(null);
       
       toast({ kind: "success", title: "OI creada", message: `${created.code} (#${created.id})` });
       return true;
@@ -750,6 +810,11 @@ export default function OiPage() {
           title: "Sin conexion",
           message: "Sin conexion. Cambios guardados localmente. Reintenta al reconectar.",
         });
+        return false;
+      }
+      if (isAuthExpiredError(e)) {
+        pendingHeaderSaveRef.current = true;
+        persistHeaderDraft(headerDraftKey, buildHeaderDraftData(v));
         return false;
       }
       toast({ kind:"error", title:"Error", message: e?.message ?? "Error creando OI" });
@@ -800,6 +865,8 @@ export default function OiPage() {
       setIsEditingOI(false);
       pendingHeaderSaveRef.current = false;
       clearHeaderDraft(headerDraftKey);
+      clearPendingAction();
+      setPendingAuthAction(null);
       toast({ kind: "success", title: "OI actualizada", message: v.oi});
       return true;
     } catch (e: any) {
@@ -811,6 +878,11 @@ export default function OiPage() {
           title: "Sin conexion",
           message: "Sin conexion. Cambios guardados localmente. Reintenta al reconectar.",
         });
+        return false;
+      }
+      if (isAuthExpiredError(e)) {
+        pendingHeaderSaveRef.current = true;
+        persistHeaderDraft(headerDraftKey, buildHeaderDraftData(v));
         return false;
       }
       const status = e?.status ?? e?.response?.status;
@@ -979,6 +1051,9 @@ export default function OiPage() {
 
       setShowModal(false);
       setEditing(null);
+      clearPendingAction();
+      setPendingAuthAction(null);
+      setPendingBancadaSave(false);
 
     } catch (e: any) {
       if (isNetworkError(e)) {
@@ -993,6 +1068,15 @@ export default function OiPage() {
           title: "Sin conexion",
           message: "Sin conexion. La bancada se guardo localmente. Reintenta cuando vuelva la red.",
         });
+        return;
+      }
+      if (isAuthExpiredError(e)) {
+        if (editing) {
+          persistBancadaDraft(oiId, editing.id, form);
+        } else {
+          persistNewBancadaDraft(oiId, form);
+        }
+        setPendingBancadaSave(true);
         return;
       }
       const status = e?.status ?? e?.response?.status;
@@ -1207,6 +1291,8 @@ export default function OiPage() {
     setIsEditingOI(false);
     pendingHeaderSaveRef.current = false;
     clearHeaderDraft(headerDraftKey);
+    clearPendingAction();
+    setPendingAuthAction(null);
   };
 
 
@@ -1225,6 +1311,8 @@ export default function OiPage() {
     clearHeaderDraft(getHeaderDraftStorageKey(null));
     pendingHeaderSaveRef.current = false;
     setPendingBancadaSave(false);
+    clearPendingAction();
+    setPendingAuthAction(null);
     clearCurrentOI();
     clearOpenOiId();
     setOiId(null);
@@ -1449,6 +1537,11 @@ export default function OiPage() {
       {!isOnline && (
         <div className="alert alert-warning py-1 mt-2 mb-2">
           Sin conexion. Los cambios se guardaran localmente hasta que vuelva la red.
+        </div>
+      )}
+      {pendingAuthAction && (
+        <div className="alert alert-info py-1 mt-2 mb-2">
+          Sesion restaurada. Reintenta guardar.
         </div>
       )}
       <div className="d-flex align-items-center justify-content-between">

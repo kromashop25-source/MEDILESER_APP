@@ -8,6 +8,8 @@ const AUTH_KEY_B = "vi_auth";
 const SELECTED_BANK_KEY = "medileser.selectedBank";
 const SELECTED_BANK_EVENT = "medileser:selectedBank";
 const PENDING_TOAST_KEY = "medileser.pendingToast";
+const PENDING_ACTION_KEY = "medileser.pendingAction";
+const AUTH_EXPIRED_EVENT = "medileser:auth-expired";
 
 const resolveBaseURL = () => {
     const envUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
@@ -105,6 +107,40 @@ export function popPendingToast(): string | null {
     }
 }
 
+export type PendingAction = {
+    type: "save_oi" | "save_bancada";
+    route: string;
+    oiId?: number | null;
+    bancadaId?: number | null;
+    ts: string;
+};
+
+export function setPendingAction(action: PendingAction) {
+    try {
+        sessionStorage.setItem(PENDING_ACTION_KEY, JSON.stringify(action));
+    } catch {
+        // ignore
+    }
+}
+
+export function getPendingAction(): PendingAction | null {
+    try {
+        const raw = sessionStorage.getItem(PENDING_ACTION_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw) as PendingAction;
+    } catch {
+        return null;
+    }
+}
+
+export function clearPendingAction() {
+    try {
+        sessionStorage.removeItem(PENDING_ACTION_KEY);
+    } catch {
+        // ignore
+    }
+}
+
 function clearLocalSession() {
     try {
         localStorage.removeItem(AUTH_KEY_A);
@@ -129,20 +165,102 @@ function clearLocalSession() {
 }
 
 let handlingAuthFailure = false;
-export async function handleAuthFailure(): Promise<void> {
+export async function handleAuthFailure(options?: { returnTo?: string; pending?: boolean }): Promise<void> {
     if (handlingAuthFailure) return;
     handlingAuthFailure = true;
     try {
         await closeOpenOiIfAny();
     } finally {
         clearLocalSession();
-        setPendingToast("Sesión inválida o expirada");
+        const msg = options?.pending
+            ? "Sesion expirada. Inicia sesion para guardar. Tu borrador esta guardado."
+            : "Sesion invalida o expirada";
+        setPendingToast(msg);
         if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-            window.location.replace("/login");
+            const returnTo = options?.returnTo;
+            const qs = returnTo
+                ? `?returnTo=${encodeURIComponent(returnTo)}${options?.pending ? "&pending=1" : ""}`
+                : "";
+            window.location.replace(`/login${qs}`);
         }
         // Si ya estamos en /login, no hacemos replace para evitar loops
     }
 }
+
+export const isAuthExpiredError = (error: any) => {
+    const status = error?.response?.status;
+    if (status === 401 || status === 403) return true;
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === "string" && /token requerido/i.test(detail)) return true;
+    return false;
+};
+
+const parseIdFromUrl = (pattern: RegExp, url: string) => {
+    const match = url.match(pattern);
+    if (!match) return null;
+    const id = Number(match[1]);
+    return Number.isFinite(id) ? id : null;
+};
+
+const buildPendingActionFromRequest = (error: any): PendingAction | null => {
+    if (typeof window === "undefined") return null;
+    const method = String(error?.config?.method ?? "").toUpperCase();
+    const url = String(error?.config?.url ?? "");
+    const route = `${window.location.pathname}${window.location.search}`;
+
+    if (method === "PUT" && /\/oi\/\d+$/.test(url)) {
+        return {
+            type: "save_oi",
+            route,
+            oiId: parseIdFromUrl(/\/oi\/(\d+)$/, url),
+            ts: new Date().toISOString(),
+        };
+    }
+    if (method === "POST" && url === "/oi") {
+        return {
+            type: "save_oi",
+            route,
+            oiId: null,
+            ts: new Date().toISOString(),
+        };
+    }
+    if (method === "POST" && /\/oi\/\d+\/bancadas$/.test(url)) {
+        return {
+            type: "save_bancada",
+            route,
+            oiId: parseIdFromUrl(/\/oi\/(\d+)\/bancadas$/, url),
+            ts: new Date().toISOString(),
+        };
+    }
+    if (method === "PUT" && /\/oi\/bancadas\/\d+$/.test(url)) {
+        return {
+            type: "save_bancada",
+            route,
+            bancadaId: parseIdFromUrl(/\/oi\/bancadas\/(\d+)$/, url),
+            ts: new Date().toISOString(),
+        };
+    }
+
+    return null;
+};
+
+const dispatchAuthExpired = (
+    detail: unknown,
+    status: number | undefined,
+    url: string,
+    method: string,
+    pending: PendingAction | null
+) => {
+    try {
+        window.dispatchEvent(
+            new CustomEvent(AUTH_EXPIRED_EVENT, {
+                detail: { status, detail, url, method, pending },
+            })
+        );
+    } catch {
+        // ignore
+    }
+};
 
 api.interceptors.response.use(
     (res) => res,
@@ -150,10 +268,18 @@ api.interceptors.response.use(
         const status = error?.response?.status;
         const url = String(error?.config?.url ?? "");
         const detail = error?.response?.data?.detail;
+        const method = String(error?.config?.method ?? "").toUpperCase();
 
         const isLogin = url.includes("/auth/login");
-        if (!isLogin && (status === 401 || (status === 403 && typeof detail === "string" && /sesi[oó]n|token/i.test(detail)))) {
-            await handleAuthFailure();
+        if (!isLogin && isAuthExpiredError(error)) {
+            const pending = buildPendingActionFromRequest(error);
+            if (pending) {
+                setPendingAction(pending);
+            }
+            dispatchAuthExpired(detail, status, url, method, pending);
+            const returnTo =
+                typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : undefined;
+            await handleAuthFailure({ returnTo, pending: Boolean(pending) });
         }
 
         return Promise.reject(error);

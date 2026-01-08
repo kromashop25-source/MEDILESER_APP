@@ -1977,22 +1977,13 @@ useEffect(() => {
     >
       Cancelar
     </button>
-    {showRetry && online && (
-      <button
-        type="submit"
-        className="btn btn-outline-primary btn-sm"
-        disabled={hasConstraintErrors || isReadOnly}
-      >
-        Reintentar guardar
-      </button>
-    )}
    <button
      type="submit"
      className="btn btn-primary btn-sm"
      ref={saveButtonRef}
       disabled={hasConstraintErrors || isReadOnly}
    >
-     Guardar Bancada
+     {showRetry && online ? "Reintentar guardar" : "Guardar Bancada"}
    </button>
   </div>
           </form>
