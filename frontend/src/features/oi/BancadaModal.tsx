@@ -83,6 +83,9 @@ type Props = {
   readOnly?: boolean;
   duplicateMap?: Record<string, { message: string }>;
   onClearDuplicate?: (value?: string | null) => void;
+  draftStorageKey?: string | null;
+  isOnline?: boolean;
+  showRetry?: boolean;
 };
 
 // Normaliza los valores numéricos que el usuario escribe con punto (.) o coma (,)
@@ -297,6 +300,9 @@ export default function BancadaModal({
   duplicateMap,
   onClearDuplicate,
   readOnly,
+  draftStorageKey,
+  isOnline,
+  showRetry,
 }: Props) {
   const defaultValues: BancadaForm = {
     estado: initial?.estado ?? 0,
@@ -315,6 +321,7 @@ export default function BancadaModal({
     })),
   };
   const isReadOnly = readOnly === true;
+  const online = isOnline !== false;
   const { register, control, handleSubmit, reset, setValue, getValues } = useForm<BancadaForm>({
     defaultValues,
   });
@@ -353,6 +360,8 @@ const handleDecreaseFont = () => {
   const isEditingExisting = Boolean(initial?.version);
   const lastFocusRef = useRef<"rows" | "grid">("rows");
   const lastFocusFieldRef = useRef<string | null>(null);
+  const draftPersistTimerRef = useRef<number | null>(null);
+  const lastDraftSnapshotRef = useRef<string | null>(null);
 
   // PUNTOS A y C: seguimiento de filas con medidor editado manualmente
   const medidorManualMap = useRef<Map<string, boolean>>(new Map());
@@ -657,6 +666,19 @@ const handleGridKeyDown = (
       draftId: initial?.draftId ?? null,
     };
   };
+
+  const buildDraftSnapshot = useCallback((): BancadaForm => {
+    const values = getValues();
+    const rowsData = (values.rowsData ?? []) as BancadaRowForm[];
+    return {
+      estado: values.estado ?? 0,
+      rows: Number(values.rows ?? rowsData.length),
+      version: values.version ?? initial?.version ?? null,
+      rowsData,
+      draftCreatedAt: values.draftCreatedAt ?? initial?.draftCreatedAt ?? null,
+      draftId: values.draftId ?? initial?.draftId ?? null,
+    };
+  }, [getValues, initial?.version, initial?.draftCreatedAt, initial?.draftId]);
 
   // Helpers de validación
   const isEmptyValue = (val: any): boolean =>
@@ -1163,6 +1185,16 @@ useEffect(() => {
       lastFocusRef.current = "grid";
       lastFocusFieldRef.current = null;
     }
+    if (draftStorageKey) {
+      try {
+        const snapshot = buildDraftSnapshot();
+        const serialized = JSON.stringify({ version: 1, ts: new Date().toISOString(), data: snapshot });
+        sessionStorage.setItem(draftStorageKey, serialized);
+        lastDraftSnapshotRef.current = serialized;
+      } catch {
+        // ignore
+      }
+    }
     if (onCancelWithDraft) {
       onCancelWithDraft(currentValues);
     }
@@ -1218,6 +1250,29 @@ useEffect(() => {
       }
     });
   }, [initial, reset, replace, focusMedidorInput, isEditingExisting]);
+
+  useEffect(() => {
+    if (!show || !draftStorageKey) return;
+    const snapshot = buildDraftSnapshot();
+    const serialized = JSON.stringify({ version: 1, ts: new Date().toISOString(), data: snapshot });
+    if (serialized === lastDraftSnapshotRef.current) return;
+    if (draftPersistTimerRef.current) {
+      window.clearTimeout(draftPersistTimerRef.current);
+    }
+    draftPersistTimerRef.current = window.setTimeout(() => {
+      try {
+        sessionStorage.setItem(draftStorageKey, serialized);
+        lastDraftSnapshotRef.current = serialized;
+      } catch {
+        // ignore
+      }
+    }, 400);
+    return () => {
+      if (draftPersistTimerRef.current) {
+        window.clearTimeout(draftPersistTimerRef.current);
+      }
+    };
+  }, [show, draftStorageKey, allRows, buildDraftSnapshot]);
 
   useEffect(() => {
     if (!show) return;
@@ -1502,6 +1557,11 @@ useEffect(() => {
             </div>
             <fieldset disabled={isReadOnly}>
             <div className="modal-body p-2">
+              {!online && (
+                <div className="alert alert-warning py-1 mb-2">
+                  Sin conexion. Los cambios se guardaran localmente hasta que vuelva la red.
+                </div>
+              )}
               
               {/* Controles Superiores */}
               <div className="row g-2 mb-2 align-items-end">
@@ -1917,6 +1977,15 @@ useEffect(() => {
     >
       Cancelar
     </button>
+    {showRetry && online && (
+      <button
+        type="submit"
+        className="btn btn-outline-primary btn-sm"
+        disabled={hasConstraintErrors || isReadOnly}
+      >
+        Reintentar guardar
+      </button>
+    )}
    <button
      type="submit"
      className="btn btn-primary btn-sm"

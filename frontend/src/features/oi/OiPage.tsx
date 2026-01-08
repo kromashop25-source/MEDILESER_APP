@@ -207,12 +207,40 @@ const buildApiUrl = (path: string) => {
   return `${String(base).replace(/\/$/, "")}${path.startsWith("/") ? "" : "/"}${path}`;
 };
 
+const useNetworkStatus = () => {
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  return isOnline;
+};
+
+const isNetworkError = (e: any) => {
+  const status = e?.status ?? e?.response?.status;
+  if (status) return false;
+  const code = e?.code ?? e?.name;
+  if (code === "ERR_NETWORK" || code === "ECONNABORTED") return true;
+  return !e?.response;
+};
+
 export default function OiPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const { oiId: oiIdParam } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const isOnline = useNetworkStatus();
   const { data } = useQuery<Catalogs>({ queryKey: ["catalogs"], queryFn: getCatalogs });
   const { register, handleSubmit, watch, formState:{errors}, reset, getValues } = useForm<OIFormInput, unknown, OIForm>({
     resolver: zodResolver(OISchema),
@@ -251,10 +279,15 @@ export default function OiPage() {
   const [savedAtTarget, setSavedAtTarget] = useState<BancadaRead | null>(null);
   const [savedAtScope, setSavedAtScope] = useState<"oi" | "bancada">("bancada");
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [pendingBancadaSave, setPendingBancadaSave] = useState(false);
   const originalBancadasRef = useRef<BancadaRead[]>([]);
   const originalOiUpdatedAtRef = useRef<string | null>(null);
   const skipExitWarnRef = useRef(false);
   const didSendCloseRef = useRef(false);
+  const pendingHeaderSaveRef = useRef(false);
+  const headerDraftTimerRef = useRef<number | null>(null);
+  const headerDraftRestoredRef = useRef(false);
+  const wasOnlineRef = useRef(isOnline);
 
   // Id del OI creado y lista local de bancadas
   const [oiId, setOiId] = useState<number | null>(null);
@@ -270,6 +303,8 @@ export default function OiPage() {
 
   // Borradores temporales de bancadas (por id o "new")
   const [bancadaDrafts, setBancadaDrafts] = useState<Record<string, BancadaForm>>({});
+
+  const headerDraftKey = getHeaderDraftStorageKey(oiId);
 
   const returnTo = (location.state as { returnTo?: string } | null)?.returnTo;
   const getReturnTo = () =>
@@ -341,6 +376,87 @@ export default function OiPage() {
     }
   };
 
+  const getHeaderDraftStorageKey = (id: number | null) =>
+    id ? `oi:${id}:draft:header` : "oi:new:draft:header";
+
+  const loadHeaderDraft = (key: string) => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { data?: Partial<OIFormInput> } | null;
+      return parsed?.data ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistHeaderDraft = (key: string, data: Partial<OIFormInput>) => {
+    try {
+      sessionStorage.setItem(
+        key,
+        JSON.stringify({ version: 1, ts: new Date().toISOString(), data })
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const clearHeaderDraft = (key: string) => {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  };
+
+  const buildHeaderDraftData = (value: Partial<OIFormInput>) => {
+    const data: Partial<OIFormInput> = {};
+    if (value.q3 != null) data.q3 = Number(value.q3);
+    if (value.alcance != null) data.alcance = Number(value.alcance);
+    if (value.pma != null) data.pma = Number(value.pma);
+    if (value.numeration_type) data.numeration_type = value.numeration_type;
+    return data;
+  };
+
+  const getBancadaDraftStorageKey = (id: number | null, bancadaId: number | null) =>
+    id && bancadaId ? `oi:${id}:bancada:${bancadaId}:draft` : null;
+
+  const loadBancadaDraft = (id: number | null, bancadaId: number | null) => {
+    const key = getBancadaDraftStorageKey(id, bancadaId);
+    if (!key) return null;
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { data?: BancadaForm } | null;
+      return parsed?.data ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistBancadaDraft = (id: number | null, bancadaId: number | null, draft: BancadaForm) => {
+    const key = getBancadaDraftStorageKey(id, bancadaId);
+    if (!key) return;
+    try {
+      sessionStorage.setItem(
+        key,
+        JSON.stringify({ version: 1, ts: new Date().toISOString(), data: draft })
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const clearBancadaDraft = (id: number | null, bancadaId: number | null) => {
+    const key = getBancadaDraftStorageKey(id, bancadaId);
+    if (!key) return;
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  };
+
 
   // Set defaults de selects al cargar catálogos
   useEffect(() => {
@@ -407,13 +523,12 @@ export default function OiPage() {
 
   useEffect(() => {
     if (!oiId) return;
-    setBancadaDrafts((prev) => {
-      if (prev[NEW_BANCADA_DRAFT_KEY]) return prev;
-      const storedDraft = loadNewBancadaDraft(oiId);
-      if (!storedDraft) return prev;
-      return { ...prev, [NEW_BANCADA_DRAFT_KEY]: storedDraft };
-    });
-  }, [oiId]);
+    if (bancadaDrafts[NEW_BANCADA_DRAFT_KEY]) return;
+    const storedDraft = loadNewBancadaDraft(oiId);
+    if (!storedDraft) return;
+    setBancadaDrafts((prev) => ({ ...prev, [NEW_BANCADA_DRAFT_KEY]: storedDraft }));
+    toast({ kind: "info", message: "Se restauro un borrador local." });
+  }, [oiId, bancadaDrafts, toast]);
 
   // Lock de OI para t?cnicos: intenta tomar o refrescar lock al abrir la pantalla
   useEffect(() => {
@@ -484,7 +599,57 @@ export default function OiPage() {
 
   useEffect(() => {
     didSendCloseRef.current = false;
+    pendingHeaderSaveRef.current = false;
+    setPendingBancadaSave(false);
+    headerDraftRestoredRef.current = false;
   }, [oiId]);
+
+  useEffect(() => {
+    if (!wasOnlineRef.current && isOnline) {
+      if (pendingHeaderSaveRef.current || pendingBancadaSave) {
+        toast({
+          kind: "info",
+          message: "Conexion restablecida. Puedes reintentar guardar.",
+        });
+      }
+    }
+    wasOnlineRef.current = isOnline;
+  }, [isOnline, pendingBancadaSave, toast]);
+
+  const shouldPersistHeaderDraft = isEditMode && !isReadOnly && (isEditingOI || !oiId);
+
+  useEffect(() => {
+    if (!shouldPersistHeaderDraft) return;
+    if (headerDraftRestoredRef.current) return;
+    const stored = loadHeaderDraft(headerDraftKey);
+    if (!stored) return;
+    const current = getValues();
+    reset({
+      ...current,
+      ...stored,
+      numeration_type: stored.numeration_type ?? current.numeration_type ?? "correlativo",
+    });
+    headerDraftRestoredRef.current = true;
+    toast({ kind: "info", message: "Se restauro un borrador local." });
+  }, [shouldPersistHeaderDraft, headerDraftKey, getValues, reset, toast]);
+
+  useEffect(() => {
+    if (!shouldPersistHeaderDraft) return;
+    const subscription = watch((value) => {
+      if (headerDraftTimerRef.current) {
+        window.clearTimeout(headerDraftTimerRef.current);
+      }
+      headerDraftTimerRef.current = window.setTimeout(() => {
+        persistHeaderDraft(headerDraftKey, buildHeaderDraftData(value));
+      }, 400);
+    });
+    return () => {
+      subscription.unsubscribe();
+      if (headerDraftTimerRef.current) {
+        window.clearTimeout(headerDraftTimerRef.current);
+      }
+    };
+  }, [watch, shouldPersistHeaderDraft, headerDraftKey]);
 
   const hasDrafts = useMemo(() => Object.keys(bancadaDrafts).length > 0, [bancadaDrafts]);
   const shouldWarnOnExit = isEditMode && !isReadOnly && (hasLock || isEditingOI || hasDrafts);
@@ -569,10 +734,24 @@ export default function OiPage() {
       setOiCreatedAt(created.created_at ?? null);
       saveCurrentOI({ id: created.id, code: created.code });
       setOriginalOI(v);
+
+      pendingHeaderSaveRef.current = false;
+      clearHeaderDraft(getHeaderDraftStorageKey(null));
+      clearHeaderDraft(getHeaderDraftStorageKey(created.id));
       
       toast({ kind: "success", title: "OI creada", message: `${created.code} (#${created.id})` });
       return true;
     } catch (e: any) {
+      if (isNetworkError(e)) {
+        pendingHeaderSaveRef.current = true;
+        persistHeaderDraft(headerDraftKey, buildHeaderDraftData(v));
+        toast({
+          kind: "warning",
+          title: "Sin conexion",
+          message: "Sin conexion. Cambios guardados localmente. Reintenta al reconectar.",
+        });
+        return false;
+      }
       toast({ kind:"error", title:"Error", message: e?.message ?? "Error creando OI" });
       return false;
     }
@@ -619,9 +798,21 @@ export default function OiPage() {
       setReadOnly(updated.read_only_for_current_user ?? false);
       setHasLock((updated.locked_by_user_id ?? null) === authUserId);
       setIsEditingOI(false);
+      pendingHeaderSaveRef.current = false;
+      clearHeaderDraft(headerDraftKey);
       toast({ kind: "success", title: "OI actualizada", message: v.oi});
       return true;
     } catch (e: any) {
+      if (isNetworkError(e)) {
+        pendingHeaderSaveRef.current = true;
+        persistHeaderDraft(headerDraftKey, buildHeaderDraftData(v));
+        toast({
+          kind: "warning",
+          title: "Sin conexion",
+          message: "Sin conexion. Cambios guardados localmente. Reintenta al reconectar.",
+        });
+        return false;
+      }
       const status = e?.status ?? e?.response?.status;
       if (status === 409) {
         toast({
@@ -661,13 +852,16 @@ export default function OiPage() {
     }
     if (!oiId) return;
     clearDuplicateMap();
-    setBancadaDrafts((prev) => {
-      if (prev[NEW_BANCADA_DRAFT_KEY]) return prev;
-      const stored = loadNewBancadaDraft(oiId);
-      const draft = stored ?? createNewBancadaDraft();
-      persistNewBancadaDraft(oiId, draft);
-      return { ...prev, [NEW_BANCADA_DRAFT_KEY]: draft };
-    });
+    setPendingBancadaSave(false);
+    const stored = loadNewBancadaDraft(oiId);
+    const draft = stored ?? createNewBancadaDraft();
+    setBancadaDrafts((prev) =>
+      prev[NEW_BANCADA_DRAFT_KEY] ? prev : { ...prev, [NEW_BANCADA_DRAFT_KEY]: draft }
+    );
+    persistNewBancadaDraft(oiId, draft);
+    if (stored) {
+      toast({ kind: "info", message: "Se restauro un borrador local." });
+    }
     setEditing(null);
     setShowModal(true);
   };
@@ -677,6 +871,13 @@ export default function OiPage() {
       return;
     }
     clearDuplicateMap();
+    setPendingBancadaSave(false);
+    const stored = loadBancadaDraft(oiId, row.id);
+    if (stored) {
+      const key = getDraftKey(row);
+      setBancadaDrafts((prev) => ({ ...prev, [key]: stored }));
+      toast({ kind: "info", message: "Se restauro un borrador local." });
+    }
     setEditing(row);
     setShowModal(true);
   };
@@ -713,6 +914,7 @@ export default function OiPage() {
       return;
     }
     clearDuplicateMap();
+    setPendingBancadaSave(false);
     try {
       setBusy(true);
 
@@ -734,6 +936,7 @@ export default function OiPage() {
         setBancadas(prev => prev.map(x => (x.id === upd.id ? upd : x)));
         setOiVersion(upd.updated_at ?? upd.created_at ?? oiVersion);
         setMedidoresUsuarioApi(null);
+        clearBancadaDraft(oiId, editing.id);
         // Limpiar borrador de esta bancada editada
         setBancadaDrafts(prev => {
           const key = `bancada-${editing.id}`;
@@ -778,6 +981,20 @@ export default function OiPage() {
       setEditing(null);
 
     } catch (e: any) {
+      if (isNetworkError(e)) {
+        if (editing) {
+          persistBancadaDraft(oiId, editing.id, form);
+        } else {
+          persistNewBancadaDraft(oiId, form);
+        }
+        setPendingBancadaSave(true);
+        toast({
+          kind: "warning",
+          title: "Sin conexion",
+          message: "Sin conexion. La bancada se guardo localmente. Reintenta cuando vuelva la red.",
+        });
+        return;
+      }
       const status = e?.status ?? e?.response?.status;
       if (status === 409) {
         toast({
@@ -830,6 +1047,7 @@ export default function OiPage() {
         const { [key]: _, ...rest } = prev;
         return rest;
       });
+      clearBancadaDraft(oiId, row.id);
       const refreshed = await getOi(oiId);
       setOiVersion(refreshed.updated_at ?? refreshed.created_at ?? null);
       setOiSavedAt(refreshed.saved_at ?? null);
@@ -942,6 +1160,7 @@ export default function OiPage() {
 
   const handleBancadaCancel = (draft: BancadaForm) => {
     clearDuplicateMap();
+    setPendingBancadaSave(false);
     const key = getDraftKey(editing);
     let nextDraft = { ...draft };
     if (!editing) {
@@ -956,6 +1175,8 @@ export default function OiPage() {
     setBancadaDrafts(prev => ({ ...prev, [key]: nextDraft }));
     if (!editing) {
       persistNewBancadaDraft(oiId, nextDraft);
+    } else {
+      persistBancadaDraft(oiId, editing.id, nextDraft);
     }
     setShowModal(false);
   };
@@ -984,13 +1205,26 @@ export default function OiPage() {
       reset(originalOI);
     }
     setIsEditingOI(false);
+    pendingHeaderSaveRef.current = false;
+    clearHeaderDraft(headerDraftKey);
   };
 
 
   const resetOiState = () => {
     if (oiId) {
       persistNewBancadaDraft(oiId, null);
+      Object.keys(bancadaDrafts).forEach((key) => {
+        if (!key.startsWith("bancada-")) return;
+        const id = Number(key.replace("bancada-", ""));
+        if (Number.isFinite(id)) {
+          clearBancadaDraft(oiId, id);
+        }
+      });
     }
+    clearHeaderDraft(getHeaderDraftStorageKey(oiId));
+    clearHeaderDraft(getHeaderDraftStorageKey(null));
+    pendingHeaderSaveRef.current = false;
+    setPendingBancadaSave(false);
     clearCurrentOI();
     clearOpenOiId();
     setOiId(null);
@@ -1205,9 +1439,18 @@ export default function OiPage() {
       }).format(d);
     };
 
+  const modalDraftStorageKey = editing
+    ? getBancadaDraftStorageKey(oiId, editing.id)
+    : getNewDraftStorageKey(oiId);
+
   return (
     <div className="oi-page vi-oi-light">
        <Spinner show={busy} />
+      {!isOnline && (
+        <div className="alert alert-warning py-1 mt-2 mb-2">
+          Sin conexion. Los cambios se guardaran localmente hasta que vuelva la red.
+        </div>
+      )}
       <div className="d-flex align-items-center justify-content-between">
         <h1 className="h3">Formulario OI</h1>
         <div className="d-flex gap-2">
@@ -1463,6 +1706,9 @@ export default function OiPage() {
         readOnly={isReadOnly}
         duplicateMap={duplicateMap}
         onClearDuplicate={clearDuplicateForMedidor}
+        draftStorageKey={modalDraftStorageKey}
+        isOnline={isOnline}
+        showRetry={pendingBancadaSave}
       />
        )}
 
