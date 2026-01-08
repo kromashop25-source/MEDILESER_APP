@@ -1,5 +1,5 @@
 import { api } from "./client";
-import { closeOpenOiIfAny } from "./client";
+import { clearDraftSessionIfUserChanged, closeOpenOiIfAny } from "./client";
 
 export type LoginInput = { username: string; password: string; bancoId?: number | null };
 
@@ -99,6 +99,7 @@ export async function login(payload: LoginInput): Promise<AuthPayload> {
   try {
     const { data } = await api.post<AuthPayload>("/auth/login", payload);
     localStorage.setItem("vi.auth", JSON.stringify(data));
+    clearDraftSessionIfUserChanged(data.userId ?? null);
     // Banco se selecciona post-login solo para técnicos
     if (isTechnicianRole(data.role)) clearSelectedBank();
     else setSelectedBank(0);
@@ -147,6 +148,7 @@ export function getAuth(): LoginOut | null {
 export async function setSessionBank(bancoId: number): Promise<AuthPayload> {
   const { data } = await api.put<AuthPayload>("/auth/banco", { bancoId });
   localStorage.setItem("vi.auth", JSON.stringify(data));
+  clearDraftSessionIfUserChanged(data.userId ?? null);
   setSelectedBank(bancoId);
   return data;
 }

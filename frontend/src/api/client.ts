@@ -10,6 +10,7 @@ const SELECTED_BANK_EVENT = "medileser:selectedBank";
 const PENDING_TOAST_KEY = "medileser.pendingToast";
 const PENDING_ACTION_KEY = "medileser.pendingAction";
 const AUTH_EXPIRED_EVENT = "medileser:auth-expired";
+const SESSION_USER_KEY = "medileser.sessionUserId";
 
 const resolveBaseURL = () => {
     const envUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
@@ -139,6 +140,60 @@ export function clearPendingAction() {
     } catch {
         // ignore
     }
+}
+
+export function getSessionUserId(): number | null {
+    try {
+        const raw = sessionStorage.getItem(SESSION_USER_KEY);
+        if (!raw) return null;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : null;
+    } catch {
+        return null;
+    }
+}
+
+export function setSessionUserId(userId: number | null) {
+    try {
+        if (userId == null) {
+            sessionStorage.removeItem(SESSION_USER_KEY);
+        } else {
+            sessionStorage.setItem(SESSION_USER_KEY, String(userId));
+        }
+    } catch {
+        // ignore
+    }
+}
+
+export function clearDraftSessionIfUserChanged(nextUserId: number | null): boolean {
+    const prev = getSessionUserId();
+    if (nextUserId == null) return false;
+    if (prev === null || prev === nextUserId) {
+        setSessionUserId(nextUserId);
+        return false;
+    }
+
+    try {
+        const keys: string[] = [];
+        for (let i = 0; i < sessionStorage.length; i += 1) {
+            const key = sessionStorage.key(i);
+            if (!key) continue;
+            if (
+                key.startsWith("oi:") ||
+                key === OPEN_OI_KEY ||
+                key === CURRENT_OI_KEY ||
+                key === PENDING_ACTION_KEY
+            ) {
+                keys.push(key);
+            }
+        }
+        keys.forEach((key) => sessionStorage.removeItem(key));
+    } catch {
+        // ignore
+    }
+
+    setSessionUserId(nextUserId);
+    return true;
 }
 
 function clearLocalSession() {
