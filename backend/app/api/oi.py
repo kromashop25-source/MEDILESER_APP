@@ -300,20 +300,39 @@ def _release_user_locks(session: Session, user_id: int | None) -> None:
         .values(locked_by_user_id=None, locked_at=None)
     )
 
-def _parse_date(date_str: str | None) -> datetime | None:
-    """
-    Parsea una fecha en formato YYYY-MM-DD desde la querystring.
-    Devuelve datetime a medianoche; lanza 400 si el formato es inválido.
-    """
+def _parse_date(date_str: str | None):
+    """Parsea fecha YYYY-MM-DD y devuelve date."""
     if not date_str:
         return None
     try:
-        return datetime.strptime(date_str, "%Y-%m-%d")
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
         raise HTTPException(
             status_code=400,
-            detail="Formato de fecha inválido; use YYYY-MM-DD",
+            detail="Formato de fecha invalido; use YYYY-MM-DD",
         )
+
+def _resolve_date_range_utc(
+    date_from: str | None,
+    date_to: str | None,
+) -> tuple[datetime | None, datetime | None]:
+    start_date = _parse_date(date_from)
+    end_date = _parse_date(date_to)
+    if not start_date and not end_date:
+        return None, None
+
+    tz = ZoneInfo("America/Lima")
+    start_utc = None
+    end_utc_excl = None
+
+    if start_date:
+        start_local = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=tz)
+        start_utc = start_local.astimezone(timezone.utc).replace(tzinfo=None)
+    if end_date:
+        end_local_excl = datetime.combine(end_date + timedelta(days=1), datetime.min.time()).replace(tzinfo=tz)
+        end_utc_excl = end_local_excl.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return start_utc, end_utc_excl
 
 def _build_oi_filters(
     session: Session,
@@ -339,13 +358,11 @@ def _build_oi_filters(
         if banco_id is not None:
             conditions.append(oi_banco_id_col == banco_id)
 
-    start_dt = _parse_date(date_from)
-    end_dt = _parse_date(date_to)
-    if start_dt:
-        conditions.append(OI.created_at >= start_dt)  # type: ignore[arg-type]
-    if end_dt:
-        end_dt_plus = end_dt + timedelta(days=1)
-        conditions.append(OI.created_at < end_dt_plus)  # type: ignore[arg-type]
+    start_utc, end_utc_excl = _resolve_date_range_utc(date_from, date_to)
+    if start_utc:
+        conditions.append(OI.created_at >= start_utc)  # type: ignore[arg-type]
+    if end_utc_excl:
+        conditions.append(OI.created_at < end_utc_excl)  # type: ignore[arg-type]
 
     if responsable_tech_number is not None:
         try:
