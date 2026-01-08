@@ -97,6 +97,7 @@ export async function changeOwnPassword(oldPassword: string, newPassword: string
 
 export async function login(payload: LoginInput): Promise<AuthPayload> {
   try {
+    await closeOpenOiIfAny();
     const { data } = await api.post<AuthPayload>("/auth/login", payload);
     localStorage.setItem("vi.auth", JSON.stringify(data));
     clearDraftSessionIfUserChanged(data.userId ?? null);

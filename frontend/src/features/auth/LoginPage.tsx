@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { getCatalogs } from "../../api/catalogs";
 import type { Catalogs } from "../../api/catalogs";
 import { isTechnicianRole, login, logout, setSessionBank } from "../../api/auth";
-import { popPendingToast } from "../../api/client";
+import { getSessionUserId, popPendingToast } from "../../api/client";
 import PasswordInput from "../../components/PasswordInput";
 import Spinner from "../../components/Spinner";
 import { useToast } from "../../components/Toast";
@@ -20,6 +20,7 @@ export default function LoginPage() {
   const returnToRaw = params.get("returnTo") ?? "";
   const returnTo = returnToRaw.startsWith("/") ? returnToRaw : "/home";
   const [loading, setLoading] = useState(false);
+  const postLoginTargetRef = useRef(returnTo);
   const [showBankModal, setShowBankModal] = useState(false);
   const [bankId, setBankId] = useState<number>(0);
   const [savingBank, setSavingBank] = useState(false);
@@ -47,13 +48,16 @@ export default function LoginPage() {
   const onSubmit = async (v: Form) => {
     try {
       setLoading(true);
+      const prevUserId = getSessionUserId();
       const auth = await login(v);
+      const switchedUser = prevUserId != null && auth.userId && prevUserId !== auth.userId;
+      postLoginTargetRef.current = switchedUser ? "/home" : returnTo;
       if (isTechnicianRole(auth.role)) {
         setShowBankModal(true);
         toast({ kind: "info", title: "Banco", message: "Seleccione el banco para continuar." });
         return;
       }
-      window.location.replace(returnTo);
+      window.location.replace(postLoginTargetRef.current);
     } catch (e: any) {
       const msg =
         e?.message ??
@@ -72,7 +76,7 @@ export default function LoginPage() {
     try {
       setSavingBank(true);
       await setSessionBank(bankId);
-      window.location.replace(returnTo);
+      window.location.replace(postLoginTargetRef.current);
     } catch (e: any) {
       const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo guardar el banco.";
       toast({ kind: "error", title: "Banco", message: String(msg) });
