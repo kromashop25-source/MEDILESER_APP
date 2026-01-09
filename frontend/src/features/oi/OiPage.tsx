@@ -272,7 +272,7 @@ export default function OiPage() {
       alcance: 80,
     },
   });
-  const auth = useMemo(() => getAuth(), []);
+  const auth = getAuth();
   const authUserId = auth?.userId ?? null;
   const bankId = auth?.bancoId ?? getSelectedBank();
   const isAdmin = normalizeRole(auth?.role, auth?.username) !== "technician";
@@ -350,9 +350,15 @@ export default function OiPage() {
     return true;
   };
 
+  const isDraftKeyIgnored = (key: string) =>
+    key === "c7_seconds" || key === "caudal" || key === "error";
+
   const hasAnyBlockValue = (block?: Record<string, unknown> | null) => {
     if (!block) return false;
-    return Object.values(block).some(isMeaningfulDraftValue);
+    return Object.entries(block).some(([key, value]) => {
+      if (isDraftKeyIgnored(key)) return false;
+      return isMeaningfulDraftValue(value);
+    });
   };
 
   const hasBancadaDraftContent = (draft: BancadaForm | null) => {

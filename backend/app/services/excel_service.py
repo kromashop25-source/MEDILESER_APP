@@ -25,8 +25,8 @@ from .rules_service import pma_to_pressure, find_exact_in_range, normalize_for_e
 HEADER_ROW = 8
 DATA_START_ROW = 9
 SHEET_NAME = "ERROR FINAL"
-Q3_RANGE = "AZ2:BC2"       # lista para E4
-ALCANCE_RANGE = "AZ1:BE1"  # lista para O4
+Q3_RANGE = "AY2:BB2"       # lista para E4
+ALCANCE_RANGE = "AY1:BE1"  # lista para O4
 # CORRECCIÓN: Copiamos fórmulas desde la Col Q (tiempo) hasta el final
 FORMULA_START_COL = "Q"
 FORMULA_END_COL = "BL"

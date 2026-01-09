@@ -20,6 +20,7 @@ export default function LoginPage() {
   const params = new URLSearchParams(window.location.search);
   const returnToRaw = params.get("returnTo") ?? "";
   const returnTo = returnToRaw.startsWith("/") ? returnToRaw : "/home";
+  const pendingParam = params.get("pending") === "1";
   const [loading, setLoading] = useState(false);
   const postLoginTargetRef = useRef(returnTo);
   const [showBankModal, setShowBankModal] = useState(false);
@@ -55,8 +56,10 @@ export default function LoginPage() {
       const recoveryDecision = maybeRestoreRecovery(auth.userId, auth.bancoId ?? 0);
       if (recoveryDecision.target) {
         postLoginTargetRef.current = recoveryDecision.target;
+      } else if (pendingParam || switchedUser) {
+        postLoginTargetRef.current = "/home";
       } else {
-        postLoginTargetRef.current = switchedUser ? "/home" : returnTo;
+        postLoginTargetRef.current = returnTo;
       }
       if (isTechnicianRole(auth.role)) {
         setShowBankModal(true);
@@ -87,7 +90,7 @@ export default function LoginPage() {
       const recoveryDecision = maybeRestoreRecovery(auth.userId, auth.bancoId ?? bankId);
       if (recoveryDecision.target) {
         postLoginTargetRef.current = recoveryDecision.target;
-      } else if (switchedBank) {
+      } else if (pendingParam || switchedBank) {
         postLoginTargetRef.current = "/home";
       }
       window.location.replace(postLoginTargetRef.current);
