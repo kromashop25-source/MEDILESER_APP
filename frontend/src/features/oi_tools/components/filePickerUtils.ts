@@ -2,6 +2,18 @@ export function getFileKey(file: File) {
   return `${file.name}::${file.size}::${file.lastModified}`;
 }
 
+export function normalizeFileName(name: string) {
+  return name
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, "")
+    .toLowerCase();
+}
+
+export function getFileNameKey(file: File) {
+  return normalizeFileName(file.name);
+}
+
 function normalizeAccept(accept: string | undefined) {
   if (!accept) return null;
   const parts = accept
@@ -25,11 +37,11 @@ export function filterFilesByAccept(files: File[], accept: string | undefined) {
 export function mergeFiles(prev: File[], next: File[]) {
   if (next.length === 0) return prev;
 
-  const seen = new Set(prev.map(getFileKey));
+  const seen = new Set(prev.map(getFileNameKey));
   const merged = [...prev];
 
   for (const file of next) {
-    const key = getFileKey(file);
+    const key = getFileNameKey(file);
     if (!seen.has(key)) {
       seen.add(key);
       merged.push(file);
@@ -52,9 +64,9 @@ export function mergeFilesWithReport(prev: File[], next: File[]): MergeFilesRepo
   const added: File[] = [];
   const duplicates: File[] = [];
 
-  const seen = new Set(prev.map(getFileKey));
+  const seen = new Set(prev.map(getFileNameKey));
   for (const file of next) {
-    const key = getFileKey(file);
+    const key = getFileNameKey(file);
     if (seen.has(key)) {
       duplicates.push(file);
       continue;

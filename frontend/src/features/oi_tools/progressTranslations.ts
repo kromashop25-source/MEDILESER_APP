@@ -6,6 +6,11 @@ const TYPE_MAP: Record<string, string> = {
 };
 
 const STAGE_MAP: Record<string, string> = {
+  file: "archivo",
+  file_done: "archivo procesado",
+  file_error: "archoivo con error",
+  render: "generando",
+  failed: "fallido",
   received: "recibido",
   loading: "cargando",
   upload: "subida",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
-import { filterFilesByAccept, getFileKey } from "./filePickerUtils";
+import { filterFilesByAccept, getFileKey, getFileNameKey } from "./filePickerUtils";
 
 type Props = {
   show: boolean;
@@ -53,13 +53,13 @@ export default function FilePickerModal({
     const filtered = filterFilesByAccept(incoming, accept);
     if (filtered.length === 0) return;
 
-    const existing = new Set(files.map(getFileKey));
+    const existing = new Set(files.map(getFileNameKey));
     const seen = new Set(existing);
     const toAdd: File[] = [];
     const duplicates: File[] = [];
 
     for (const file of filtered) {
-      const key = getFileKey(file);
+      const key = getFileNameKey(file);
       if (seen.has(key)) {
         duplicates.push(file);
         continue;
@@ -70,11 +70,13 @@ export default function FilePickerModal({
 
     if (duplicates.length > 0) {
       const names = Array.from(new Set(duplicates.map((d) => d.name)));
-      setDupWarning(
-        names.length === 1
-          ? `El archivo "${names[0]}" ya se encuentra cargado.`
-          : `Los archivos ya se encuentran cargados: ${names.join(", ")}.`
-      );
+      const ommited = duplicates.length;
+      if (names.length === 1) {
+        const base = ommited === 1 ? "Se omitió 1 archivo duplicado" : `Se omitieron ${ommited} archivos duplicados`;
+        setDupWarning(`${base}: "${names[0]}".`);
+      } else {
+        setDupWarning(`Se omitieron ${ommited} archivos duplicados: ${names.join(", ")}.`);
+      }
     }
 
     if (toAdd.length > 0) onAddFiles(toAdd);

@@ -1,4 +1,4 @@
-import { useMemo,useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
@@ -79,6 +79,61 @@ export default function Log01ExcelPage() {
   const [resultOperationId, setResultOperationId] = useState<string | null>(null);
   const [auditSummary, setAuditSummary] = useState<any | null>(null);
   const [showTechAudit, setShowTechAudit] = useState(false);
+
+  function getDuplicatesEliminated(summary: any): number | null {
+    const v =
+      summary?.series_duplicates_eliminated ??
+      summary?.detail?.series_duplicates_eliminated ??
+      // backward-compat (typo viejo)
+      summary?.series_duplcates_eliminated;
+    return typeof v === "number" ? v : null; 
+  }
+
+  const ERROR_CODE_LABELS: Record<string, string> = {
+    MISSING_HEADERS: "Faltan cabeceras requeridas",
+    FILE_INVALID: "Archivo inválido",
+    INVALID_OI_FILENAME: "Nombre de archivo inválido",
+    EMPTY_FILE: "Archivo vacío",
+  };
+
+  function translateErrorCode(code?: string): string {
+    const key = String(code ?? "").trim().toUpperCase();
+    if (!key) return "";
+    return ERROR_CODE_LABELS[key] ?? key;
+  }
+
+  function normalizeErrorText(text?: string): string {
+    if (!text) return "";
+    let out = translateProgressMessage(text);
+    out = out.replace(/\bERROR\b/gi, "Error");
+    for (const [code, label] of Object.entries(ERROR_CODE_LABELS)) {
+      out = out.replace(new RegExp(`\\b${code}\\b`, "g"), label);
+    }
+    return out;
+  }
+  function buildMotivo(code?: string, detail?: string): string {
+    const codeLabel = translateErrorCode(code);
+    const detailText = normalizeErrorText(detail);
+    if (detailText) {
+      if (codeLabel && !detailText.toLowerCase().includes(codeLabel.toLowerCase())) {
+        return `${codeLabel}: ${detailText}`;
+      }
+      return detailText;
+    }
+    return codeLabel || "N/D";
+  }
+
+
+  function fmtOiNum(n: any): string {
+    const num = Number(n);
+    if (!Number.isFinite(num) || num <= 0) return "N/D";
+    return `OI-${String(num).padStart(4, "0")}`;
+  }
+
+  function getRowsTotalRead(summary: any): number | null {
+    const v = summary?.rows_total_read ?? summary?.totals_input?.rows_read;
+    return typeof v === "number" ? v : null;
+  }
 
   // Ordenar auditoria por OI (asc) para visualización consistente
   const auditByOiOkSorted = useMemo(() => {
@@ -168,7 +223,7 @@ export default function Log01ExcelPage() {
   }
 
   function pushEvent(ev: ProgressEvent) {
-    const label = `${translateProgressType(ev.type)} · ${translateProgressStage(ev.stage)} · ${translateProgressMessage(
+    const label = `${translateProgressType(ev.type)} · ${translateProgressStage(ev.stage)} · ${normalizeErrorText(
       (ev as any).message ?? (ev as any).detail ?? ""
     )}`;
     setProgressLabel(label);
@@ -679,7 +734,7 @@ export default function Log01ExcelPage() {
                                 {auditByOiOkSorted.map((x: any, i: number) => (
                                   <tr key={i} className="small">
                                     <td style={{ whiteSpace: "nowrap" }}>
-                                      {x?.oi_num ? `OI-${x.oi_num}` : "N/D"}
+                                      {fmtOiNum(x?.oi_num)}
                                     </td>
                                     <td style={{ whiteSpace: "nowrap" }}>
                                       <strong>{x?.rows_read ?? 0}</strong>
@@ -709,6 +764,18 @@ export default function Log01ExcelPage() {
                         </div>
                       ) : null}
 
+                      <div className="col-12 mT-10 p-0">
+                        <div className="small text-muted">Totales (origen)</div>
+                        <div className="small">
+                          Registros leídos:{" "}
+                          <strong>{auditSummary.totals_input?.rows_read ?? "N/D"}</strong> · Conformes:{" "}
+                          <strong>{auditSummary.totals_input?.conformes ?? "N/D"}</strong> · No conformes:{" "}
+                          <strong>{auditSummary.totals_input?.no_conformes ?? "N/D"}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-md-6 mT-10 mT-md-0">
                       {auditRejectedSorted.length > 0 ? (
                         <div className="mT-15">
                           <div className="small text-muted">Archivos rechazados</div>
@@ -722,17 +789,15 @@ export default function Log01ExcelPage() {
                               </thead>
                               <tbody>
                                 {auditRejectedSorted.map((r: any, i: number) => {
-                                  const code = String(r?.code ?? "");
-                                  const detail = String(r?.detail ?? "");
-                                  let motivo = "";
-                                  if (code && detail) motivo = `(${code}) ${detail}`;
-                                  else if (code) motivo = `(${code})`;
-                                  else motivo = detail || "N/D";
+                                  const motivo = buildMotivo(r?.code, r?.detail);
                                   const src = String(r?.source ?? "").toUpperCase();
                                   let oiOrFile = r?.filename ?? "N/D";
                                   if (src === "BASES") {
                                     const oiNum = Number(r?.oi_num);
-                                    if (Number.isFinite(oiNum) && oiNum > 0) oiOrFile = `OI-${oiNum} / ${oiOrFile}`;
+                                    const oiTag = fmtOiNum(oiNum);
+                                    if (oiTag !== "N/D") {
+                                      oiOrFile = `${oiTag} / ${oiOrFile}`;
+                                    }
                                   } else if (src === "GASELAG") {
                                     oiOrFile = `GASELAG / ${oiOrFile}`;
                                   }
@@ -748,19 +813,6 @@ export default function Log01ExcelPage() {
                           </div>
                         </div>
                       ) : null}
-
-                      <div className="col-12 mT-10 p-0">
-                        <div className="small text-muted">Totales (origen)</div>
-                        <div className="small">
-                          Registros leídos:{" "}
-                          <strong>{auditSummary.totals_input?.rows_read ?? "N/D"}</strong> · Conformes:{" "}
-                          <strong>{auditSummary.totals_input?.conformes ?? "N/D"}</strong> · No conformes:{" "}
-                          <strong>{auditSummary.totals_input?.no_conformes ?? "N/D"}</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="col-md-6 mT-10 mT-md-0">
                       <div className="small text-muted">Resultado final (post-dedupe)</div>
                       <div className="small">
                         Únicas (post-dedupe):{" "}
@@ -785,27 +837,18 @@ export default function Log01ExcelPage() {
                           <div className="small">
                             Registros leídos (total):{" "}
                             <strong>
-                              {auditSummary.rows_total_read ??
-                                auditSummary.totals_input?.rows_read ??
-                                "N/D"}
+                              {getRowsTotalRead(auditSummary) ?? "N/D"}
                             </strong>{" "}
                             · Duplicados eliminados:{" "}
                             <strong>
-                              {auditSummary.series_duplicates_eliminated ??
-                                auditSummary.detail?.series_duplicates_eliminated ??
-                                "N/D"}
+                              {getDuplicatesEliminated(auditSummary) ?? "N/D"}
                             </strong>
                           {" "}
                             · Únicas = Leídos − Duplicados:{" "}
                             <strong>
                               {(() => {
-                                const rows =
-                                  auditSummary.technical?.rows_total_read ??
-                                  auditSummary.rows_total_read ??
-                                  auditSummary.totals_input?.rows_read;
-                                const dup =
-                                  auditSummary.technical?.series_duplicates_eliminated ??
-                                  auditSummary.detail?.series_duplicates_eliminated;
+                                const rows = getRowsTotalRead(auditSummary);
+                                const dup = getDuplicatesEliminated(auditSummary);
                                 if (typeof rows === "number" && typeof dup === "number") return rows - dup;
                                 // fallback: si backend ya trae series_total_dedup, úsalo
                                 const uniques = auditSummary.series_total_dedup;
@@ -827,21 +870,21 @@ export default function Log01ExcelPage() {
                 <h6 className="c-grey-900">Eventos</h6>
                 <div className="bd p-10" style={{ maxHeight: 240, overflow: "auto" }}>
                   {events.map((ev, i) => {
-                    const msg = (ev as any).message ?? "";
-                    const code = (ev as any).code ?? "";
-                    const detail = (ev as any).detail ?? "";
-                    const baseText = translateProgressMessage(msg || detail || "");
-                    let suffix = "";
-                    if (code) {
-                      suffix = `${code}${detail ? ` · ${detail}` : ""}`;
-                    } else if (detail && msg) {
-                      suffix = detail;
-                    }
+                    const msg = String((ev as any).message ?? "");
+                    const code = String((ev as any).code ?? "");
+                    const detail = String((ev as any).detail ?? "");
+                    const baseText = normalizeErrorText(msg || detail || "");
+                    const baseLower = baseText.toLowerCase();
+                    const codeLabel = translateErrorCode(code);
+                    const detailText = normalizeErrorText(detail);
+                    const suffixParts: string[] = [];
+                    if (codeLabel && !baseLower.includes(codeLabel.toLowerCase())) suffixParts.push(codeLabel);
+                    if (detailText && !baseLower.includes(detailText.toLowerCase())) suffixParts.push(detailText);
+                    const suffix = suffixParts.join(" · ");
 
                     return (
                       <div key={i} className="small">
-                        {translateProgressType(ev.type)} · {translateProgressStage(ev.stage)} ·{" "}
-                        {baseText}
+                        {translateProgressType(ev.type)} · {baseText}
                         {suffix ? <span className="text-muted"> ({suffix})</span> : null}
                       </div>
                     );

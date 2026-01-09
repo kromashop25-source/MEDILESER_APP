@@ -15,9 +15,12 @@ type Props = {
 function buildDupWarningMessage(duplicates: File[]) {
   if (duplicates.length === 0) return "";
   const names = Array.from(new Set(duplicates.map((d) => d.name)));
-  return names.length === 1
-    ? `El archivo "${names[0]}" ya se encuentra cargado.`
-    : `Los archivos ya se encuentran cargados: ${names.join(", ")}.`;
+  const omitted = duplicates.length;
+  if (names.length === 1) {
+    const base = omitted === 1 ? "Se omitió 1 archivo duplicado" : `Se omitieron ${omitted} archivos duplicados`;
+    return `${base}: "${names[0]}".`;
+  }
+  return `Se omitieron ${omitted} archivos duplicados: ${names.join(", ")}.`;
 }
 
 export default function MultiFilePicker({

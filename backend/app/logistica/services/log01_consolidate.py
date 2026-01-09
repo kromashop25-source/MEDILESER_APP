@@ -60,7 +60,7 @@ def _parse_oi_number_from_filename(filename: str) -> int:
     m = _OI_RE.search(filename or "")
     if not m:
         raise ValueError(
-            "INVALID_OI_FILENAME·El nombre del archivo debe incluir el patrón OI-####-YYYY (ej: OI-0123-2025.xlsx)."
+            "El nombre del archivo debe incluir el patrón OI-####-YYYY (ej: OI-0123-2025.xlsx)."
         )
     return int(m.group(1))
 
@@ -399,7 +399,7 @@ def process_log01_files(
     input_conformes_total = 0
     input_no_conformes_total = 0
 
-    def _mew_source_bucket() ->  Dict[str, Any]:
+    def _new_source_bucket() ->  Dict[str, Any]:
         return {
             "files_total": 0,
             "files_ok": 0,
@@ -412,8 +412,8 @@ def process_log01_files(
     
     # Auditoría agregada por tipo de origen
     by_source: Dict[str, Dict[str, Any]] = {
-        "BASES": _mew_source_bucket(),
-        "GASELAG": _mew_source_bucket(),
+        "BASES": _new_source_bucket(),
+        "GASELAG": _new_source_bucket(),
     }
 
     for idx, item in enumerate(file_items, start=1):
@@ -439,7 +439,7 @@ def process_log01_files(
         try:
             data = _read_input_bytes(item)
             if not data:
-                raise ValueError("EMPTY_FILE·El archivo está vacío o no se pudo leer.")
+                raise ValueError("El archivo está vacío o no se pudo leer.")
 
             wb = load_workbook(filename=BytesIO(data), data_only=True, read_only=True)
             ws = wb.worksheets[0]
@@ -447,7 +447,7 @@ def process_log01_files(
             item_pos = _find_item_header_cell(ws)
             if not item_pos:
                 raise ValueError(
-                    "MISSING_HEADERS·No se encontró la cabecera 'Item' (normalizada) en la hoja."
+                    "No se encontró la cabecera 'Item' (normalizada) en la hoja."
                 )
             header_row, _item_col = item_pos
 
@@ -472,22 +472,19 @@ def process_log01_files(
                 return find_input_col
 
             find_bases = _make_find_input_col(_INPUT_HEADER_ALIASES_BASES)
-            missing_bases = [k for k in _OUTPUT_KEYS if k != "organismo" and not find_bases(k)]
-            # BASES requiere además "organismo" desde input (comportamiento vigente)
-            if not find_bases("organismo"):
-                missing_bases.append("organismo")
+            missing_bases = [k for k in _REQUIRED_INPUT_KEYS_BASES if not find_bases(k)]
 
             find_gaselag = _make_find_input_col(_INPUT_HEADER_ALIASES_GASELAG)
             missing_gaselag = [k for k in _REQUIRED_INPUT_KEYS_GASELAG if not find_gaselag(k)]
 
             if source == "BASES":
                 if missing_bases:
-                    raise ValueError("MISSING_HEADERS·Faltan cabeceras requeridas (BASES): " + ", ".join(missing_bases))
+                    raise ValueError("Faltan cabeceras requeridas (BASES): " + ", ".join(missing_bases))
                 source_type = "BASES"
                 find_input_col = find_bases
             elif source == "GASELAG":
                 if missing_gaselag:
-                    raise ValueError("MISSING_HEADERS·Faltan cabeceras requeridas (GASELAG): " + ", ".join(missing_gaselag))
+                    raise ValueError("Faltan cabeceras requeridas (GASELAG): " + ", ".join(missing_gaselag))
                 source_type = "GASELAG"
                 find_input_col = find_gaselag
             else:
@@ -501,8 +498,8 @@ def process_log01_files(
                 else:
                     # Reportar el set "más cercano" para debugging
                     if len(missing_bases) <= len(missing_gaselag):
-                        raise ValueError("MISSING_HEADERS·Faltan cabeceras requeridas (BASES): " + ", ".join(missing_bases))
-                    raise ValueError("MISSING_HEADERS·Faltan cabeceras requeridas (GASELAG): " + ", ".join(missing_gaselag))
+                        raise ValueError("Faltan cabeceras requeridas (BASES): " + ", ".join(missing_bases))
+                    raise ValueError("Faltan cabeceras requeridas (GASELAG): " + ", ".join(missing_gaselag))
 
             # Validación por nombre SOLO para BASES
             if source_type == "BASES":
@@ -513,11 +510,6 @@ def process_log01_files(
                 oi_tag = "GASELAG"
 
             required_keys = _REQUIRED_INPUT_KEYS_BASES if source_type == "BASES" else _REQUIRED_INPUT_KEYS_GASELAG
-            missing = [k for k in required_keys if not find_input_col(k)]
-            if missing:
-                 raise ValueError(
-                    "MISSING_HEADERS·Faltan cabeceras requeridas: " + ", ".join(missing)
-                )
 
             file_conformes = 0
             file_no_conformes = 0
@@ -531,7 +523,7 @@ def process_log01_files(
             missing = [key for key, col in col_by_key.items() if not col]
             if missing:
                 raise ValueError(
-                    "MISSING_HEADERS·Faltan cabeceras requeridas: " + ", ".join(missing)
+                    "Faltan cabeceras requeridas: " + ", ".join(missing)
                 )
 
             serie_col = col_by_key["medidor"]
@@ -627,10 +619,12 @@ def process_log01_files(
 
             file_no_conforme_series = sorted(set(file_no_conforme_series), key=_natural_key)
             rows_total_read += extracted
+            if source_type not in ("BASES", "GASELAG"):
+                raise ValueError("No se pudo clasificar el archivo por cabeceras.")
             ok_files += 1
 
             # Agregado por tipo
-            b= by_source.setdefault(source_type, _mew_source_bucket())
+            b= by_source.setdefault(source_type, _new_source_bucket())
             b["files_ok"] += 1
             b["rows_read"] += extracted
             b["conformes"] += file_conformes
@@ -679,25 +673,37 @@ def process_log01_files(
             # En errores debemos registrar el tipo REAL del archivo si ya fue detectado
             # Si aún no se detectó, mantener AUTO e intentar inferir por el texto
             err_source = source_type or "AUTO"
-            if err_source == "AUTO":
+            if err_code == "INVALID_OI_FILENAME":
+                err_source = "BASES"
+            elif err_source == "AUTO":
                 up = raw.upper()
                 if "(BASES)" in up:
                     err_source = "BASES"
                 elif "(GASELAG)" in up:
                     err_source = "GASELAG"
                 else:
-                    # Si no hay pista, mantener AUTO para no falsear buckets
-                    err_source = "AUTO"
-
-            oi_tag = None
+                    # Heurística por filename: si parece Base Comercial (OI-####-YYYY) => BASES
+                    if _parse_oi_tag_from_filename(fname):
+                        err_source = "BASES"
+                    else:
+                        err_source = "AUTO"
+            
+            # Si es BASES y el error NO es por filename inválido, intenta extraer oi_num/oi_tag
             if err_source == "BASES" and err_code != "INVALID_OI_FILENAME":
-                oi_tag = _parse_oi_tag_from_filename(fname)
+                if not isinstance(oi_num, int) or oi_num <= 0:
+                    try:
+                        oi_num = _parse_oi_number_from_filename(fname)
+                    except Exception:
+                        pass
+                if not isinstance(oi_tag, str) or not oi_tag:
+                    oi_tag = _parse_oi_tag_from_filename(fname)
             elif err_source == "GASELAG":
                 oi_tag = "GASELAG"
 
             # Agregado por tipo
-            b= by_source.setdefault(err_source, _mew_source_bucket())
-            b["files_error"] += 1
+            if err_source != "AUTO":
+                b= by_source.setdefault(err_source, _new_source_bucket())
+                b["files_error"] += 1
 
             audit_by_oi.append(
                 {
@@ -767,7 +773,7 @@ def process_log01_files(
         if header_row:
             break
     if not header_row:
-        raise ValueError("TEMPLATE_INVALID·No se encontró la cabecera 'Item' en la hoja BD de la plantilla.")
+        raise ValueError("No se encontró la cabecera 'Item' en la hoja BD de la plantilla.")
 
     data_start_row = header_row + 1
 
@@ -822,7 +828,7 @@ def process_log01_files(
     critical = {"medidor", "estado", "q3", "q2", "q1"}
     if critical.intersection(set(missing_out)):
         raise ValueError(
-            "TEMPLATE_INVALID·La plantilla BD no contiene cabeceras requeridas: " + ", ".join(sorted(critical.intersection(set(missing_out))))
+            "La plantilla BD no contiene cabeceras requeridas: " + ", ".join(sorted(critical.intersection(set(missing_out))))
         )
 
     # 3) Limpiar filas de datos previas (solo en columnas relevantes)
@@ -912,7 +918,7 @@ def process_log01_files(
         "files_ok": ok_files,
         "files_error": bad_files,
         "rows_total_read": rows_total_read,
-        "series_duplcates_eliminated": series_duplicates_eliminated,
+        "series_duplicates_eliminated": series_duplicates_eliminated,
         "series_total_dedup": series_total_dedup,
         "series_conformes": series_conformes,
         "series_no_conformes_final": series_no_conformes_final,
