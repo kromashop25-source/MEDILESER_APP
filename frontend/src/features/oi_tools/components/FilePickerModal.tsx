@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { ChangeEvent, DragEvent } from "react";
+import {useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent, DragEvent as ReactDragEvent} from "react";
 import { filterFilesByAccept, getFileKey, getFileNameKey } from "./filePickerUtils";
 
 type Props = {
@@ -47,9 +47,7 @@ export default function FilePickerModal({
     if (show) setDupWarning("");
   }, [show]);
 
-  if (!show) return null;
-
-  const addIncomingFiles = (incoming: File[]) => {
+  const addIncomingFiles = useCallback((incoming: File[]) => {
     const filtered = filterFilesByAccept(incoming, accept);
     if (filtered.length === 0) return;
 
@@ -80,7 +78,32 @@ export default function FilePickerModal({
     }
 
     if (toAdd.length > 0) onAddFiles(toAdd);
-  };
+  }, [accept, files, onAddFiles]);
+
+  useEffect(() => {
+    if (!show) return;
+    const onWindowDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onWindowDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (disabled) return;
+      const dropped = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
+      addIncomingFiles(dropped);
+    };
+    window.addEventListener("dragover", onWindowDragOver, true);
+    window.addEventListener("drop", onWindowDrop, true);
+    return () => {
+      window.removeEventListener("dragover", onWindowDragOver, true);
+      window.removeEventListener("drop", onWindowDrop, true);
+    };
+  }, [show, disabled, addIncomingFiles]);
+
+  if (!show) return null;
+
+
 
   const pickMore = () => {
     if (disabled) return;
@@ -99,7 +122,7 @@ export default function FilePickerModal({
     onRemoveAll();
   };
 
-  const onDragEnter = (e: DragEvent<HTMLDivElement>) => {
+  const onDragEnter = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     if (disabled) return;
@@ -107,12 +130,12 @@ export default function FilePickerModal({
     setIsDragOver(true);
   };
 
-  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+  const onDragOver = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
   };
 
-  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
+  const onDragLeave = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     if (disabled) return;
@@ -120,7 +143,7 @@ export default function FilePickerModal({
     if (dragDepthRef.current === 0) setIsDragOver(false);
   };
 
-  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+  const onDrop = (e: ReactDragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     dragDepthRef.current = 0;

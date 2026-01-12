@@ -53,15 +53,15 @@ class Log01ProcessResult:
 # Utilitarios
 # ----------------------------
 
-_OI_RE = re.compile(r"OI-(\d{4})-(\d{4})", re.IGNORECASE)
+_BASES_FILENAME_RE = re.compile(r"Base Comercial\s+OI-(\d{4})-(\d{4})", re.IGNORECASE)
 
 
 def _parse_oi_number_from_filename(filename: str) -> int:
-    m = _OI_RE.search(filename or "")
+    m = _BASES_FILENAME_RE.search(filename or "")
     if not m:
         raise ValueError(
-            "El nombre del archivo debe incluir el patrón OI-####-YYYY (ej: OI-0123-2025.xlsx)."
-        )
+            "El nombre del archivo de Base Comercial debe incluir el patron Base Comercial OI-####-YYYY (ej: Base Comercial OI-0123-2025.xlsx)."
+         )
     return int(m.group(1))
 
 
@@ -104,7 +104,7 @@ def _classify_file_error(msg: str) -> str:
 
 
 def _parse_oi_tag_from_filename(filename: str) -> Optional[str]:
-    m = _OI_RE.search(filename or "")
+    m = _BASES_FILENAME_RE.search(filename or "")
     if not m:
         return None
     return f"OI-{m.group(1)}-{m.group(2)}"
@@ -234,7 +234,7 @@ _INPUT_HEADER_ALIASES_BASES: Dict[str, List[str]] = {
     "organismo": ["organismo de inspeccion"],
 }
 
-_REQUIRED_INPUT_KEYS_GASELAG = [
+_REQUIRED_INPUT_KEYS_GASELAG_V1 = [
     # organismo es fijo OI-066 (NO viene del archivo)
     "medidor",
     "precinto",
@@ -250,6 +250,24 @@ _REQUIRED_INPUT_KEYS_GASELAG = [
     "error_q1",
     "estado",
     "certificado_banco",
+]
+
+_REQUIRED_INPUT_KEYS_GASELAG_V2 = [
+    "medidor",
+    "q3",
+    "error_q3",
+    "q2",
+    "error_q2",
+    "q1",
+    "error_q1",
+    "estado_pe",
+    "fecha",
+    "certificado",
+    "estado",
+    "precinto",
+    "banco_numero",
+    "certificado_banco",
+    "organismo",
 ]
 
 _INPUT_HEADER_ALIASES_GASELAG: Dict[str, List[str]] = {
@@ -317,7 +335,7 @@ def _normalize_output_date(d: Any) -> Optional[date]:
     if not s:
         return None
     # intentar dd/mm/yyyy
-    for fmt in ("%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d", "%d-%m-%Y"):
+    for fmt in ("%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
         try:
             return datetime.strptime(s, fmt).date()
         except Exception:
@@ -347,7 +365,7 @@ def _normalize_input_date(v: Any, epoch: date) -> Optional[date]:
     s = str(v).strip()
     if not s:
         return None
-    for fmt in ("%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d", "%d-%m-%Y"):
+    for fmt in ("%d/%m/%Y", "%Y/%m/%d", "%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"):
         try:
             return datetime.strptime(s, fmt).date()
         except Exception:
@@ -420,6 +438,7 @@ def process_log01_files(
         _raise_cancelled()
 
         fname = item.name or f"archivo_{idx}.xlsx"
+        bases_filename = bool(_BASES_FILENAME_RE.search(fname or ""))
         _emit(
             operation_id,
             {
@@ -450,12 +469,32 @@ def process_log01_files(
                     "No se encontró la cabecera 'Item' (normalizada) en la hoja."
                 )
             header_row, _item_col = item_pos
+            header_row_idx: int = header_row
 
             input_header_map: Dict[str, int] = {}
             for c in range(1, ws.max_column + 1):
                 name = _norm_header(ws.cell(row=header_row, column=c).value)
                 if name and name not in input_header_map:
                     input_header_map[name] = c
+
+            def _peek_col_value(col: Optional[int], max_scan: int = 25) -> Optional[str]:
+                if not col:
+                    return None
+                max_row = min(ws.max_row or 0, header_row_idx + max_scan)
+                for row in ws.iter_rows(
+                    min_row=header_row_idx + 1,
+                    max_row=max_row,
+                    min_col=col,
+                    max_col=col,
+                    values_only=True,
+                ):
+                    v = row[0] if row else None
+                    if v is None:
+                        continue
+                    if isinstance(v, str) and not v.strip():
+                        continue
+                    return _norm_str(v)
+                return None
 
             # AUTO / BASES / GASELAG: se resuelve por archivo en source_type
 
@@ -475,7 +514,10 @@ def process_log01_files(
             missing_bases = [k for k in _REQUIRED_INPUT_KEYS_BASES if not find_bases(k)]
 
             find_gaselag = _make_find_input_col(_INPUT_HEADER_ALIASES_GASELAG)
-            missing_gaselag = [k for k in _REQUIRED_INPUT_KEYS_GASELAG if not find_gaselag(k)]
+            missing_gaselag_v2 = [k for k in _REQUIRED_INPUT_KEYS_GASELAG_V2 if not find_gaselag(k)]
+            missing_gaselag_v1 = [k for k in _REQUIRED_INPUT_KEYS_GASELAG_V1 if not find_gaselag(k)]
+
+            gaselag_variant: str | None = None
 
             if source == "BASES":
                 if missing_bases:
@@ -483,23 +525,55 @@ def process_log01_files(
                 source_type = "BASES"
                 find_input_col = find_bases
             elif source == "GASELAG":
-                if missing_gaselag:
-                    raise ValueError("Faltan cabeceras requeridas (GASELAG): " + ", ".join(missing_gaselag))
-                source_type = "GASELAG"
-                find_input_col = find_gaselag
-            else:
-                # AUTO: detectar por cabeceras
-                if not missing_bases:
-                    source_type = "BASES"
-                    find_input_col = find_bases
-                elif not missing_gaselag:
+                if not missing_gaselag_v2:
                     source_type = "GASELAG"
+                    gaselag_variant = "V2"
+                    find_input_col = find_gaselag
+                elif not missing_gaselag_v1:
+                    source_type = "GASELAG"
+                    gaselag_variant = "V1"
                     find_input_col = find_gaselag
                 else:
+                    # reporta el más cercano (útil en soporte)
+                    miss = missing_gaselag_v2 if len(missing_gaselag_v2) <= len(missing_gaselag_v1) else missing_gaselag_v1
+                    raise ValueError("Faltan cabeceras requeridas (GASELAG): " + ", ".join(miss))
+            else:
+                # AUTO: detectar por cabeceras + nombre Base Comercial + organismo
+                if bases_filename:
+                    source_type = "BASES"
+                    find_input_col = find_bases
+                elif (not missing_bases) and (not missing_gaselag_v2):
+                    org_col = find_gaselag("organismo") or find_bases("organismo")
+                    org_val = _peek_col_value(org_col)
+                    org_norm = (org_val or "").strip().upper()
+                    if org_norm == "OI-066":
+                        source_type = "GASELAG"
+                        gaselag_variant = "V2"
+                        find_input_col = find_gaselag
+                    elif org_norm == "OI-040":
+                        source_type = "BASES"
+                        find_input_col = find_bases
+                    else:
+                        source_type = "GASELAG"
+                        gaselag_variant = "V2"
+                        find_input_col = find_gaselag
+                elif not missing_gaselag_v2:
+                    source_type = "GASELAG"
+                    gaselag_variant = "V2"
+                    find_input_col = find_gaselag
+                elif not missing_gaselag_v1:
+                    source_type = "GASELAG"
+                    gaselag_variant = "V1"
+                    find_input_col = find_gaselag
+                elif not missing_bases:
+                    source_type = "BASES"
+                    find_input_col = find_bases
+                else:
                     # Reportar el set "más cercano" para debugging
-                    if len(missing_bases) <= len(missing_gaselag):
+                    if len(missing_bases) <= min(len(missing_gaselag_v2), len(missing_gaselag_v1)):
                         raise ValueError("Faltan cabeceras requeridas (BASES): " + ", ".join(missing_bases))
-                    raise ValueError("Faltan cabeceras requeridas (GASELAG): " + ", ".join(missing_gaselag))
+                    miss = missing_gaselag_v2 if len(missing_gaselag_v2) <= len(missing_gaselag_v1) else missing_gaselag_v1
+                    raise ValueError("Faltan cabeceras requeridas (GASELAG): " + ", ".join(miss))
 
             # Validación por nombre SOLO para BASES
             if source_type == "BASES":
@@ -509,7 +583,14 @@ def process_log01_files(
                 oi_num = 0
                 oi_tag = "GASELAG"
 
-            required_keys = _REQUIRED_INPUT_KEYS_BASES if source_type == "BASES" else _REQUIRED_INPUT_KEYS_GASELAG
+            if source_type == "BASES":
+                required_keys = _REQUIRED_INPUT_KEYS_BASES
+            else:
+                required_keys = (
+                    _REQUIRED_INPUT_KEYS_GASELAG_V2
+                    if gaselag_variant == "V2"
+                    else _REQUIRED_INPUT_KEYS_GASELAG_V1
+                )
 
             file_conformes = 0
             file_no_conformes = 0
@@ -596,7 +677,11 @@ def process_log01_files(
                         row_values[key] = estado
                         continue
                     if source_type == "GASELAG" and key == "organismo":
-                        row_values[key] = "OI-066"
+                        col_org = find_input_col("organismo") # Opcional en V1, requerido en V2
+                        if col_org:
+                            row_values[key] = _row_value(row, col_org)
+                        else:
+                            row_values[key] = "OI-066"
                         continue
                     col = col_by_key.get(key)
                     val = _row_value(row, col)

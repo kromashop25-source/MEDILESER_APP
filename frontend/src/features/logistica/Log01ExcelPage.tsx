@@ -578,6 +578,7 @@ export default function Log01ExcelPage() {
                   accept=".xlsx"
                   files={files}
                   setFiles={setFiles}
+                  fullDropArea
                   disabled={running}
                 />
                 <div className="small text-muted mT-5">

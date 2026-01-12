@@ -8,6 +8,7 @@ type Props = {
   title: string;
   accept?: string;
   disabled?: boolean;
+  fullDropArea?: boolean;
   files: File[];
   setFiles: Dispatch<SetStateAction<File[]>>;
 };
@@ -28,6 +29,7 @@ export default function MultiFilePicker({
   title,
   accept,
   disabled = false,
+  fullDropArea = false,
   files,
   setFiles,
 }: Props) {
@@ -87,31 +89,20 @@ export default function MultiFilePicker({
     addFiles(dropped);
   };
 
-  return (
-    <div>
+  const pickerBody = (
+    <>
       <label className="form-label">{label}</label>
-
-      <div
-        className={`vi-file-drop-target${isDragOver ? " is-dragover" : ""}`}
-        onDragEnter={onDragEnter}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        aria-disabled={disabled ? "true" : "false"}
-      >
-        <div className="input-group">
-          <button
-            type="button"
-            className="btn btn-outline-primary"
-            onClick={() => setShowModal(true)}
-            disabled={disabled}
-          >
-            {buttonLabel}
-          </button>
-          <input className="form-control" type="text" readOnly value={countLabel} />
-        </div>
+      <div className="input-group">
+        <button
+          type="button"
+          className="btn btn-outline-primary"
+          onClick={() => setShowModal(true)}
+          disabled={disabled}
+        >
+          {buttonLabel}
+        </button>
+        <input className="form-control" type="text" readOnly value={countLabel} />
       </div>
-
       {dupWarning ? (
         <div className="alert alert-warning d-flex align-items-center justify-content-between mT-10" role="alert">
           <div>{dupWarning}</div>
@@ -123,6 +114,58 @@ export default function MultiFilePicker({
           />
         </div>
       ) : null}
+    </>
+  );
+
+  return (
+    <>
+      {fullDropArea ? (
+        <div
+          className={`vi-file-drop-target${isDragOver ? " is-dragover" : ""}`}
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          aria-disabled={disabled ? "true" : "false"}
+        >
+          {pickerBody}
+        </div>
+      ) : (
+        <div>
+          <label className="form-label">{label}</label>
+          <div
+            className={`vi-file-drop-target${isDragOver ? " is-dragover" : ""}`}
+            onDragEnter={onDragEnter}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            aria-disabled={disabled ? "true" : "false"}
+          >
+            <div className="input-group">
+              <button
+                type="button"
+                className="btn btn-outline-primary"
+                onClick={() => setShowModal(true)}
+                disabled={disabled}
+              >
+                {buttonLabel}
+              </button>
+              <input className="form-control" type="text" readOnly value={countLabel} />
+            </div>
+          </div>
+          {dupWarning ? (
+            <div className="alert alert-warning d-flex align-items-center justify-content-between mT-10" role="alert">
+              <div>{dupWarning}</div>
+              <button
+                type="button"
+                className="btn-close"
+                aria-label="Cerrar"
+                onClick={() => setDupWarning("")}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <FilePickerModal
         show={showModal}
@@ -135,6 +178,6 @@ export default function MultiFilePicker({
         onRemoveFile={(key) => setFiles((prev) => prev.filter((f) => getFileKey(f) !== key))}
         onRemoveAll={() => setFiles([])}
       />
-    </div>
+    </>
   );
-}
+ }
