@@ -22,6 +22,22 @@ from app.oi_tools.services.progress_manager import progress_manager, SENTINEL
 from app.oi_tools.services.cancel_manager import cancel_manager
 from app.logistica.services.log01_consolidate import process_log01_files, Log01InputFile, Log01Cancelled
 
+from datetime import datetime
+from sqlalchemy import func
+from sqlmodel import Session, select
+
+from app.core.db import engine
+from app.core.settings import get_settings
+from app.core.rbac import can_manage_users
+from app.models import Log01Run, Log01Artifact
+from app.schemas import (
+    Log01RunListResponse,
+    Log01RunListItem,
+    Log01RunDetail,
+    Log01ArtifactRead,
+    Log01RunDeleteRequest,
+)
+
 router = APIRouter(
     prefix="/logistica/log01",
     tags=["logistica/log01"],
@@ -93,6 +109,7 @@ def _run_log01_job(
     job: Log01Job,
     file_items: List[Log01InputFile],
     output_filename: Optional[str],
+    sess_snapshot: Dict[str, Any]
 ) -> None:
     operation_id = job.operation_id
     cancel_token = cancel_manager.get(operation_id)
@@ -122,6 +139,30 @@ def _run_log01_job(
         manifest_path = os.path.join(job.work_dir, "manifiesto.json")
         with open(manifest_path, "wb") as out_f:
             out_f.write(res.manifest_json)
+
+        try:
+            settings = get_settings()
+
+            def _write_persistent(run_id: int, filename: str, content: bytes) -> tuple[str, int]:
+                base_dir = settings.data_dir / "logistica" / "log01_runs" / str(run_id)
+                base_dir.mkdir(parents=True, exist_ok=True)
+                abs_path = base_dir / filename
+                abs_path.write_bytes(content)
+                rel_path = str(abs_path.relative_to(settings.data_dir))
+                return rel_path, abs_path.stat().st_size
+            
+            with Session(engine) as session:
+                run = Log01Run(
+                    operation_id=operation_id,
+                    source=job.source,
+                    output_name=out_name,
+                    status="COMPLETADO",
+                    created_at=datetime.utcnow(),
+                    completed_at=datetime.utcnow(),
+                    created_by_user_id=sess_snapshot["user_id"],
+                    created_by_username=()
+                )
+                
 
         with LOG01_JOBS_LOCK:
             current = LOG01_JOBS.get(operation_id)

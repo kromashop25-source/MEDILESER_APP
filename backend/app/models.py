@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, ClassVar
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, CheckConstraint, Enum as SAEnum, event
 from sqlalchemy.types import JSON
@@ -82,6 +82,62 @@ class Bancada(SQLModel, table=True):
     saved_at: Optional[datetime] = None
 
     oi: Optional[OI] = Relationship(back_populates="bancadas")
+
+class Log01Run(SQLModel, table=True):
+    __tablename__: ClassVar[str] = "log01_run"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Trazabilidad con el job async actual
+    operation_id: str = Field(index=True)
+
+    # Igual a /logistica/log01/start
+    source: str = Field(index=True)
+
+    # Nombre final del Excel (rest.out_name)
+    output_name: Optional[str] = Field(default=None)
+
+    # Estados en español para historail (no afecta estados internos del job)
+    status: str = Field(default="COMPLETADO", index=True)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+
+    # Auditoría del usuario (snapshot de sesión)
+    created_by_user_id: Optional[int] = Field(default=None, index=True)
+    created_by_username: str = Field(index=True)
+    created_by_full_name: Optional[str] = None
+    created_by_banco_id: Optional[int]  = Field(default=None, index=True)
+    
+    # Guardamos el summary completo del consolidado
+    summary_json: Optional[dict] = Field(default= None, sa_column=Column(JSON))
+
+    #Soft delete
+    deleted_at: Optional[datetime] = None
+    deleted_by_user_id: Optional[int] = None
+    deleted_by_username: Optional[str] = None
+    delete_reason: Optional[str] = None
+
+    artifacts: List["Log01Artifact"] = Relationship(back_populates="run")
+
+class Log01Artifact(SQLModel, table=True):
+    __tablename__: ClassVar[str] = "log01_artifact"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    run_id: int = Field(foreign_key="log01_run.id", index=True)
+
+    # EXCEL_FINAL | JSON_NO_CONFORME_FINAL | JSON_MANIFIESTO
+    kind: str = Field(index=True)
+
+    filename: str
+    storage_rel_path: str # relativo a settings.data_dir
+    content_type: str
+    size_bytes: Optional[int] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    run: Optional[Log01Run] = Relationship(back_populates="artifacts")
+
+
 
 # --- Normalización de numeration_type al guardar ---
 @event.listens_for(OI, "before_insert")

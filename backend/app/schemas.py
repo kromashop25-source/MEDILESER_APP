@@ -139,3 +139,59 @@ class OIListResponse(BaseModel):
     limit: int
     offset: int
     summary: Optional[OIListSummary] = None
+
+class Log01ArtifactRead(BaseModel):
+    id: int
+    kind: str
+    filename: str
+    content_type: str
+    size_bytes: Optional[int] = None
+    created_at: datetime
+
+class Log01RunListItem(BaseModel):
+    id: int
+    operation_id: str
+    source: str
+    status: str
+    output_name: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+    created_by_username: str
+    created_by_full_name: Optional[str] = None
+    created_by_banco_id: Optional[int] = None
+
+    # Resumen liviano para la tabla (guardamos el summary completo en default)
+    summary_json: Optional[Any] = None
+
+    deleted_at: Optional[datetime] = None
+
+class Log01RunDetail(BaseModel):
+    id: int
+    operation_id: str
+    source: str
+    status: str
+    output_name: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+    created_by_user_id: Optional[int] = None
+    created_by_username: str
+    created_by_full_name: Optional[str] = None
+    created_by_banco_id: Optional[int] = None
+
+    summary_json: Optional[Any] = None
+    artifacts: List[Log01ArtifactRead] = []
+
+    deleted_at: Optional[datetime] = None
+    deleted_by_username: Optional[str] = None
+    delete_reason: Optional[str] = None
+
+class Log01RunListResponse(BaseModel):
+    items: List[Log01RunListItem]
+    total: int
+    limit: int
+    offset: int
+
+class Log01RunDeleteRequest(BaseModel):
+    reason: Optional[str] = None

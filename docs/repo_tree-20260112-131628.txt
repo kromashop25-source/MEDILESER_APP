@@ -286,8 +286,8 @@ MEDILESER_APP
 │   │   │       │   ├── ui.html
 │   │   │       │   └── vector-maps.html
 │   │   │       ├── assets
-│   │   │       │   ├── index-8x77u06b.js
-│   │   │       │   └── index-BxqLcx0v.css
+│   │   │       │   ├── index-BxqLcx0v.css
+│   │   │       │   └── index-niynQbVW.js
 │   │   │       ├── medileser
 │   │   │       │   ├── banner.jpg
 │   │   │       │   ├── logo-vertical.jpg
@@ -341,7 +341,8 @@ MEDILESER_APP
 │   ├── Manual_Usuario_Formato_VI.md
 │   ├── MEDILESER_APP_BITACORA _SCRUM.xlsx
 │   ├── Pruebas_Desempeño_Excel.md
-│   └── Pruebas_E2E_Excel.md
+│   ├── Pruebas_E2E_Excel.md
+│   └── repo_tree-20260109-160002.txt
 ├── frontend
 │   ├── public
 │   │   ├── adminator
@@ -532,6 +533,7 @@ MEDILESER_APP
 ├── backup_medileser.ps1
 ├── BASE.sql
 ├── build_frontend_and_copy.bat
+├── DATA MEDILESER.sql
 ├── INSTALACION.md
 ├── INSTALAR VENV.txt
 ├── instalar_dependencias.bat
