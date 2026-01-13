@@ -23,7 +23,7 @@ from app.oi_tools.services.cancel_manager import cancel_manager
 from app.logistica.services.log01_consolidate import process_log01_files, Log01InputFile, Log01Cancelled
 
 from datetime import datetime
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 from app.core.db import engine
@@ -104,6 +104,35 @@ def _persist_upload_files(files: List[UploadFile], work_dir: str) -> List[Log01I
         items.append(Log01InputFile(name=name, path=dest_path))
     return items
 
+def _infer_log01_run_source(job_source: str, summary: Dict[str, Any]) -> str:
+    if job_source in ("BASES", "GASELAG"):
+        return job_source
+    if not isinstance(summary, dict):
+        return job_source
+    by_source = summary.get("by_source")
+    if not isinstance(by_source, dict):
+        return job_source
+
+    def _files_total(bucket: Any) -> int:
+        if not isinstance(bucket, dict):
+            return 0
+        v = bucket.get("files_total")
+        if isinstance(v, (int, float)):
+            return int(v)
+        ok = bucket.get("files_ok")
+        err = bucket.get("files_error")
+        if isinstance(ok, (int, float)) and isinstance(err, (int, float)):
+            return int(ok) + int(err)
+        return 0
+
+    bases_total = _files_total(by_source.get("BASES"))
+    gas_total = _files_total(by_source.get("GASELAG"))
+    if bases_total > 0 and gas_total <= 0:
+        return "BASES"
+    if gas_total > 0 and bases_total <= 0:
+        return "GASELAG"
+    return job_source
+
 
 def _run_log01_job(
     job: Log01Job,
@@ -124,6 +153,7 @@ def _run_log01_job(
         xlsx_bytes = res.xlsx_bytes
         out_name = res.out_name
         _summary = res.summary
+        run_source = _infer_log01_run_source(job.source, _summary)
 
         # 1) Excel final (CONFORME)
         result_path = os.path.join(job.work_dir, "result.xlsx")
@@ -154,15 +184,66 @@ def _run_log01_job(
             with Session(engine) as session:
                 run = Log01Run(
                     operation_id=operation_id,
-                    source=job.source,
+                    source=run_source,
                     output_name=out_name,
                     status="COMPLETADO",
                     created_at=datetime.utcnow(),
                     completed_at=datetime.utcnow(),
-                    created_by_user_id=sess_snapshot["user_id"],
-                    created_by_username=()
+                    created_by_user_id=sess_snapshot["userId"],
+                    created_by_username=(sess_snapshot.get("username") or "").strip() or "desconocido",
+                    created_by_full_name=sess_snapshot.get("fullName"),
+                    created_by_banco_id=sess_snapshot.get("bancoId"),
+                    summary_json=_summary,
                 )
-                
+                session.add(run)
+                session.commit()
+                session.refresh(run)
+                run_id = run.id
+                if run_id is None:
+                    raise RuntimeError("LOG01 persistence failed: run.id is None")
+                run_id = cast(int, run_id)
+
+                base = Path(out_name or f"LOG01_{operation_id}").stem
+
+                # Excel
+                excel_filename = out_name or f"{base}.xlsx"
+                excel_rel, excel_size = _write_persistent(run_id, excel_filename, xlsx_bytes)
+                session.add(Log01Artifact(
+                    run_id=run_id,
+                    kind="EXCEL_FINAL",
+                    filename=excel_filename,
+                    storage_rel_path=excel_rel,
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    size_bytes=excel_size,
+                ))
+
+                # NO CONFORME FINAL JSON
+                nc_filename = f"{base}__NO_CONFORME_FINAL.json"
+                nc_rel, nc_size = _write_persistent(run_id, nc_filename, res.no_conforme_json)
+                session.add(Log01Artifact(
+                    run_id=run_id,
+                    kind="JSON_NO_CONFORME_FINAL",
+                    filename=nc_filename,
+                    storage_rel_path=nc_rel,
+                    content_type="application/json",
+                    size_bytes=nc_size,
+                ))
+
+                # MANIFIESTO JSON
+                man_filename = f"{base}__MANIFIESTO.json"
+                man_rel, man_size = _write_persistent(run_id, man_filename, res.manifest_json)
+                session.add(Log01Artifact(
+                    run_id=run_id,
+                    kind="JSON_MANIFIESTO",
+                    filename=man_filename,
+                    storage_rel_path=man_rel,
+                    content_type="application/json",
+                    size_bytes=man_size
+                ))
+
+                session.commit()
+        except Exception:
+            logger.exception("LOG01 persistence failed operation_id=%s", operation_id)
 
         with LOG01_JOBS_LOCK:
             current = LOG01_JOBS.get(operation_id)
@@ -340,6 +421,7 @@ def log01_start(
     operationId: Optional[str] = Form(None),  
     output_filename: Optional[str] = Form(None),
     source: Optional[str] = Form(None),
+    sess: Dict[str, Any]  = Depends(get_current_user_session),
 ):
     _cleanup_log01_jobs()
     # Compatibilidad frontend: aceptar operation_id o operationId
@@ -379,9 +461,18 @@ def log01_start(
     with LOG01_JOBS_LOCK:
         LOG01_JOBS[op_id] = job
 
+    sess_snapshot = {
+        "userId": sess.get("userId"),
+        "username": sess.get("username"),
+        "fullName": sess.get("fullName"),
+        "role": sess.get("role"),
+        "bancoId": sess.get("bancoId"),
+    
+    }
+
     thread = threading.Thread(
         target=_run_log01_job,
-        args=(job, file_items, output_filename),
+        args=(job, file_items, output_filename, sess_snapshot),
         daemon=True,
     )
     thread.start()
@@ -452,6 +543,218 @@ def log01_result_manifest(operation_id: str):
     filename = (job.output_name and f"{Path(job.output_name).stem}_MANIFIESTO.json") or "MANIFIESTO.json"
     headers = {"X-File-Name": filename}
     return FileResponse(job.manifest_path, filename=filename, media_type="application/json", headers=headers)
+
+# ----------------------------
+# Historial LOG01
+# ----------------------------
+def _parse_history_date(value: Optional[str], end_of_day: bool) -> Optional[datetime]:
+    if not value:
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        cleaned = raw[:-1] if raw.endswith("Z") else raw
+        parsed = datetime.fromisoformat(cleaned)
+    except ValueError:
+        return None
+    has_time = "T" in raw or " " in raw
+    if not has_time:
+        if end_of_day:
+            return parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return parsed.replace(hour=0, minute=0, second=0, microsecond=0)
+    return parsed
+
+
+@router.get("/history", response_model=Log01RunListResponse)
+def log01_history_list(
+    limit: int = 20,
+    offset: int = 0,
+    include_deleted: bool = False,
+    q: Optional[str] = None,
+    dateFrom: Optional[str] = None,
+    dateTo: Optional[str] = None,
+    source: Optional[str] = None,
+    status: Optional[str] = None,
+):
+    deleted_at_col = cast(Any, Log01Run.deleted_at)
+    created_at_col = cast(Any, Log01Run.created_at)
+    where = []
+    if not include_deleted:
+        where.append(deleted_at_col.is_(None))
+
+    q_clean = (q or "").strip()
+    if q_clean:
+        q_like = f"%{q_clean.lower()}%"
+        where.append(
+            or_(
+                func.lower(cast(Any, Log01Run.created_by_username)).like(q_like),
+                func.lower(cast(Any, Log01Run.created_by_full_name)).like(q_like),
+                func.lower(cast(Any, Log01Run.operation_id)).like(q_like),
+                func.lower(cast(Any, Log01Run.output_name)).like(q_like),
+            )
+        )
+
+    dt_from = _parse_history_date(dateFrom, end_of_day=False)
+    if dt_from:
+        where.append(created_at_col >= dt_from)
+
+    dt_to = _parse_history_date(dateTo, end_of_day=True)
+    if dt_to:
+        where.append(created_at_col <= dt_to)
+
+    source_clean = (source or "").strip().upper()
+    if source_clean:
+        where.append(Log01Run.source == source_clean)
+
+    status_clean = (status or "").strip().upper()
+    if status_clean:
+        where.append(func.upper(cast(Any, Log01Run.status)) == status_clean)
+
+    with Session(engine) as session:
+        total = session.exec(select(func.count()).select_from(Log01Run).where(*where)).one()
+        runs = session.exec(
+            select(Log01Run)
+            .where(*where)
+            .order_by(created_at_col.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+
+        items = [
+            Log01RunListItem(
+                id=cast(int, r.id),
+                operation_id=r.operation_id,
+                source=r.source,
+                status=r.status,
+                output_name=r.output_name,
+                created_at=r.created_at,
+                completed_at=r.completed_at,
+                created_by_username=r.created_by_username,
+                created_by_full_name=r.created_by_full_name,
+                created_by_banco_id=r.created_by_banco_id,
+                summary_json=r.summary_json,
+                deleted_at=r.deleted_at,
+            )
+            for r in runs
+        ]
+        return Log01RunListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/history/{run_id}", response_model=Log01RunDetail)
+def log01_history_detail(
+    run_id: int,
+):
+    with Session(engine) as session:
+        run = session.get(Log01Run, run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="No existe la corrida solicitada.")
+        run_id_value = run.id
+        if run_id_value is None:
+            raise HTTPException(status_code=500, detail="Corrida sin id persistida.")
+
+        arts = session.exec(
+            select(Log01Artifact)
+            .where(Log01Artifact.run_id == run_id)
+            .order_by(cast(Any, Log01Artifact.created_at).asc())
+        ).all()
+
+        return Log01RunDetail(
+            id=run_id_value,
+            operation_id=run.operation_id,
+            source=run.source,
+            status=run.status,
+            output_name=run.output_name,
+            created_at=run.created_at,
+            completed_at=run.completed_at,
+            created_by_user_id=run.created_by_user_id,
+            created_by_username=run.created_by_username,
+            created_by_full_name=run.created_by_full_name,
+            created_by_banco_id=run.created_by_banco_id,
+            summary_json=run.summary_json,
+            artifacts=[
+                Log01ArtifactRead(
+                    id=cast(int, a.id),
+                    kind=a.kind,
+                    filename=a.filename,
+                    content_type=a.content_type,
+                    size_bytes=a.size_bytes,
+                    created_at=a.created_at,
+                )
+                for a in arts
+            ],
+            deleted_at=run.deleted_at,
+            deleted_by_username=run.deleted_by_username,
+            delete_reason=run.delete_reason,
+        )
+
+
+@router.get("/history/{run_id}/artifact/{kind}")
+def log01_history_download_artifact(
+    run_id: int,
+    kind: str,
+):
+    kind_map = {
+        "excel": "EXCEL_FINAL",
+        "no-conforme": "JSON_NO_CONFORME_FINAL",
+        "manifiesto": "JSON_MANIFIESTO",
+    }
+    if kind not in kind_map:
+        raise HTTPException(status_code=400, detail="Tipo de artefacto inválido.")
+
+    settings = get_settings()
+    with Session(engine) as session:
+        run = session.get(Log01Run, run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="No existe la corrida solicitada.")
+
+        art = session.exec(
+            select(Log01Artifact)
+            .where(Log01Artifact.run_id == run_id, Log01Artifact.kind == kind_map[kind])
+        ).first()
+
+        if not art:
+            raise HTTPException(status_code=404, detail="No existe el artefacto solicitado.")
+
+        abs_path = settings.data_dir / art.storage_rel_path
+        if not abs_path.exists():
+            raise HTTPException(status_code=404, detail="El archivo no está disponible en el almacenamiento.")
+
+        return FileResponse(
+            path=str(abs_path),
+            filename=art.filename,
+            media_type=art.content_type,
+        )
+
+
+@router.delete("/history/{run_id}")
+def log01_history_soft_delete(
+    run_id: int,
+    payload: Log01RunDeleteRequest | None = None,
+    sess: Dict[str, Any] = Depends(get_current_user_session),
+):
+    role = sess.get("role")
+    username = sess.get("username")
+
+    if not can_manage_users(role, username):
+        raise HTTPException(status_code=403, detail="No autorizado para eliminar corridas.")
+
+    with Session(engine) as session:
+        run = session.get(Log01Run, run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="No existe la corrida solicitada.")
+
+        if run.deleted_at is not None:
+            return {"ok": True, "message": "La corrida ya estaba eliminada."}
+
+        run.deleted_at = datetime.utcnow()
+        run.deleted_by_user_id = sess.get("userId")
+        run.deleted_by_username = sess.get("username")
+        run.delete_reason = (payload.reason if payload else None)
+        session.add(run)
+        session.commit()
+
+        return {"ok": True, "message": "Corrida eliminada (soft delete)."}
 
 
 

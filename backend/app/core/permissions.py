@@ -15,7 +15,7 @@ MODULE_IDS: List[str] = [
     "admin_permisos",
     # Módulos visibles pero deshabilitados (FUTURO)
     "future_ot",
-    "future_logistica",
+    "logistica",
     "future_smart",
 ]
 
@@ -45,6 +45,9 @@ def normalize_allowed_modules(modules: Iterable[str]) -> List[str]:
         if not m:
             continue
         key = str(m).strip()
+        # Compatibilidad hacia atrás: antes el módulo se llamaba "future_logistica"
+        if key == "future_logistica":
+            key = "logistica"
         if not key or key in seen:
             continue
         seen.add(key)

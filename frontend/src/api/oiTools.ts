@@ -308,6 +308,144 @@ export async function cancelLog01Operation(operationId: string): Promise<void> {
   await api.post(`/logistica/log01/cancel/${encodeURIComponent(operationId)}`);
 }
 
+// ================================
+// LOG-01 - Historial (PB-LOG-026)
+// ================================
+
+export type Log01HistoryItem = {
+  id: number;
+  operation_id: string;
+  source: string;
+  status: string;
+  output_name?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  created_by_username: string;
+  created_by_full_name?: string | null;
+  created_by_banco_id?: number | null;
+  summary_json?: any;
+  deleted_at?: string | null;
+};
+
+
+
+export type Log01HistoryListParams = {
+  limit?: number;
+  offset?: number;
+  include_deleted?: boolean;
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  source?: string;
+  status?: string;
+};
+
+export type Log01HistoryListItem = {
+  id: number;
+  operation_id: string;
+  source: string;
+  status: string;
+  output_name?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  created_by_username: string;
+  created_by_full_name?: string | null;
+  created_by_banco_id?: number | null;
+  summary_json?: unknown;
+  deleted_at?: string | null;
+};
+
+export type Log01HistoryListResponse = {
+  items: Log01HistoryListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type Log01HistoryArtifact = {
+  id: number;
+  kind: string;
+  filename: string;
+  content_type: string;
+  size_bytes?: number | null;
+  created_at: string;
+};
+
+export type Log01HistoryDetail = {
+  id: number;
+  operation_id: string;
+  source: string;
+  status: string;
+  output_name?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  created_by_user_id?: number | null;
+  created_by_username: string;
+  created_by_full_name?: string | null;
+  created_by_banco_id?: number | null;
+  summary_json?: unknown;
+  artifacts: Log01HistoryArtifact[];
+  deleted_at?: string | null;
+  deleted_by_username?: string | null;
+  delete_reason?: string | null;
+};
+
+export async function log01HistoryList(
+  params: Log01HistoryListParams = {}
+): Promise<Log01HistoryListResponse>  {
+  const {
+    limit = 20,
+    offset = 0,
+    include_deleted = false,
+    q,
+    dateFrom,
+    dateTo,
+    source,
+    status,
+  } = params;
+  const query: Record<string, unknown> = { limit, offset, include_deleted };
+  if (q && q.trim()) query.q = q.trim();
+  if (dateFrom && dateFrom.trim()) query.dateFrom = dateFrom.trim();
+  if (dateTo && dateTo.trim()) query.dateTo = dateTo.trim();
+  if (source && source.trim()) query.source = source.trim();
+  if (status && status.trim()) query.status = status.trim();
+  const { data } = await api.get<Log01HistoryListResponse>("/logistica/log01/history", {
+    params: query,
+  });
+  return data;
+}
+
+export async function log01HistoryDetail(runId: number): Promise<Log01HistoryDetail> {
+  const { data } = await api.get<Log01HistoryDetail>(
+    `/logistica/log01/history/${encodeURIComponent(String(runId))}`
+  );
+  return data;
+}
+
+export const Log01HistoryDetail = log01HistoryDetail;
+
+export async function log01HistoryDownloadArtifact(
+  runId: number,
+  kind: "excel" | "no-conforme" | "manifiesto",
+  signal?: AbortSignal
+): Promise<AxiosResponse<Blob>>  {
+  return api.get(
+    `/logistica/log01/history/${encodeURIComponent(String(runId))}/artifact/${encodeURIComponent(kind)}`,
+    {
+      responseType: "blob",
+      signal,
+      validateStatus: (status) => status === 200,
+    }
+  );
+}
+
+export async function log01HistoryDelete(runId: number, reason?: string): Promise<void> {
+  await api.delete(`/logistica/log01/history/${encodeURIComponent(String(runId))}`, {
+    data: reason ? { reason } : undefined,
+  });
+}
+
+
 
 export async function getMergeUploadLimits(): Promise<MergeUploadLimits> {
   const { data } = await api.get<MergeUploadLimits>("/merge/config/upload-limits");

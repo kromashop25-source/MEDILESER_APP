@@ -15,7 +15,7 @@ const MODULES: ModuleDef[] = [
   { id: "tools_consol_correlativo", label: "Consolidación (Correlativo)", path: "/oi/tools/consolidacion/correlativo" },
   { id: "tools_consol_no_correlativo", label: "Consolidación (No Correlativo)", path: "/oi/tools/consolidacion/no-correlativo" },
   { id: "future_ot", label: "Orden de Trabajo (FUTURO)", path: "FUTURO" },
-  { id: "future_logistica", label: "Logística (FUTURO)", path: "FUTURO" },
+  { id: "logistica", label: "Logística", path: "/logistica/log01/excel" },
   { id: "future_smart", label: "Smart (FUTURO)", path: "FUTURO" },
   { id: "users_admin", label: "Gestión de usuarios", path: "/users" },
   { id: "admin_permisos", label: "Permisos", path: "/admin/permisos" },
@@ -26,9 +26,10 @@ function normalizeModules(mods: string[]) {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const m of mods) {
-    if (!known.has(m) || seen.has(m)) continue;
-    seen.add(m);
-    out.push(m);
+    const mapped = m === "future_logistica" ? "logistica" : m;
+    if (!known.has(mapped) || seen.has(mapped)) continue;
+    seen.add(mapped);
+    out.push(mapped);
   }
   return out;
 }

@@ -145,7 +145,9 @@ export function getAuth(): LoginOut | null {
       token: obj.token,
       techNumber: obj.techNumber,
       role: normalizeRole(obj.role, username),
-      allowedModules: Array.isArray(obj.allowedModules) ? obj.allowedModules : undefined,
+      allowedModules: Array.isArray(obj.allowedModules)
+      ? obj.allowedModules.map((m: string) => (m === "future_logistica" ? "logistica" : m))
+      : undefined,
     };
 
     return auth.username && auth.token ? auth : null;

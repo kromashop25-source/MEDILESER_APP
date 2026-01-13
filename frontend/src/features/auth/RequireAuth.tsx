@@ -12,6 +12,7 @@ function getModuleIdForPath(pathname: string): string | null {
   if (pathname === "/oi/tools/actualizacion-base") return "tools_actualizacion_bases";
   if (pathname === "/oi/tools/consolidacion/correlativo") return "tools_consol_correlativo";
   if (pathname === "/oi/tools/consolidacion/no-correlativo") return "tools_consol_no_correlativo";
+  if (pathname.startsWith("/logistica/")) return "logistica";
   if (pathname.startsWith("/oi/")) return "oi_formulario";
   if (pathname === "/users") return "users_admin";
   if (pathname === "/admin/permisos") return "admin_permisos";
@@ -61,7 +62,8 @@ export default function RequireAuth() {
   const isTech = isTechnicianRole(role);
 
   const selectedBank = getSelectedBank();
-  const needsBank = isTech && !(selectedBank && selectedBank > 0);
+  const isOiArea = location.pathname === "/oi" || location.pathname.startsWith("/oi/");
+  const needsBank = isTech && isOiArea && !(selectedBank && selectedBank > 0);
   if (needsBank && location.pathname !== "/home") {
     return (
       <Navigate

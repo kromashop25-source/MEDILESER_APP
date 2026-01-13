@@ -4,6 +4,7 @@ from sqlmodel import SQLModel, create_engine, Session, select
 from sqlalchemy import inspect
 import os
 import sys
+import json
 
 from app.core.settings import get_settings
 from sqlalchemy.engine.url import make_url
@@ -303,6 +304,49 @@ def _ensure_user_allowed_modules_column() -> None:
         if "allowed_modules" not in cols:
             conn.exec_driver_sql("ALTER TABLE [user] ADD COLUMN allowed_modules TEXT")
 
+def _patch_allowed_modules_future_logistica_to_logistica(session: Session) -> None:
+    from app.models import User
+
+    changed = False
+    users = session.exec(select(User)).all()
+    for user in users:
+        raw = user.allowed_modules
+        if not raw:
+            continue
+
+        mods: list[str] | None = None
+        if isinstance(raw, list):
+            mods = [str(m) for m in raw if m]
+        elif isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                continue
+            if isinstance(parsed, list):
+                mods = [str(m) for m in parsed if m]
+
+        if not mods or "future_logistica" not in mods:
+            continue
+
+        updated = ["logistica" if m == "future_logistica" else m for m in mods]
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for m in updated:
+            if not m or m in seen:
+                continue
+            seen.add(m)
+            cleaned.append(m)
+
+        if cleaned != mods:
+            user.allowed_modules = cleaned
+            changed = True
+
+    if changed:
+        session.commit()
+
+
+
+
 
 DEFAULT_USERS = [
     # id, username, first_name, last_name, password_hash, tech_number, role, is_active
@@ -372,4 +416,6 @@ def init_db() -> None:
         _ensure_user_role_column()
         _ensure_user_is_active_column()
         _ensure_user_allowed_modules_column()
+        with Session(engine) as session:
+            _patch_allowed_modules_future_logistica_to_logistica(session)
     _seed_default_users()

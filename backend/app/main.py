@@ -174,6 +174,9 @@ async def spa_for_react_routes(request: Request, call_next):
     accept = request.headers.get("accept", "")
     path = request.url.path.rstrip("/")
 
+    if path.startswith("/logistica/log01/history"):
+        if request.method != "GET" or "text/html" not in accept or path != "/logistica/log01/history":
+            return await call_next(request)
     if (
         path.startswith("/logistica/log01/progress")
         or path.startswith("/logistica/log01/poll")
