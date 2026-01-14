@@ -1003,6 +1003,9 @@ def process_log01_files(
         "files_ok": ok_files,
         "files_error": bad_files,
         "rows_total_read": rows_total_read,
+        # Rango de series (post-dedupe, SOLO CONFORMES)
+        "serie_ini": conformes[0] if conformes else None,
+        "serie_fin": conformes[-1] if conformes else None,
         "series_duplicates_eliminated": series_duplicates_eliminated,
         "series_total_dedup": series_total_dedup,
         "series_conformes": series_conformes,

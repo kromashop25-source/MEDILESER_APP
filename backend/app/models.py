@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List, ClassVar
 from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy import Column, CheckConstraint, Enum as SAEnum, event
+from sqlalchemy import Column, CheckConstraint, Enum as SAEnum, event, BigInteger
 from sqlalchemy.types import JSON
 from .schemas import NumerationType
 
@@ -112,6 +112,13 @@ class Log01Run(SQLModel, table=True):
     # Guardamos el summary completo del consolidado
     summary_json: Optional[dict] = Field(default= None, sa_column=Column(JSON))
 
+    # Rango de series (texto y numérico) para filtros
+    serie_ini: Optional[str] = Field(default=None)
+    serie_fin: Optional[str] = Field(default=None)
+    serie_ini_num: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
+    serie_fin_num: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
+    
+
     #Soft delete
     deleted_at: Optional[datetime] = None
     deleted_by_user_id: Optional[int] = None
@@ -136,6 +143,46 @@ class Log01Artifact(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     run: Optional[Log01Run] = Relationship(back_populates="artifacts")
+
+
+class FormatoAcRun(SQLModel, table=True):
+    __tablename__: ClassVar[str] = "formato_ac_run"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    operation_id: str = Field(index=True)
+    origin: str = Field(index=True)  # VIMA_LISTA | ACTUALIZACION_BASES
+    status: str = Field(default="COMPLETADO", index=True)
+    output_name: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+
+    created_by_user_id: Optional[int] = Field(default=None, index=True)
+    created_by_username: str = Field(index=True)
+    created_by_full_name: Optional[str] = None
+    created_by_banco_id: Optional[int] = Field(default=None, index=True)
+
+    summary_json: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    error_detail: Optional[str] = None
+
+    artifacts: List["FormatoAcArtifact"] = Relationship(back_populates="run")
+
+
+class FormatoAcArtifact(SQLModel, table=True):
+    __tablename__: ClassVar[str] = "formato_ac_artifact"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    run_id: int = Field(foreign_key="formato_ac_run.id", index=True)
+
+    kind: str = Field(index=True)  # EXCEL_FINAL
+    filename: str
+    storage_rel_path: str
+    content_type: str
+    size_bytes: Optional[int] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    run: Optional[FormatoAcRun] = Relationship(back_populates="artifacts")
 
 
 

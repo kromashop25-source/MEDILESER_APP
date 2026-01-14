@@ -5,9 +5,11 @@ from sqlalchemy import inspect
 import os
 import sys
 import json
+import re
 
 from app.core.settings import get_settings
 from sqlalchemy.engine.url import make_url
+from app.models import Log01Run
 
 settings = get_settings()
 
@@ -141,6 +143,15 @@ def _get_mysql_columns(table_name: str) -> set[str]:
         return {col["name"] for col in inspector.get_columns(table_name)}
     except Exception:
         return set()
+    
+def _get_mysql_indexes(table_name: str) -> set[str]:
+    try:
+        inspector = inspect(engine)
+        idxs = inspector.get_indexes(table_name)
+        return {name for i in idxs if (name := i.get("name"))}
+    except Exception:
+        return set()
+
 
 
 def _ensure_oi_saved_at_column() -> None:
@@ -304,6 +315,131 @@ def _ensure_user_allowed_modules_column() -> None:
         if "allowed_modules" not in cols:
             conn.exec_driver_sql("ALTER TABLE [user] ADD COLUMN allowed_modules TEXT")
 
+def _ensure_log01_run_series_columns() -> None:
+    """
+    Agrega columnas para rango de serie en log01_run.
+    - serie_ini / serie_fin (texto)
+    - serie_ini_num / serie_fin_num (numérico para filtros por rango)
+    Adeás crea índice para acelerar búsquedas por serie.
+    """
+    if IS_SQLITE:
+        with engine.begin() as conn:
+            cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(log01_run)").all()}
+            if not cols:
+                return
+            if "serie_ini" not in cols:
+                conn.exec_driver_sql("ALTER TABLE log01_run ADD COLUMN serie_ini TEXT")
+            if "serie_fin" not in cols:
+                conn.exec_driver_sql("ALTER TABLE log01_run ADD COLUMN serie_fin TEXT")
+            if "serie_ini_num" not in cols:
+                conn.exec_driver_sql("ALTER TABLE log01_run ADD COLUMN serie_ini_num INTEGER")
+            if "serie_fin_num" not in cols:
+                conn.exec_driver_sql("ALTER TABLE log01_run ADD COLUMN serie_fin_num INTEGER")
+
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS idx_log01_run_serie_range ON log01_run (serie_ini_num, serie_fin_num)"
+                )
+        return
+    
+    cols = _get_mysql_columns("log01_run")
+    if not cols:
+        return
+    with engine.begin() as conn:
+        if "serie_ini" not in cols:
+            conn.exec_driver_sql("ALTER TABLE log01_run ADD COLUMN serie_ini VARCHAR(64) NULL")
+        if "serie_fin" not in cols:
+            conn.exec_driver_sql("ALTER TABLE log01_run ADD COLUMN serie_fin VARCHAR(64) NULL")
+        if "serie_ini_num" not in cols:
+            conn.exec_driver_sql("ALTER TABLE log01_run ADD COLUMN serie_ini_num BIGINT NULL")
+        if "serie_fin_num" not in cols:
+            conn.exec_driver_sql("ALTER TABLE log01_run ADD COLUMN serie_fin_num BIGINT NULL")
+
+    idxs = _get_mysql_indexes("log01_run")
+    if "idx_log01_run_serie_range" not in idxs:
+        try:
+            with engine.begin() as conn:
+                conn.exec_driver_sql(
+                    "CREATE INDEX idx_log01_run_serie_range ON log01_run (serie_ini_num, serie_fin_num)"
+                )
+        except Exception:
+            # Evitar romper startup si ya existe (o permisos)
+            pass
+
+def _backfill_log01_run_series(session: Session) -> None:
+    """
+    Backfill para corridas antiguas:
+    - intenta tomar serie_ini/serie_fin desde summary_json
+    - si no existe, intenta parsear output_name: BD_<INI>_AL_<FIN>
+    - rellena también serie_ini_num/serie_fin_num
+    - si summary_json existe y no tiene keys, las agrega (para UI)
+    """
+    runs = session.exec(select(Log01Run)).all()
+    changed = False
+
+    def _to_int(s: Any) -> int | None:
+        if s is None:
+            return None
+        if isinstance(s, int):
+            return s
+        if isinstance(s, str):
+            t = s.strip()
+            if t.isdigit():
+                try:
+                    return int(t)
+                except Exception:
+                    return None
+        return None
+
+    for r in runs:
+        if r.serie_ini and r.serie_fin and r.serie_ini_num is not None and r.serie_fin_num is not None:
+            continue
+
+        ini = r.serie_ini
+        fin = r.serie_fin
+
+        s = r.summary_json if isinstance(r.summary_json, dict) else None
+        if s:
+            ini = ini or s.get("serie_ini")
+            fin = fin or s.get("serie_fin")
+
+        if (not ini or not fin) and r.output_name:
+            m = re.search(r"BD_(\d+)_AL_(\d+)", r.output_name)
+            if m:
+                ini = ini or m.group(1)
+                fin = fin or m.group(2)
+
+        ini_num = _to_int(ini)
+        fin_num = _to_int(fin)
+
+        # Solo actualizamos si encontramos algo consistente
+        if ini and fin:
+            if r.serie_ini != ini:
+                r.serie_ini = ini
+                changed = True
+            if r.serie_fin != fin:
+                r.serie_fin = fin
+                changed = True
+            if r.serie_ini_num != ini_num:
+                r.serie_ini_num = ini_num
+                changed = True
+            if r.serie_fin_num != fin_num:
+                r.serie_fin_num = fin_num
+                changed = True
+
+            # Mantener summary_json con keys para UI
+            if s is not None:
+                if s.get("serie_ini") != ini or s.get("serie_fin") != fin:
+                    s["serie_ini"] = ini
+                    s["serie_fin"] = fin
+                    r.summary_json = s
+                    changed = True
+
+    if changed:
+        session.commit()
+
+            
+ 
+
 def _patch_allowed_modules_future_logistica_to_logistica(session: Session) -> None:
     from app.models import User
 
@@ -405,6 +541,7 @@ def _seed_default_users() -> None:
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    _ensure_log01_run_series_columns()
     _ensure_oi_saved_at_column()
     _ensure_bancada_saved_at_column()
     if IS_SQLITE:
@@ -418,4 +555,9 @@ def init_db() -> None:
         _ensure_user_allowed_modules_column()
         with Session(engine) as session:
             _patch_allowed_modules_future_logistica_to_logistica(session)
+
+    # Backfill LOG01 (SQLite y MySQL)
+    with Session(engine) as session:
+        _backfill_log01_run_series(session)
+
     _seed_default_users()

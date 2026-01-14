@@ -1,0 +1,116 @@
+{
+  "operation_id": "1ab78173-d7bf-47b6-ae0e-8151b5f97ce5",
+  "generated_at": "2026-01-14T17:53:44Z",
+  "output_excel": "BD_AA25130585_AL_AA25133464.xlsx",
+  "source": "AUTO",
+  "totals": {
+    "files_total": 5,
+    "files_ok": 5,
+    "files_error": 0,
+    "rows_read": 135,
+    "series_total_dedup": 135,
+    "series_conformes": 129,
+    "series_no_conformes_final": 6,
+    "series_duplicates_eliminated": 0,
+    "files_rejected": 0,
+    "origin_no_conformes_total": 6,
+    "final_no_conformes_total": 6
+  },
+  "by_oi_origen": [
+    {
+      "oi": "OI-1197-2025",
+      "oi_num": 1197,
+      "source_files": [
+        "Base Comercial OI-1197-2025.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1198-2025",
+      "oi_num": 1198,
+      "source_files": [
+        "Base Comercial OI-1198-2025.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1199-2025",
+      "oi_num": 1199,
+      "source_files": [
+        "Base Comercial OI-1199-2025.xlsx"
+      ],
+      "series_no_conforme": [
+        "AA25131916",
+        "AA25132119"
+      ],
+      "total_no_conforme": 2
+    },
+    {
+      "oi": "OI-1200-2025",
+      "oi_num": 1200,
+      "source_files": [
+        "Base Comercial OI-1200-2025.xlsx"
+      ],
+      "series_no_conforme": [
+        "AA25132369",
+        "AA25132427",
+        "AA25132489"
+      ],
+      "total_no_conforme": 3
+    },
+    {
+      "oi": "OI-1208-2025",
+      "oi_num": 1208,
+      "source_files": [
+        "Base Comercial OI-1208-2025.xlsx"
+      ],
+      "series_no_conforme": [
+        "AA25133340"
+      ],
+      "total_no_conforme": 1
+    }
+  ],
+  "by_oi": [
+    {
+      "oi": "OI-1197-2025",
+      "oi_num": 1197,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1198-2025",
+      "oi_num": 1198,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1199-2025",
+      "oi_num": 1199,
+      "series_no_conforme": [
+        "AA25131916",
+        "AA25132119"
+      ],
+      "total_no_conforme": 2
+    },
+    {
+      "oi": "OI-1200-2025",
+      "oi_num": 1200,
+      "series_no_conforme": [
+        "AA25132369",
+        "AA25132427",
+        "AA25132489"
+      ],
+      "total_no_conforme": 3
+    },
+    {
+      "oi": "OI-1208-2025",
+      "oi_num": 1208,
+      "series_no_conforme": [
+        "AA25133340"
+      ],
+      "total_no_conforme": 1
+    }
+  ]
+}

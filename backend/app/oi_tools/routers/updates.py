@@ -1,8 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import StreamingResponse, Response
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import os
 import json
+import uuid
 
 from app.oi_tools.services.updates.update_base_by_model import (
     OIFile,
@@ -15,6 +16,10 @@ from app.oi_tools.services.updates.update_base_by_model import (
     WrongPasswordError,
 )
 from app.oi_tools.services.progress_manager import progress_manager
+from app.oi_tools.services.formato_ac_history import (
+    persist_formato_ac_success,
+    persist_formato_ac_error,
+)
 
 from app.api.auth import get_current_user_session
 
@@ -124,8 +129,10 @@ def run_upload(
     replicate_col_widths: str = Form("false"),
     base_sheet: Optional[str] = Form(None),
     operation_id: Optional[str] = Form(None),
+    sess: Dict[str, Any] = Depends(get_current_user_session),
 ):
     # Helpers: usamos el to_bool definido a nivel de módulo
+    log_operation_id = (operation_id or "").strip() or str(uuid.uuid4())
     
     # Leer binarios
     base_file.file.seek(0)
@@ -196,7 +203,23 @@ def run_upload(
         # p.ej. overflow de filas de Excel
         if operation_id:
             progress_manager.finish(operation_id)
+        persist_formato_ac_error(
+            origin="ACTUALIZACION_BASES",
+            operation_id=log_operation_id,
+            error_detail=str(e),
+            sess=sess,
+        )
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        if operation_id:
+            progress_manager.finish(operation_id)
+        persist_formato_ac_error(
+            origin="ACTUALIZACION_BASES",
+            operation_id=log_operation_id,
+            error_detail=f"{type(e).__name__}: {e}",
+            sess=sess,
+        )
+        raise HTTPException(status_code=500, detail="Error al procesar la actualizacion de bases.")
 
     # Completar y responder
     if operation_id:
@@ -209,6 +232,14 @@ def run_upload(
         progress_manager.finish(operation_id)
 
     fname = base_file.filename or "base_actualizada.xlsx"
+    persist_formato_ac_success(
+        origin="ACTUALIZACION_BASES",
+        operation_id=log_operation_id,
+        output_name=fname,
+        file_bytes=xlsx_bytes,
+        summary=summary if isinstance(summary, dict) else None,
+        sess=sess,
+    )
     headers = {
         "X-File-Name": fname,
         "Content-Disposition": f'attachment; filename="{os.path.basename(fname)}"',

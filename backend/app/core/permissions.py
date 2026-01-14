@@ -9,6 +9,7 @@ MODULE_IDS: List[str] = [
     "oi_listado",
     "tools_vima_lista",
     "tools_actualizacion_bases",
+    "tools_historial_ac",
     "tools_consol_correlativo",
     "tools_consol_no_correlativo",
     "users_admin",
@@ -24,6 +25,7 @@ DEFAULT_TECH_MODULES: List[str] = [
     "oi_listado",
     "tools_vima_lista",
     "tools_actualizacion_bases",
+    "tools_historial_ac",
     "tools_consol_correlativo",
     "tools_consol_no_correlativo",
 ]

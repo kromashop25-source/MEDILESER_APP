@@ -9,6 +9,7 @@ import ChangePasswordPage from "../features/auth/ChangePasswordPage";
 import AdminPermisosPage from "../features/admin/AdminPermisosPage";
 import VimaToListaPage from "../features/oi_tools/VimaToListaPage";
 import ActualizacionBasePage from "../features/oi_tools/ActualizacionBasePage";
+import FormatoAcHistoryPage from "../features/oi_tools/FormatoAcHistoryPage";
 import ConsolidacionOisPage from "../features/oi_tools/ConsolidacionOisPage";
 import ConsolidacionCorrelativoPage from "../features/oi_tools/ConsolidacionCorrelativoPage";
 import ConsolidacionNoCorrelativoPage from "../features/oi_tools/ConsolidacionNoCorrelativoPage";
@@ -48,6 +49,7 @@ export default function AppRouter() {
             {/* OI Tools (Fase 2.2: páginas cascarón; menú se habilita luego) */}
             <Route path="/oi/tools/vima-to-lista" element={<VimaToListaPage />} />
             <Route path="/oi/tools/actualizacion-base" element={<ActualizacionBasePage />} />
+            <Route path="/oi/tools/formato-ac/history" element={<FormatoAcHistoryPage />} />
             <Route path="/oi/tools/consolidacion" element={<ConsolidacionOisPage />} />
             <Route path="/oi/tools/consolidacion/correlativo" element={<ConsolidacionCorrelativoPage />} />
             <Route path="/oi/tools/consolidacion/no-correlativo" element={<ConsolidacionNoCorrelativoPage />} />

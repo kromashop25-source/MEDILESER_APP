@@ -8,6 +8,10 @@ import {
   log01HistoryList,
   type Log01HistoryListItem,
 } from "../../api/oiTools";
+
+const PERU_TZ = "America/Lima";
+
+
 import { getAuth, normalizeRole } from "../../api/auth";
 
 function parseFilename(contentDisposition?: string): string | null {
@@ -35,17 +39,40 @@ function downloadBlob(blob: Blob, filename: string) {
 
 function formatDateTime(value?: string | null): string {
   if (!value) return "N/D";
-  const d = new Date(value);
+  // Si el backend emvía datetime "native" (sin zona), asumimos que está em UTC.
+  // Esto evita mostrar horas "corridas" cuando la BD guarda utc pero el string no traer 'Z' / offset.
+  const hasTz = 
+  /[zZ]$/.test(value) || /[+-]\d{2}:\d{2}$/.test(value) || /[+-]\d{4}$/.test(value);
+  const safe = hasTz ? value : `${value}Z`;
+
+  const d = new Date(safe);
   if (Number.isNaN(d.getTime())) return String(value);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
-}
+  // Forzar visualización en hora local de Perú (aunque el navegador esté en otra zona horaria)
+  const fmt = new Intl.DateTimeFormat("es-PE", {
+    timeZone: PERU_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  // Formato dd/mm/yyyy HH:MM (sin comas ni “a. m./p. m.”)
+  const parts = fmt.formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
+ }
 
 function getSummaryNumber(summary: any, key: string): string {
   const v = summary?.[key];
   return typeof v === "number" ? String(v) : "N/D";
+}
+
+function getSummaryString(summary: any, key: string): string {
+  const v = summary?.[key];
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return "N/D"
 }
 
 function statusBadgeClass(status?: string | null) {
@@ -221,7 +248,7 @@ export default function Log01HistoryPage() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") applyFilters();
                   }}
-                  placeholder="Usuario, operación, archivo..."
+                  placeholder="Usuario, serie inicial, serie final..."
                 />
               </div>
               <div className="col-md-2">
@@ -309,6 +336,8 @@ export default function Log01HistoryPage() {
                         <th style={{ whiteSpace: "nowrap" }}>Fecha</th>
                         <th style={{ whiteSpace: "nowrap" }}>Usuario</th>
                         <th style={{ whiteSpace: "nowrap" }}>Estado</th>
+                        <th style={{ whiteSpace: "nowrap" }}> Serie inic</th>
+                        <th style={{ whiteSpace: "nowrap" }}> Serie fin </th>
                         <th style={{ whiteSpace: "nowrap" }}>Únicas</th>
                         <th style={{ whiteSpace: "nowrap" }}>Conformes</th>
                         <th style={{ whiteSpace: "nowrap" }}>No conformes</th>
@@ -325,6 +354,8 @@ export default function Log01HistoryPage() {
                       ) : (
                         items.map((item) => {
                           const summary = item.summary_json as any;
+                          const serieIni = getSummaryString(summary, "serie_ini");
+                          const serieFin = getSummaryString(summary, "serie_fin");
                           const totalDedup = getSummaryNumber(summary, "series_total_dedup");
                           const conformes = getSummaryNumber(summary, "series_conformes");
                           const noConformes = getSummaryNumber(summary, "series_no_conformes_final");
@@ -337,6 +368,8 @@ export default function Log01HistoryPage() {
                                <td style={{ whiteSpace: "nowrap" }}>
                                 <span className={statusBadgeClass(item.status)}>{item.status}</span>
                               </td>
+                              <td style={{ whiteSpace: "nowrap" }}>{serieIni}</td>
+                              <td style={{ whiteSpace: "nowrap" }}>{serieFin}</td>
                               <td style={{ whiteSpace: "nowrap" }}>
                                 <strong>{totalDedup}</strong>
                               </td>

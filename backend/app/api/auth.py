@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Body
 from sqlmodel import Session, select
+from sqlalchemy import func, or_, cast, String
 
 from ..core.db import engine
 from ..core.permissions import get_effective_allowed_modules
@@ -48,6 +49,20 @@ class LoginOut(BaseModel):
 
 class SetBancoRequest(BaseModel):
     bancoId: int
+
+class UserPagedOut(BaseModel):
+    items: List[UserRead]
+    total: int
+    limit: int
+    offset: int
+
+class UserUpdateRequest(BaseModel):
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    tech_number: Optional[int] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
 
 def get_session():
     with Session(engine) as session:
@@ -184,6 +199,49 @@ def list_users(
     users = session.exec(select(User)).all()
     return users
 
+@router.get("/users/paged", response_model=UserPagedOut)
+def list_users_paged(
+    limit: int = 20,
+    offset: int = 0,
+    q: Optional[str] = None,
+    role: Optional[str] = None,
+    sess: dict = Depends(get_current_user_session),
+    session: Session = Depends(get_session)
+):
+    requester_username = (sess.get("username") or sess.get("user") or "").lower()
+    if not can_manage_users(sess.get("role"), requester_username):
+        raise HTTPException(status_code=403, detail="Requiere privilegios de administrador")
+
+    limit = max(1, min(int(limit or 20), 200))
+    offset = max(0, int(offset or 0))
+
+    where = []
+    q_clean = (q or "").strip().lower()
+    if q_clean:
+        like = f"%{q_clean}%"
+        where.append(
+            or_(
+                func.lower(cast(User.username, String)).like(like),
+                func.lower(cast(User.first_name, String)).like(like),
+                func.lower(cast(User.last_name, String)).like(like),
+                func.lower(cast(User.role, String)).like(like),
+            )
+        )
+
+    role_clean = (role or "").strip().lower()
+    if role_clean:
+        where.append(func.lower(cast(User.role, String)) == role_clean)
+
+    total = session.exec(select(func.count()).select_from(User).where(*where)).one()
+    users = session.exec(
+        select(User)
+        .where(*where)
+        .order_by(cast(User.username, String).asc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    return UserPagedOut(items=users, total=int(total or 0), limit=limit, offset=offset)
+
 @router.post("/users", response_model=UserRead)
 def create_user(
     payload: UserCreate,
@@ -225,6 +283,88 @@ def create_user(
     session.commit()
     session.refresh(new_user)
     return new_user
+
+@router.put("/users/{user_id}", response_model=UserRead)
+def update_user(
+    user_id: int,
+    payload: UserUpdateRequest,
+    sess: dict = Depends(get_current_user_session),
+    session: Session = Depends(get_session)
+):
+    requester_username = (sess.get("username") or sess.get("user") or "").lower()
+    if not can_manage_users(sess.get("role"), requester_username):
+        raise HTTPException(status_code=403, detail="Requiere privilegios de administrador")
+
+    target_user = session.get(User, user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    target_norm_role = normalize_role(target_user.role, target_user.username)
+    requester_is_superuser = is_superuser(requester_username)
+    if target_norm_role in ("admin", "administrator") and not requester_is_superuser:
+        raise HTTPException(status_code=403, detail="Solo el superusuario puede actualizar usuarios administradores")
+
+    if not requester_is_superuser:
+        if payload.password:
+            target_user.password_hash = get_password_hash(payload.password)
+            session.add(target_user)
+            session.commit()
+            session.refresh(target_user)
+            return target_user
+        if any(
+            value is not None
+            for value in (
+                payload.username,
+                payload.first_name,
+                payload.last_name,
+                payload.tech_number,
+                payload.role,
+            )
+        ):
+            raise HTTPException(status_code=403, detail="Solo el superusuario puede actualizar datos del usuario")
+        raise HTTPException(status_code=400, detail="Debe ingresar una nueva contraseña")
+
+    next_username = target_user.username
+    if payload.username is not None:
+        username = payload.username.strip().lower()
+        if not username:
+            raise HTTPException(status_code=400, detail="Nombre de usuario inválido")
+        if username == "admin" and target_user.username != "admin":
+            raise HTTPException(status_code=400, detail="El usuario 'admin' está reservado para el superusuario")
+        if username != target_user.username:
+            existing = session.exec(select(User).where(User.username == username)).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="El nombre de usuario ya existe")
+        target_user.username = username
+        next_username = username
+
+    if payload.first_name is not None:
+        target_user.first_name = payload.first_name
+    if payload.last_name is not None:
+        target_user.last_name = payload.last_name
+    if payload.tech_number is not None:
+        if payload.tech_number != target_user.tech_number:
+            existing_tech = session.exec(select(User).where(User.tech_number == payload.tech_number)).first()
+            if existing_tech and payload.tech_number != 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"El número de técnico {payload.tech_number} ya está asignado a {existing_tech.username}",
+                )
+        target_user.tech_number = payload.tech_number
+
+    if payload.role is not None:
+        requested_role = normalize_role(payload.role, next_username)
+        if requested_role == "admin" and next_username != "admin":
+            raise HTTPException(status_code=400, detail="El rol admin es exclusivo del superusuario")
+        target_user.role = requested_role
+
+    if payload.password:
+        target_user.password_hash = get_password_hash(payload.password)
+
+    session.add(target_user)
+    session.commit()
+    session.refresh(target_user)
+    return target_user
 
 @router.delete("/users/{user_id}")
 def delete_user(

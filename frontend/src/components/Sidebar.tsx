@@ -154,6 +154,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
 
   const canVimaToLista = isAuth && isAllowed("tools_vima_lista");
   const canActualizacionBases = isAuth && isAllowed("tools_actualizacion_bases");
+  const canHistorialAc = isAuth && isAllowed("tools_historial_ac");
   const canConsolCorrelativo = isAuth && isAllowed("tools_consol_correlativo");
   const canConsolNoCorrelativo = isAuth && isAllowed("tools_consol_no_correlativo");
   const canRegistroOi = isAuth && isAllowed("oi_formulario");
@@ -164,7 +165,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const canFutureSmart = isAuth && isAllowed("future_smart");
 
   const showConsolidacionGroup = canConsolCorrelativo || canConsolNoCorrelativo;
-  const showFormatoAcGroup = canVimaToLista || canActualizacionBases;
+  const showFormatoAcGroup = canVimaToLista || canActualizacionBases || canHistorialAc;
   const showVerificacionGroup = canRegistroOi || canListadoOi || canFutureOt;
   const showOiGroup = showFormatoAcGroup || showVerificacionGroup || showConsolidacionGroup;
 
@@ -210,6 +211,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
     return {
       vimaToLista: exact("/oi/tools/vima-to-lista"),
       actualizacionBases: exact("/oi/tools/actualizacion-base"),
+      formatoAcHistory: exact("/oi/tools/formato-ac/history"),
       consolidacionCorrelativo: exact("/oi/tools/consolidacion/correlativo"),
       consolidacionNoCorrelativo: exact("/oi/tools/consolidacion/no-correlativo"),
       registroOi: exact("/oi"),
@@ -229,11 +231,13 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           activeLeaves.consolidacionCorrelativo || activeLeaves.consolidacionNoCorrelativo,
         oi_formato_ac:
           activeLeaves.vimaToLista ||
-          activeLeaves.actualizacionBases,
+          activeLeaves.actualizacionBases ||
+          activeLeaves.formatoAcHistory,
         oi_verificacion: activeLeaves.registroOi || activeLeaves.listadoOi,
         oi:
           activeLeaves.vimaToLista ||
           activeLeaves.actualizacionBases ||
+          activeLeaves.formatoAcHistory ||
           activeLeaves.consolidacionCorrelativo ||
           activeLeaves.consolidacionNoCorrelativo ||
           activeLeaves.registroOi ||
@@ -314,6 +318,15 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
                 to="/oi/tools/actualizacion-base"
                 icon="ti-reload"
                 label="ACTUALIZACIÓN DE BASES"
+                depth={2}
+                collapsed={collapsed}
+              />
+            )}
+            {canHistorialAc && (
+              <SidebarNavItem
+                to="/oi/tools/formato-ac/history"
+                icon="ti-view-list-alt"
+                label="HISTORIAL A-C"
                 depth={2}
                 collapsed={collapsed}
               />

@@ -27,6 +27,7 @@ class VimaToListaConfig:
     oi_pattern: str = r"^OI[-\u2010\u2011\u2012\u2013\u2014\u2212\uFE63\uFF0D](\d+)[-\u2010\u2011\u2012\u2013\u2014\u2212\uFE63\uFF0D](\d{4})$"
     strict_incremental : bool = False # si True, falla si el último OI en LISTA
     replicate_merges: bool = True  # NUEVO: permite desactivar la réplica de merges
+    update_existing_periodo: bool = False  # actualiza Periodo en OIs existentes
 
 
 def _row_is_valid(ws_vima: Worksheet, row: int, cfg: VimaToListaConfig) -> bool:
@@ -88,6 +89,12 @@ def _normalize_oi_value(value: object) -> str:
         s = s.replace(ch, "")
     return s.strip()
 
+def _normalize_periodo_value(value: object) -> str:
+    s = "" if value is None else str(value)
+    for ch in (_NBSP + _ZERO_WIDTH):
+        s = s.replace(ch, "")
+    return s.strip()
+
 def _parse_oi(value: object, pat: Pattern[str]) -> Optional[Tuple[int, int]]:
     """
     Devuelve (year, number) si el valor cumple el patrÃ³n; si no, None.
@@ -102,6 +109,19 @@ def _parse_oi(value: object, pat: Pattern[str]) -> Optional[Tuple[int, int]]:
     num = int(m.group(1))  # correlativo
     year = int(m.group(2))
     return (year, num)
+
+def _build_oi_row_map(ws_lista: Worksheet, cfg: VimaToListaConfig) -> Dict[str, int]:
+    """Mapea OI normalizada -> ultima fila en LISTA."""
+    b_col = column_index_from_string("B")  # columna OI en LISTA
+    row_map: Dict[str, int] = {}
+    for r in range(cfg.lista_start_row, ws_lista.max_row + 1):
+        raw = ws_lista.cell(row=r, column=b_col).value
+        if raw in (None, ""):
+            continue
+        key = _normalize_oi_value(raw)
+        if key:
+            row_map[key] = r
+    return row_map
 
 
 def _last_oi_in_lista(ws_lista: Worksheet, cfg: VimaToListaConfig) -> Tuple[Optional[Tuple[int,int]], int]:
@@ -159,6 +179,7 @@ def map_vima_to_lista(
 
     rows_copied = 0
     rows_skipped = 0
+    rows_updated_periodo = 0
     blank_oi_streak = 0
     total_rows = max(1, ws_vima.max_row - cfg.vima_start_row + 1)
     processed_rows = 0
@@ -199,6 +220,7 @@ def map_vima_to_lista(
     pat = re.compile(cfg.oi_pattern, re.IGNORECASE)
     last_key: Optional[Tuple[int, int]] = None
     dst_base_row = cfg.lista_start_row
+    oi_row_map: Dict[str, int] = {}
     if cfg.incremental:
         last_key, last_row_idx = _last_oi_in_lista(ws_lista, cfg)
         if cfg.strict_incremental and last_key is None:
@@ -208,6 +230,8 @@ def map_vima_to_lista(
                 f"({cfg.oi_pattern}). Corrige el dato o desactiva 'strict_incremental'."
             )
         dst_base_row = max(last_row_idx + 1, cfg.lista_start_row)
+        if cfg.update_existing_periodo:
+            oi_row_map = _build_oi_row_map(ws_lista, cfg)
 
     emit_progress(cfg.vima_start_row, "init")
 
@@ -226,11 +250,22 @@ def map_vima_to_lista(
             continue
 
         blank_oi_streak = 0
-        # Si incremental: saltar las OIs <= último en LISTA
+        # Si incremental: actualizar Periodo de OIs existentes y saltar OIs <= ultimo en LISTA
         if cfg.incremental:
             oi_val = ws_vima.cell(row=r, column=column_index_from_string("C")).value
             oi_key = _parse_oi(oi_val, pat)
-            # si el OI no cumple el patrón, por seguridad lo saltamos en incremental
+            if cfg.update_existing_periodo:
+                oi_norm = _normalize_oi_value(oi_val)
+                dst_row = oi_row_map.get(oi_norm) if oi_norm else None
+                if dst_row is not None:
+                    src_cell = ws_vima.cell(row=r, column=src_c0)  # B en VIMA
+                    src_val = src_cell.value
+                    if src_val not in (None, ""):
+                        dst_cell = ws_lista.cell(row=dst_row, column=dst_c0)  # A en LISTA
+                        if _normalize_periodo_value(src_val) != _normalize_periodo_value(dst_cell.value):
+                            dst_cell.value = src_val
+                            rows_updated_periodo += 1
+            # si el OI no cumple el patron, por seguridad lo saltamos en incremental
             if not oi_key or (last_key is not None and oi_key <= last_key):
                 rows_skipped += 1
                 emit_progress(r, "skipped_incremental")
@@ -305,6 +340,7 @@ def map_vima_to_lista(
     return {
         "rows_copied": rows_copied,
         "rows_skipped": rows_skipped,
+        "rows_updated_periodo": rows_updated_periodo,
         "start_row_vima": cfg.vima_start_row,
         "start_row_lista": cfg.lista_start_row,
     }

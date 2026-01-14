@@ -22,8 +22,9 @@ from app.oi_tools.services.progress_manager import progress_manager, SENTINEL
 from app.oi_tools.services.cancel_manager import cancel_manager
 from app.logistica.services.log01_consolidate import process_log01_files, Log01InputFile, Log01Cancelled
 
-from datetime import datetime
-from sqlalchemy import func, or_
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from sqlalchemy import func, or_, and_
 from sqlmodel import Session, select
 
 from app.core.db import engine
@@ -182,6 +183,30 @@ def _run_log01_job(
                 return rel_path, abs_path.stat().st_size
             
             with Session(engine) as session:
+                serie_ini = None
+                serie_fin = None
+                try:
+                    if isinstance(_summary, dict):
+                        serie_ini = _summary.get("serie_ini")
+                        serie_fin = _summary.get("serie_fin")
+                except Exception:
+                    serie_ini = None
+                    serie_fin = None
+
+                def _to_int(s: Any) -> Optional[int]:
+                    if s is None:
+                        return None
+                    if isinstance(s, int):
+                        return s
+                    if isinstance(s, str):
+                        t = s.strip()
+                        if t.isdigit():
+                            try:
+                                return int(t)
+                            except Exception:
+                                return None
+                    return None
+                
                 run = Log01Run(
                     operation_id=operation_id,
                     source=run_source,
@@ -194,6 +219,10 @@ def _run_log01_job(
                     created_by_full_name=sess_snapshot.get("fullName"),
                     created_by_banco_id=sess_snapshot.get("bancoId"),
                     summary_json=_summary,
+                    serie_ini=serie_ini,
+                    serie_fin=serie_fin,
+                    serie_ini_num=_to_int(serie_ini),
+                    serie_fin_num=_to_int(serie_fin),
                 )
                 session.add(run)
                 session.commit()
@@ -547,23 +576,43 @@ def log01_result_manifest(operation_id: str):
 # ----------------------------
 # Historial LOG01
 # ----------------------------
+_TZ_PERU = ZoneInfo("America/Lima")
+
 def _parse_history_date(value: Optional[str], end_of_day: bool) -> Optional[datetime]:
+    """
+    Interpreta dateFrom/dateTo como fecha/hora de Perú (America/Lima) si no trae TZ.
+    Retorna datetime UTC *naive* para comparar con created_at almacenado como UTC naive.
+    """
     if not value:
         return None
     raw = value.strip()
     if not raw:
         return None
     try:
-        cleaned = raw[:-1] if raw.endswith("Z") else raw
+        # fromisoformat no acepta "Z" directamente. Convertimos a +00:00.
+        cleaned = raw
+        if cleaned.endswith("Z"):
+            cleaned = cleaned[:-1] + "+00:00"
         parsed = datetime.fromisoformat(cleaned)
     except ValueError:
         return None
-    has_time = "T" in raw or " " in raw
+    has_time = ("T" in raw) or (" " in raw)
+
+    # Si viene solo fecha (YYYY-MM-DD), asumimos día local Perú.
     if not has_time:
         if end_of_day:
-            return parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
-        return parsed.replace(hour=0, minute=0, second=0, microsecond=0)
-    return parsed
+            parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+        else:
+            parsed = parsed.replace(hour=0, minute=0, second=0, microsecond=0)
+        parsed = parsed.replace(tzinfo=_TZ_PERU)
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+
+    # Si viene fecha+hora sin TZ, asumimos que es hora Perú.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_TZ_PERU)
+
+    # Convertir a UTC naive para comparar con created_at UTC naive
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 @router.get("/history", response_model=Log01RunListResponse)
@@ -586,14 +635,30 @@ def log01_history_list(
     q_clean = (q or "").strip()
     if q_clean:
         q_like = f"%{q_clean.lower()}%"
-        where.append(
-            or_(
-                func.lower(cast(Any, Log01Run.created_by_username)).like(q_like),
-                func.lower(cast(Any, Log01Run.created_by_full_name)).like(q_like),
-                func.lower(cast(Any, Log01Run.operation_id)).like(q_like),
-                func.lower(cast(Any, Log01Run.output_name)).like(q_like),
-            )
+        text_cond = or_(
+            func.lower(cast(Any, Log01Run.created_by_username)).like(q_like),
+            func.lower(cast(Any, Log01Run.created_by_full_name)).like(q_like),
+            func.lower(cast(Any, Log01Run.operation_id)).like(q_like),
+            func.lower(cast(Any, Log01Run.output_name)).like(q_like),
         )
+
+        q_digits = "".join(ch for ch in q_clean if ch.isdigit())
+        if q_digits:
+            try:
+                serie_q = int(q_digits)
+            except Exception:
+                serie_q = None
+            if serie_q is not None:
+                range_cond = and_(
+                    cast(Any, Log01Run.serie_ini_num) <= serie_q,
+                    cast(Any, Log01Run.serie_fin_num) >= serie_q,
+                )
+                where.append(or_(text_cond, range_cond))
+            else:
+                where.append(text_cond)
+        else:
+            where.append(text_cond)
+
 
     dt_from = _parse_history_date(dateFrom, end_of_day=False)
     if dt_from:

@@ -10,6 +10,7 @@
 
     { "key": "oi.tools.vima_to_lista", "area_key": "oi", "label": "VIMA → LISTA", "route": "/oi/tools/vima-to-lista", "icon": "ti-exchange-vertical", "order": 50, "enabled": false },
     { "key": "oi.tools.actualizacion_base", "area_key": "oi", "label": "Actualización Base", "route": "/oi/tools/actualizacion-base", "icon": "ti-reload", "order": 60, "enabled": false },
+    { "key": "oi.tools.historial_ac", "area_key": "oi", "label": "Historial A-C", "route": "/oi/tools/formato-ac/history", "icon": "ti-view-list-alt", "order": 65, "enabled": false },
     { "key": "oi.tools.consolidacion_ois", "area_key": "oi", "label": "Consolidación OIs", "route": "/oi/tools/consolidacion", "icon": "ti-layers", "order": 70, "enabled": false },
     { "key": "oi.tools.excel_tools", "area_key": "oi", "label": "Herramientas Excel", "route": "/oi/tools/excel", "icon": "ti-file", "order": 80, "enabled": false },
 
@@ -28,6 +29,7 @@
       "oi.vi.listado",
       "oi.tools.vima_to_lista",
       "oi.tools.actualizacion_base",
+      "oi.tools.historial_ac",
       "oi.tools.consolidacion_ois",
       "oi.tools.excel_tools",
       "account.change_password",

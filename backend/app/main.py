@@ -18,6 +18,7 @@ from app.oi_tools.routers import updates as oi_updates
 from app.oi_tools.routers import oi_merge as oi_merge
 from app.oi_tools.routers import excel as oi_excel
 from app.oi_tools.routers import files as oi_files
+from app.oi_tools.routers import formato_ac_history as formato_ac_history_router
 from app.logistica.routers import log01 as log01_router
 
 configure_logging()
@@ -59,6 +60,7 @@ app.include_router(oi_updates.router)
 app.include_router(oi_merge.router)
 app.include_router(oi_excel.router, prefix="/tools/excel", tags=["excel-tools"])
 app.include_router(oi_files.router, prefix="/tools/files", tags=["files"])
+app.include_router(formato_ac_history_router.router)
 
 app.include_router(log01_router.router)
 

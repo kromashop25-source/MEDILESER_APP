@@ -116,6 +116,7 @@ class UserCreate(UserBase):
 class UserRead(UserBase):
     id: int
     is_active: bool
+    model_config = ConfigDict(from_attributes=True)
 
 class UserUpdatePassword(BaseModel):
     old_password: Optional[str] = None # Requerido para cambio propio
@@ -189,6 +190,26 @@ class Log01RunDetail(BaseModel):
 
 class Log01RunListResponse(BaseModel):
     items: List[Log01RunListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class FormatoAcRunListItem(BaseModel):
+    id: int
+    operation_id: str
+    origin: str
+    status: str
+    output_name: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    created_by_username: str
+    created_by_full_name: Optional[str] = None
+    created_by_banco_id: Optional[int] = None
+
+
+class FormatoAcRunListResponse(BaseModel):
+    items: List[FormatoAcRunListItem]
     total: int
     limit: int
     offset: int

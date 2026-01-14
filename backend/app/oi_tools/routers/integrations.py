@@ -2,6 +2,7 @@
 import asyncio
 import json
 import queue
+import uuid
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel, Field
 from typing import Optional, cast, Dict, Any, Tuple
@@ -20,8 +21,15 @@ from app.oi_tools.services.progress_manager import progress_manager, SENTINEL
 from app.oi_tools.services.integrations.vima_to_lista import (
     VimaToListaConfig,
     map_vima_to_lista,
+    _build_oi_row_map,
     _last_oi_in_lista,
+    _normalize_oi_value,
+    _normalize_periodo_value,
     _parse_oi,
+)
+from app.oi_tools.services.formato_ac_history import (
+    persist_formato_ac_success,
+    persist_formato_ac_error,
 )
 from fastapi.responses import StreamingResponse
 from io import BytesIO
@@ -37,6 +45,10 @@ except Exception:  # ModuleNotFoundError u otros
 from app.api.auth import get_current_user_session
 
 router = APIRouter(prefix="/integrations", tags=["integrations"], dependencies=[Depends(get_current_user_session)])
+
+def _is_password_error(exc: HTTPException) -> bool:
+    code = (exc.headers or {}).get("X-Code") if hasattr(exc, "headers") else None
+    return code in ("PASSWORD_REQUIRED", "WRONG_PASSWORD")
 
 @router.get("/vima-to-lista/progress/{operation_id}")
 async def vima_progress_stream(operation_id: str):
@@ -76,6 +88,7 @@ class VimaToListaPayload(BaseModel):
     oi_pattern: Optional[str] = None # si quieres usar uno distinto, ej. "OI-(\d{4})-(\d+)"
     strict_incremental: bool = False
     replicate_merges: bool = True
+    update_existing_periodo: bool = False
 
 @router.post("/vima-to-lista")
 def vima_to_lista(payload: VimaToListaPayload):
@@ -103,6 +116,7 @@ def vima_to_lista(payload: VimaToListaPayload):
             oi_pattern=payload.oi_pattern or VimaToListaConfig().oi_pattern,
             strict_incremental=payload.strict_incremental,
             replicate_merges=payload.replicate_merges,
+            update_existing_periodo=payload.update_existing_periodo,
         )
         try:
             res = map_vima_to_lista(wb_vima, wb_lista, cfg)
@@ -152,6 +166,7 @@ def vima_to_lista_dry_run(payload: VimaToListaPayload):
             oi_pattern=payload.oi_pattern or VimaToListaConfig().oi_pattern,
             strict_incremental=payload.strict_incremental,
             replicate_merges=payload.replicate_merges,
+            update_existing_periodo=payload.update_existing_periodo,
         )
 
         ws_v = cast(Worksheet, wb_vima[cfg.vima_sheet] if cfg.vima_sheet else wb_vima.active)
@@ -298,6 +313,7 @@ def vima_to_lista_dry_run_upload(
     strict_incremental: str = Form("true"),
     oi_pattern: Optional[str] = Form(None),
     replicate_merges: str = Form("true"),
+    update_existing_periodo: str = Form("false"),
     operation_id: Optional[str] = Form(None),
 ):
     from openpyxl import load_workbook
@@ -311,6 +327,7 @@ def vima_to_lista_dry_run_upload(
     incremental_b = to_bool(incremental)
     strict_incremental_b = to_bool(strict_incremental)
     replicate_merges_b = to_bool(replicate_merges)
+    update_existing_periodo_b = to_bool(update_existing_periodo)
 
     if operation_id:
         progress_manager.emit(operation_id, {
@@ -382,6 +399,7 @@ def vima_to_lista_dry_run_upload(
             oi_pattern=oi_pattern or VimaToListaConfig().oi_pattern,
             strict_incremental=strict_incremental_b,
             replicate_merges=replicate_merges_b,
+            update_existing_periodo=update_existing_periodo_b,
         )
 
         ws_v = cast(Worksheet, wb_vima[cfg.vima_sheet] if cfg.vima_sheet else wb_vima.active)
@@ -577,7 +595,9 @@ def vima_to_lista_upload(
     strict_incremental: str = Form("true"),
     oi_pattern: Optional[str] = Form(None),
     replicate_merges: str = Form("true"),
+    update_existing_periodo: str = Form("false"),
     operation_id: Optional[str] = Form(None),
+    sess: Dict[str, Any] = Depends(get_current_user_session),
 ):
     from openpyxl import load_workbook
     from zipfile import BadZipFile
@@ -590,6 +610,7 @@ def vima_to_lista_upload(
     incremental_b = to_bool(incremental)
     strict_incremental_b = to_bool(strict_incremental)
     replicate_merges_b = to_bool(replicate_merges)
+    update_existing_periodo_b = to_bool(update_existing_periodo)
 
     if operation_id:
         progress_manager.emit(operation_id, {
@@ -607,6 +628,7 @@ def vima_to_lista_upload(
     wb_vima = None
     wb_lista = None
     out_stream = BytesIO()
+    log_operation_id = (operation_id or "").strip() or str(uuid.uuid4())
     try:
         vima_name = (vima_file.filename or "").lower()
         lista_name = (lista_file.filename or "").lower()
@@ -645,6 +667,7 @@ def vima_to_lista_upload(
             oi_pattern=oi_pattern or VimaToListaConfig().oi_pattern,
             strict_incremental=strict_incremental_b,
             replicate_merges=replicate_merges_b,
+            update_existing_periodo=update_existing_periodo_b,
         )
         pat = re.compile(cfg.oi_pattern, re.IGNORECASE)
 
@@ -655,17 +678,24 @@ def vima_to_lista_upload(
 
         ws_l = cast(Worksheet, wb_lista[cfg.lista_sheet] if cfg.lista_sheet else wb_lista.active)
         last_key, last_row_idx = (None, cfg.lista_start_row - 1)
+        oi_row_map: Dict[str, int] = {}
         if cfg.incremental:
             last_key, last_row_idx = _last_oi_in_lista(ws_l, cfg)
+            if cfg.update_existing_periodo:
+                oi_row_map = _build_oi_row_map(ws_l, cfg)
             if cfg.strict_incremental and last_key is None:
                 raise HTTPException(status_code=400, detail="Incremental estricto: último OI no válido en LISTA.")
 
         wb_vima_fast = None
         has_valid: Optional[bool] = None
+        has_updates = False
         try:
             wb_vima_fast = load_workbook_fast_for_scan(vima_tmp, password=vima_password)
             ws_fast = cast(Worksheet, wb_vima_fast[cfg.vima_sheet] if cfg.vima_sheet else wb_vima_fast.active)
-            for row in ws_fast.iter_rows(min_row=cfg.vima_start_row, min_col=3, max_col=14, values_only=True):
+            for row_idx, row in enumerate(
+                ws_fast.iter_rows(min_row=cfg.vima_start_row, min_col=3, max_col=14, values_only=True),
+                start=cfg.vima_start_row,
+            ):
                 oi = row[0]
                 if oi in (None, "", 0):
                     continue
@@ -680,6 +710,16 @@ def vima_to_lista_upload(
                 if cfg.incremental:
                     key = _parse_oi(oi, pat)
                     if not key or (last_key is not None and key <= last_key):
+                        if cfg.update_existing_periodo and oi_row_map:
+                            oi_norm = _normalize_oi_value(oi)
+                            dst_row = oi_row_map.get(oi_norm) if oi_norm else None
+                            if dst_row is not None:
+                                src_val = ws_fast.cell(row=row_idx, column=column_index_from_string(cfg.vima_cols_range[0])).value
+                                if src_val not in (None, ""):
+                                    dst_val = ws_l.cell(row=dst_row, column=column_index_from_string(cfg.lista_start_col)).value
+                                    if _normalize_periodo_value(src_val) != _normalize_periodo_value(dst_val):
+                                        has_updates = True
+                                        break
                         continue
                 has_valid = True
                 break
@@ -698,7 +738,7 @@ def vima_to_lista_upload(
                 finally:
                     release_workbook_stream(wb_vima_fast)
 
-        if has_valid is False:
+        if has_valid is False and not has_updates:
             if operation_id:
                 progress_manager.emit(operation_id, {
                     "type": "complete",
@@ -710,6 +750,14 @@ def vima_to_lista_upload(
             out_stream = BytesIO(lista_bytes)
             out_stream.seek(0)
             headers = {"Content-Disposition": 'attachment; filename="LISTA_SALIDA.xlsx"'}
+            persist_formato_ac_success(
+                origin="VIMA_LISTA",
+                operation_id=log_operation_id,
+                output_name="LISTA_SALIDA.xlsx",
+                file_bytes=lista_bytes,
+                summary={"rows_copied": 0, "rows_skipped": 0, "rows_updated_periodo": 0},
+                sess=sess,
+            )
             wb_lista.close()
             wb_lista = None
             return StreamingResponse(
@@ -763,6 +811,15 @@ def vima_to_lista_upload(
         out_stream.seek(0)
         headers = {"Content-Disposition": 'attachment; filename="LISTA_SALIDA.xlsx"'}
 
+        persist_formato_ac_success(
+            origin="VIMA_LISTA",
+            operation_id=log_operation_id,
+            output_name="LISTA_SALIDA.xlsx",
+            file_bytes=out_stream.getvalue(),
+            summary=res if isinstance(res, dict) else None,
+            sess=sess,
+        )
+
         if operation_id:
             progress_manager.emit(operation_id, {
                 "type": "complete",
@@ -777,11 +834,30 @@ def vima_to_lista_upload(
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers=headers
         )
-    except HTTPException:
+    except HTTPException as exc:
+        if not _is_password_error(exc):
+            persist_formato_ac_error(
+                origin="VIMA_LISTA",
+                operation_id=log_operation_id,
+                error_detail=str(exc.detail),
+                sess=sess,
+            )
         raise
     except ValueError as e:
+        persist_formato_ac_error(
+            origin="VIMA_LISTA",
+            operation_id=log_operation_id,
+            error_detail=str(e),
+            sess=sess,
+        )
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        persist_formato_ac_error(
+            origin="VIMA_LISTA",
+            operation_id=log_operation_id,
+            error_detail=f"{type(e).__name__}: {e}",
+            sess=sess,
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Error al integrar (upload): {type(e).__name__}: {e}"

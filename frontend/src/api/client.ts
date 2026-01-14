@@ -313,6 +313,8 @@ export async function handleAuthFailure(options?: { returnTo?: string; pending?:
 
 export const isAuthExpiredError = (error: any) => {
     const status = error?.response?.status;
+    const code = String(error?.response?.headers?.["x-code"] ?? "").toUpperCase();
+    if (code === "PASSWORD_REQUIRED" || code === "WRONG_PASSWORD") return false;
     if (status === 401 || status === 403) return true;
     const detail = error?.response?.data?.detail;
     if (typeof detail === "string" && /token requerido/i.test(detail)) return true;

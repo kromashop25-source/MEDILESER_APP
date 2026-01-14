@@ -44,6 +44,7 @@ export default function VimaToListaPage() {
   const [incremental, setIncremental] = useState<boolean>(true);
   const [strictIncremental, setStrictIncremental] = useState<boolean>(true);
   const [replicateMerges, setReplicateMerges] = useState<boolean>(true);
+  const [updateExistingPeriodo, setUpdateExistingPeriodo] = useState<boolean>(false);
   const [oiPattern, setOiPattern] = useState<string>("");
 
   const [running, setRunning] = useState<"dry" | "upload" | null>(null);
@@ -105,6 +106,7 @@ export default function VimaToListaPage() {
     form.append("incremental", incremental ? "true" : "false");
     form.append("strict_incremental", strictIncremental ? "true" : "false");
     form.append("replicate_merges", replicateMerges ? "true" : "false");
+    form.append("update_existing_periodo", updateExistingPeriodo ? "true" : "false");
     if (oiPattern.trim()) form.append("oi_pattern", oiPattern.trim());
 
     form.append("operation_id", operationId);
@@ -335,6 +337,22 @@ export default function VimaToListaPage() {
                     />
                     <label className="form-check-label" htmlFor="strictIncremental">
                         Incremental estricto
+                    </label>
+                    </div>
+                </div>
+
+                <div className="col-md-6 mB-10">
+                    <div className="form-check form-switch">
+                    <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="updateExistingPeriodo"
+                        checked={updateExistingPeriodo}
+                        onChange={(e) => setUpdateExistingPeriodo(e.target.checked)}
+                        disabled={!incremental}
+                    />
+                    <label className="form-check-label" htmlFor="updateExistingPeriodo">
+                        Actualizar periodo en OIs existentes
                     </label>
                     </div>
                 </div>

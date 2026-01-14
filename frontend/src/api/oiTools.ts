@@ -445,6 +445,65 @@ export async function log01HistoryDelete(runId: number, reason?: string): Promis
   });
 }
 
+// ================================
+// Formato A-C - Historial
+// ================================
+
+export type FormatoAcHistoryListItem = {
+  id: number;
+  operation_id: string;
+  origin: string;
+  status: string;
+  output_name?: string | null;
+  created_at: string;
+  completed_at?: string | null;
+  created_by_username: string;
+  created_by_full_name?: string | null;
+  created_by_banco_id?: number | null;
+};
+
+export type FormatoAcHistoryListResponse = {
+  items: FormatoAcHistoryListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type FormatoAcHistoryListParams = {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  origin?: string;
+};
+
+export async function formatoAcHistoryList(
+  params: FormatoAcHistoryListParams = {}
+): Promise<FormatoAcHistoryListResponse> {
+  const { limit = 20, offset = 0, q, dateFrom, dateTo, origin } = params;
+  const query: Record<string, unknown> = { limit, offset };
+  if (q && q.trim()) query.q = q.trim();
+  if (dateFrom && dateFrom.trim()) query.dateFrom = dateFrom.trim();
+  if (dateTo && dateTo.trim()) query.dateTo = dateTo.trim();
+  if (origin && origin.trim()) query.origin = origin.trim();
+  const { data } = await api.get<FormatoAcHistoryListResponse>("/oi/tools/formato-ac/history", {
+    params: query,
+  });
+  return data;
+}
+
+export async function formatoAcHistoryDownload(
+  runId: number,
+  signal?: AbortSignal
+): Promise<AxiosResponse<Blob>> {
+  return api.get(`/oi/tools/formato-ac/history/${encodeURIComponent(String(runId))}/artifact`, {
+    responseType: "blob",
+    signal,
+    validateStatus: (status) => status === 200,
+  });
+}
+
 
 
 export async function getMergeUploadLimits(): Promise<MergeUploadLimits> {

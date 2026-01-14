@@ -1,0 +1,37 @@
+{
+  "operation_id": "1ab78173-d7bf-47b6-ae0e-8151b5f97ce5",
+  "generated_at": "2026-01-14T17:53:44Z",
+  "total_no_conforme_final": 6,
+  "items": [
+    {
+      "oi": "OI-1199-2025",
+      "oi_num": 1199,
+      "serie": "AA25131916"
+    },
+    {
+      "oi": "OI-1199-2025",
+      "oi_num": 1199,
+      "serie": "AA25132119"
+    },
+    {
+      "oi": "OI-1200-2025",
+      "oi_num": 1200,
+      "serie": "AA25132369"
+    },
+    {
+      "oi": "OI-1200-2025",
+      "oi_num": 1200,
+      "serie": "AA25132427"
+    },
+    {
+      "oi": "OI-1200-2025",
+      "oi_num": 1200,
+      "serie": "AA25132489"
+    },
+    {
+      "oi": "OI-1208-2025",
+      "oi_num": 1208,
+      "serie": "AA25133340"
+    }
+  ]
+}

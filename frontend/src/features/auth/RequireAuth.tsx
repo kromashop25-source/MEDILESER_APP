@@ -10,6 +10,7 @@ function getModuleIdForPath(pathname: string): string | null {
   if (pathname === "/oi/list") return "oi_listado";
   if (pathname === "/oi/tools/vima-to-lista") return "tools_vima_lista";
   if (pathname === "/oi/tools/actualizacion-base") return "tools_actualizacion_bases";
+  if (pathname === "/oi/tools/formato-ac/history") return "tools_historial_ac";
   if (pathname === "/oi/tools/consolidacion/correlativo") return "tools_consol_correlativo";
   if (pathname === "/oi/tools/consolidacion/no-correlativo") return "tools_consol_no_correlativo";
   if (pathname.startsWith("/logistica/")) return "logistica";
