@@ -445,6 +445,40 @@ export async function log01HistoryDelete(runId: number, reason?: string): Promis
   });
 }
 
+// =========================================
+// LOG-02 (Logística) - Validación rutas UNC
+// =========================================
+export type Log02RutasCheck = {
+  ruta: String;
+  existe: boolean;
+  es_directorio: boolean;
+  lectura: boolean;
+  escritura?: boolean | null;
+  detalle?: string | null;
+};
+
+export type Log02ValidarRutasUncRequest = {
+  rutas_origen: string[];
+  ruta_destino: string;
+};
+
+export type Log02ValidarRutasUncResponse = {
+  ok: boolean;
+  origenes: Log02RutasCheck[];
+  destino: Log02RutasCheck;
+};
+
+export async function log02ValidarRutasUnc(
+  payload: Log02ValidarRutasUncRequest
+): Promise<Log02ValidarRutasUncResponse> {
+  const res = await api.post<Log02ValidarRutasUncResponse>(
+    "/logistica/log02/validar-rutas-unc",
+    payload
+  );
+  return res.data;
+}
+
+
 // ================================
 // Formato A-C - Historial
 // ================================
