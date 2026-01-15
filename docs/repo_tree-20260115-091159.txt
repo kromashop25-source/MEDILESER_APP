@@ -185,6 +185,7 @@ MEDILESER_APP
 │   │   │   ├── routers
 │   │   │   │   ├── excel.py
 │   │   │   │   ├── files.py
+│   │   │   │   ├── formato_ac_history.py
 │   │   │   │   ├── integrations.py
 │   │   │   │   ├── oi_merge.py
 │   │   │   │   └── updates.py
@@ -201,6 +202,7 @@ MEDILESER_APP
 │   │   │   │   ├── excel_io.py
 │   │   │   │   ├── excel_password.py
 │   │   │   │   ├── excel_styles.py
+│   │   │   │   ├── formato_ac_history.py
 │   │   │   │   ├── progress_manager.py
 │   │   │   │   └── validate.py
 │   │   │   ├── tests
@@ -287,7 +289,7 @@ MEDILESER_APP
 │   │   │       │   └── vector-maps.html
 │   │   │       ├── assets
 │   │   │       │   ├── index-BxqLcx0v.css
-│   │   │       │   └── index-Cn6eqkms.js
+│   │   │       │   └── index-DnCkJWND.js
 │   │   │       ├── medileser
 │   │   │       │   ├── banner.jpg
 │   │   │       │   ├── logo-vertical.jpg
@@ -343,6 +345,12 @@ MEDILESER_APP
 │   │   │           ├── BD_AA25129302_AL_AA25129900.xlsx
 │   │   │           ├── BD_AA25129302_AL_AA25129900__MANIFIESTO.json
 │   │   │           └── BD_AA25129302_AL_AA25129900__NO_CONFORME_FINAL.json
+│   │   ├── oi_tools
+│   │   │   └── formato_ac_runs
+│   │   │       ├── 1
+│   │   │       │   └── LISTA_SALIDA.xlsx
+│   │   │       └── 2
+│   │   │           └── M19 20mm R160 (SETIEMBRE) copia 2.xlsx
 │   │   └── vi.db
 │   ├── data_backup_20251217-084310
 │   │   ├── vi.db
@@ -381,10 +389,12 @@ MEDILESER_APP
 │   ├── Bitácora de Requerimientos.xlsx
 │   ├── Diccionario_Form_Excel.md
 │   ├── Manual_Usuario_Formato_VI.md
+│   ├── medileser_app_2026-01-13_220004.sql
 │   ├── MEDILESER_APP_BITACORA _SCRUM.xlsx
 │   ├── Pruebas_Desempeño_Excel.md
 │   ├── Pruebas_E2E_Excel.md
-│   └── repo_tree-20260112-131628.txt
+│   ├── repo_tree-20260112-131628.txt
+│   └── repo_tree-20260114-145144.txt
 ├── frontend
 │   ├── public
 │   │   ├── adminator
@@ -504,6 +514,7 @@ MEDILESER_APP
 │   │   │   │   ├── ConsolidacionNoCorrelativoPage.tsx
 │   │   │   │   ├── ConsolidacionOisPage.tsx
 │   │   │   │   ├── ExcelToolsPage.tsx
+│   │   │   │   ├── FormatoAcHistoryPage.tsx
 │   │   │   │   ├── OiFilesModal.tsx
 │   │   │   │   ├── progressTranslations.ts
 │   │   │   │   └── VimaToListaPage.tsx

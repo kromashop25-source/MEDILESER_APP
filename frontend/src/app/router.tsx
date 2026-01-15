@@ -18,6 +18,8 @@ import HomePage from "../features/home/HomePage";
 import { getAuth } from "../api/auth";
 import Log01ExcelPage  from "../features/logistica/Log01ExcelPage";
 import Log01HistoryPage from "../features/logistica/Log01HistoryPage";
+import Log02PdfPage from "../features/logistica/Log02PdfPage";
+
 
 
 export default function AppRouter() {
@@ -45,6 +47,8 @@ export default function AppRouter() {
             <Route path="/admin/permisos" element={<AdminPermisosPage />} />
             <Route path="/logistica/log01/excel" element={<Log01ExcelPage />} />
             <Route path="/logistica/log01/history" element={<Log01HistoryPage />} />
+            <Route path="/logistica/log02/pdfs" element={<Log02PdfPage />} />
+
 
             {/* OI Tools (Fase 2.2: páginas cascarón; menú se habilita luego) */}
             <Route path="/oi/tools/vima-to-lista" element={<VimaToListaPage />} />

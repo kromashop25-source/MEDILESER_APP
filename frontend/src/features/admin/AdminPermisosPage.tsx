@@ -18,6 +18,8 @@ const MODULES: ModuleDef[] = [
   { id: "tools_consol_no_correlativo", label: "Consolidación (No Correlativo)", path: "/oi/tools/consolidacion/no-correlativo" },
   { id: "future_ot", label: "Orden de Trabajo (FUTURO)", path: "FUTURO" },
   { id: "logistica", label: "Logística", path: "/logistica/log01/excel" },
+  { id: "logistica_history", label: "Historial de consolidaciones", path: "/logistica/log01/history" },
+  { id: "logistica_pdfs", label: "Filtrado de Cert.PDFs", path: "/logistica/log02/pdfs"},
   { id: "future_smart", label: "Smart (FUTURO)", path: "FUTURO" },
   { id: "users_admin", label: "Gestión de usuarios", path: "/users" },
   { id: "admin_permisos", label: "Permisos", path: "/admin/permisos" },
@@ -39,7 +41,7 @@ const GROUPS: GroupDef[] = [
       "future_ot",
     ],
   },
-  { id: "logistica", label: "Logística", moduleIds: ["logistica"] },
+  { id: "logistica", label: "Logística", moduleIds: ["logistica", "logistica_history", "logistica_pdfs"] },
   { id: "smart", label: "Smart (FUTURO)", moduleIds: ["future_smart"] },
   { id: "usuarios", label: "Usuarios", moduleIds: ["users_admin"] },
   { id: "administrar", label: "Administrar", moduleIds: ["admin_permisos"] },
@@ -105,13 +107,15 @@ export default function AdminPermisosPage() {
 
   // Colapso por grupo persistido
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const defaults = Object.fromEntries(GROUPS.map((g) => [g.id, true])) as Record<string, boolean>;
     try {
       const raw = localStorage.getItem(STORAGE_COLLAPSE_KEY);
-      if (!raw) return {};
+      if (!raw) return defaults;
       const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : {};
+      if (!parsed || typeof parsed !==  "object") return defaults;
+      return { ...defaults, ...parsed };
     } catch {
-      return {};
+      return defaults;
     }
   });
 
@@ -414,35 +418,39 @@ export default function AdminPermisosPage() {
                             </span>
                           </label>
                         </div>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-secondary"
-                          onClick={() => setGroupCollapsed(g.id, !isCollapsed)}
-                          disabled={mutation.isPending}
-                        >
-                          {isCollapsed ? "Expandir" : "Contraer"}
-                        </button>
+                        <div className="btn-group btn-group-sm" role="group" aria-label={`Acciones ${g.label}`}>
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary"
+                            onClick={() => setGroupCollapsed(g.id, !isCollapsed)}
+                            disabled={mutation.isPending}
+                          >
+                            {isCollapsed ? "Expandir" : "Contraer"}
+                          </button>
+                        </div>
                       </div>
 
                       {!isCollapsed && (
-                        <div className="row mt-2">
-                          {children.map((m) => (
-                            <div key={m.id} className="col-md-6 mb-2">
-                              <div className="form-check">
-                                <input
-                                  className="form-check-input"
-                                  type="checkbox"
-                                  id={`perm-${editing.id}-${m.id}`}
-                                  checked={draft.includes(m.id)}
-                                  onChange={() => toggle(m.id)}
-                                  disabled={mutation.isPending || editingIsSuperuser}
-                                />
-                                <label className="form-check-label" htmlFor={`perm-${editing.id}-${m.id}`}>
-                                  {m.label} <span className="text-muted">({m.path})</span>
-                                </label>
+                        <div className="mt-2 ms-4 ps-3 border-start border-2 border-light">
+                          <div className="row">
+                            {children.map((m) => (
+                              <div key={m.id} className="col-md-6 mb-2">
+                                <div className="form-check">
+                                  <input
+                                    className="form-check-input"
+                                    type="checkbox"
+                                    id={`perm-${editing.id}-${m.id}`}
+                                    checked={draft.includes(m.id)}
+                                    onChange={() => toggle(m.id)}
+                                    disabled={mutation.isPending || editingIsSuperuser}
+                                  />
+                                  <label className="form-check-label" htmlFor={`perm-${editing.id}-${m.id}`}>
+                                    {m.label} <span className="text-muted">({m.path})</span>
+                                  </label>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

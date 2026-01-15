@@ -122,9 +122,15 @@ export default function Log01ExcelPage() {
   }
 
 
-  function fmtOiNum(n: any): string {
+  function fmtOiTag(n: any, y?: any, tag?: any): string {
+    const rawTag = String(tag ?? "").trim();
+    if (rawTag) return rawTag;
     const num = Number(n);
     if (!Number.isFinite(num) || num <= 0) return "N/D";
+    const year = Number(y);
+    if (Number.isFinite(year) && year > 0) {
+      return `OI-${String(num).padStart(4, "0")}-${String(year).padStart(4, "0")}`;
+    }
     return `OI-${String(num).padStart(4, "0")}`;
   }
 
@@ -140,16 +146,24 @@ export default function Log01ExcelPage() {
       .filter((x: any) => x?.status === "OK" && String(x?.source ?? "").toUpperCase() === "BASES")
       .slice() // IMPORTANTE: evitar mutar auditSummary.audit_by_oi con sort()
       .sort((a: any, b: any) => {
+        const aYear = Number(a?.oi_year);
+        const bYear = Number(b?.oi_year);
+        const aYearHas = Number.isFinite(aYear) && aYear > 0;
+        const bYearHas = Number.isFinite(bYear) && bYear > 0;
+        if (aYearHas && bYearHas && aYear !== bYear) return aYear - bYear;
+        if (aYearHas && !bYearHas) return -1;
+        if (!aYearHas && bYearHas) return 1;
+
         const aNum = Number(a?.oi_num);
         const bNum = Number(b?.oi_num);
         const aHas = Number.isFinite(aNum);
         const bHas = Number.isFinite(bNum);
-        if (aHas && bHas) return aNum - bNum;
+        if (aHas && bHas && aNum !== bNum) return aNum - bNum;
         if (aHas && !bHas) return -1;
         if (!aHas && bHas) return 1;
-        // fallback estable por texto si faltara oi_num
-        const aKey = String(a?.oi_num ?? a?.oi ?? "").toUpperCase();
-        const bKey = String(b?.oi_num ?? b?.oi ?? "").toUpperCase();
+        // fallback estable por texto si faltara oi_num/oi_year
+        const aKey = String(a?.oi_tag ?? a?.oi ?? a?.oi_num ?? "").toUpperCase();
+        const bKey = String(b?.oi_tag ?? b?.oi ?? b?.oi_num ?? "").toUpperCase();
         return aKey.localeCompare(bKey);
       })
   }, [auditSummary]);
@@ -677,7 +691,7 @@ export default function Log01ExcelPage() {
                                 {auditByOiOkSorted.map((x: any, i: number) => (
                                   <tr key={i} className="small">
                                     <td style={{ whiteSpace: "nowrap" }}>
-                                      {fmtOiNum(x?.oi_num)}
+                                      {fmtOiTag(x?.oi_num, x?.oi_year, x?.oi_tag ?? x?.oi)}
                                     </td>
                                     <td style={{ whiteSpace: "nowrap" }}>
                                       <strong>{x?.rows_read ?? 0}</strong>
@@ -737,7 +751,7 @@ export default function Log01ExcelPage() {
                                   let oiOrFile = r?.filename ?? "N/D";
                                   if (src === "BASES") {
                                     const oiNum = Number(r?.oi_num);
-                                    const oiTag = fmtOiNum(oiNum);
+                                    const oiTag = fmtOiTag(oiNum, r?.oi_year, r?.oi_tag ?? r?.oi);
                                     if (oiTag !== "N/D") {
                                       oiOrFile = `${oiTag} / ${oiOrFile}`;
                                     }

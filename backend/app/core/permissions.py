@@ -17,6 +17,8 @@ MODULE_IDS: List[str] = [
     # Módulos visibles pero deshabilitados (FUTURO)
     "future_ot",
     "logistica",
+    "logistica_history",
+    "logistica_pdfs",
     "future_smart",
 ]
 

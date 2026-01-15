@@ -56,13 +56,18 @@ class Log01ProcessResult:
 _BASES_FILENAME_RE = re.compile(r"Base Comercial\s+OI-(\d{4})-(\d{4})", re.IGNORECASE)
 
 
-def _parse_oi_number_from_filename(filename: str) -> int:
+def _parse_oi_parts_from_filename(filename: str) -> tuple[int, int]:
     m = _BASES_FILENAME_RE.search(filename or "")
     if not m:
         raise ValueError(
             "El nombre del archivo de Base Comercial debe incluir el patron Base Comercial OI-####-YYYY (ej: Base Comercial OI-0123-2025.xlsx)."
-         )
-    return int(m.group(1))
+        )
+    return int(m.group(1)), int(m.group(2))
+
+
+def _parse_oi_number_from_filename(filename: str) -> int:
+    oi_num, _oi_year = _parse_oi_parts_from_filename(filename)
+    return oi_num
 
 
 def _norm_str(v: Any) -> str:
@@ -160,6 +165,10 @@ def _natural_key(s: Any) -> list:
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
 
 
+def _oi_compare_key(oi_year: Optional[int], oi_num: Optional[int]) -> tuple[int, int]:
+    return (int(oi_year or 0), int(oi_num or 0))
+
+
 def _find_item_header_cell(ws: Worksheet) -> Optional[tuple[int, int]]:
     # busca "Item" normalizado, en un rango razonable
     r_max = min(ws.max_row or 1, 200)
@@ -174,6 +183,7 @@ def _find_item_header_cell(ws: Worksheet) -> Optional[tuple[int, int]]:
 @dataclass
 class SerieInfo:
     oi_num: int
+    oi_year: int
     estado: str  # CONFORME / NO CONFORME
     values: Dict[str, Any]
 
@@ -453,6 +463,7 @@ def process_log01_files(
         )
 
         oi_num: Optional[int] = None
+        oi_year: Optional[int] = None
         oi_tag: Optional[str] = None
         source_type: str = "AUTO"
         try:
@@ -577,10 +588,11 @@ def process_log01_files(
 
             # Validación por nombre SOLO para BASES
             if source_type == "BASES":
-                oi_num = _parse_oi_number_from_filename(fname)
+                oi_num, oi_year = _parse_oi_parts_from_filename(fname)
                 oi_tag = _parse_oi_tag_from_filename(fname)
             else:
                 oi_num = 0
+                oi_year = 0
                 oi_tag = "GASELAG"
 
             if source_type == "BASES":
@@ -693,14 +705,24 @@ def process_log01_files(
                 extracted += 1
                 prev = series.get(serie)
                 if source_type == "BASES":
-                    # dedupe por OI mayor (regla vigente)
-                    if prev is None or (oi_num is not None and oi_num > prev.oi_num):
-                        series[serie] = SerieInfo(oi_num=oi_num or 0, estado=estado, values=row_values)
+                    # dedupe por OI mayor (anio, luego numero)
+                    if prev is None or _oi_compare_key(oi_year, oi_num) > _oi_compare_key(prev.oi_year, prev.oi_num):
+                        series[serie] = SerieInfo(
+                            oi_num=oi_num or 0,
+                            oi_year=oi_year or 0,
+                            estado=estado,
+                            values=row_values,
+                        )
                 else:
                     # GASELAG: no hay OI real; mantenemos oi_num=0 para no inventar OI-XXXX
-                    if prev is None or prev.oi_num == 0:
+                    if prev is None or (prev.oi_num == 0 and prev.oi_year == 0):
                         # baseline: solo registrar si no existe un registro BASES (oi_num>0)
-                        series[serie] = SerieInfo(oi_num=0, estado=estado, values=row_values)
+                        series[serie] = SerieInfo(
+                            oi_num=0,
+                            oi_year=0,
+                            estado=estado,
+                            values=row_values,
+                        )
 
             file_no_conforme_series = sorted(set(file_no_conforme_series), key=_natural_key)
             rows_total_read += extracted
@@ -722,6 +744,7 @@ def process_log01_files(
                 {
                     "filename": fname,
                     "oi_num": oi_num if source_type == "BASES" else 0,
+                    "oi_year": oi_year if source_type == "BASES" else 0,
                     "oi_tag": oi_tag,
                     "source": source_type,
                     "status": "OK",
@@ -775,14 +798,21 @@ def process_log01_files(
             
             # Si es BASES y el error NO es por filename inválido, intenta extraer oi_num/oi_tag
             if err_source == "BASES" and err_code != "INVALID_OI_FILENAME":
-                if not isinstance(oi_num, int) or oi_num <= 0:
+                if (
+                    not isinstance(oi_num, int)
+                    or oi_num <= 0
+                    or not isinstance(oi_year, int)
+                    or oi_year <= 0
+                ):
                     try:
-                        oi_num = _parse_oi_number_from_filename(fname)
+                        oi_num, oi_year = _parse_oi_parts_from_filename(fname)
                     except Exception:
                         pass
                 if not isinstance(oi_tag, str) or not oi_tag:
                     oi_tag = _parse_oi_tag_from_filename(fname)
             elif err_source == "GASELAG":
+                oi_num = 0
+                oi_year = 0
                 oi_tag = "GASELAG"
 
             # Agregado por tipo
@@ -794,6 +824,7 @@ def process_log01_files(
                 {
                     "filename": fname,
                     "oi_num": (oi_num if err_source == "BASES" else 0),
+                    "oi_year": (oi_year if err_source == "BASES" else 0),
                     "oi_tag": oi_tag,
                     "source": err_source,
                     "status": "ERROR",
@@ -807,6 +838,7 @@ def process_log01_files(
                 {
                     "filename": fname,
                     "oi_num": (oi_num if err_source == "BASES" else 0),
+                    "oi_year": (oi_year if err_source == "BASES" else 0),
                     "oi_tag": oi_tag,
                     "code": err_code,
                     "detail": err_detail,
@@ -1039,18 +1071,31 @@ def process_log01_files(
     no_conforme_filename = f"{stem}_NO_CONFORME_FINAL.json"
     manifest_filename = f"{stem}_MANIFIESTO.json"
 
-    # Mapear oi_num -> oi_tag desde auditoría (primer match); si no existe, usar OI-{oi_num:04d}
-    oi_num_to_tag: Dict[int, str] = {}
+    # Mapear (oi_year, oi_num) -> oi_tag desde auditoría (primer match)
+    oi_key_to_tag: Dict[tuple[int, int], str] = {}
     for a in audit_by_oi:
         oi = a.get("oi_num")
+        oi_year = a.get("oi_year")
         tag = a.get("oi_tag")
-        if isinstance(oi, int) and isinstance(tag, str) and tag:
-            oi_num_to_tag.setdefault(oi, tag)
+        if (
+            isinstance(oi, int)
+            and isinstance(oi_year, int)
+            and oi > 0
+            and oi_year > 0
+            and isinstance(tag, str)
+            and tag
+        ):
+            oi_key_to_tag.setdefault((oi_year, oi), tag)
 
-    def _tag_for(oi_num: int) -> str:
+    def _tag_for(oi_year: int, oi_num: int) -> str:
         if oi_num == 0:
             return "GASELAG"
-        return oi_num_to_tag.get(oi_num) or f"OI-{oi_num:04d}"
+        tag = oi_key_to_tag.get((oi_year, oi_num))
+        if tag:
+            return tag
+        if oi_year:
+            return f"OI-{oi_num:04d}-{oi_year:04d}"
+        return f"OI-{oi_num:04d}"
 
     # NO CONFORME final (post-dedupe)
     no_conforme_series = [s for s, info in series.items() if info.estado == "NO CONFORME"]
@@ -1062,8 +1107,9 @@ def process_log01_files(
         "total_no_conforme_final": len(no_conforme_series),
         "items": [
             {
-                "oi": _tag_for(series[s].oi_num),
+                "oi": _tag_for(series[s].oi_year, series[s].oi_num),
                 "oi_num": series[s].oi_num,
+                "oi_year": series[s].oi_year,
                 "serie": s,
             }
             for s in no_conforme_series
@@ -1072,13 +1118,15 @@ def process_log01_files(
     no_conforme_json = json.dumps(no_conforme_payload, ensure_ascii=False, indent=2).encode("utf-8")
 
     # Manifiesto por OI (listas de NO CONFORME para LOG-02)
-    by_oi: Dict[int, Dict[str, Any]] = {}
+    by_oi: Dict[tuple[int, int], Dict[str, Any]] = {}
     for serie, info in series.items():
+        oi_key = (info.oi_year, info.oi_num)
         bucket = by_oi.setdefault(
-            info.oi_num,
+            oi_key,
             {
-                "oi": _tag_for(info.oi_num),
+                "oi": _tag_for(info.oi_year, info.oi_num),
                 "oi_num": info.oi_num,
+                "oi_year": info.oi_year,
                 "series_no_conforme": [],
             },
         )
@@ -1097,10 +1145,11 @@ def process_log01_files(
         if not isinstance(series_list, list):
             continue
         oi_num = a.get("oi_num")
+        oi_year = a.get("oi_year")
         oi_tag = a.get("oi_tag")
         if not isinstance(oi_tag, str) or not oi_tag:
             if isinstance(oi_num, int):
-                oi_tag = _tag_for(oi_num)
+                oi_tag = _tag_for(oi_year if isinstance(oi_year, int) else 0, oi_num)
             else:
                 continue
         bucket = by_oi_origen_map.setdefault(
@@ -1108,12 +1157,15 @@ def process_log01_files(
             {
                 "oi": oi_tag,
                 "oi_num": oi_num if isinstance(oi_num, int) else None,
+                "oi_year": oi_year if isinstance(oi_year, int) else None,
                 "source_files": [],
                 "series_no_conforme": set(),
             },
         )
         if isinstance(oi_num, int) and bucket.get("oi_num") is None:
             bucket["oi_num"] = oi_num
+        if isinstance(oi_year, int) and bucket.get("oi_year") is None:
+            bucket["oi_year"] = oi_year
         fname = a.get("filename")
         if isinstance(fname, str) and fname:
             bucket["source_files"].append(fname)
@@ -1130,7 +1182,13 @@ def process_log01_files(
         bucket["total_no_conforme"] = len(series_sorted)
         origin_no_conformes_total += len(series_sorted)
         by_oi_origen.append(bucket)
-    by_oi_origen.sort(key=lambda x: (x.get("oi_num") or 0, x.get("oi") or ""))
+    by_oi_origen.sort(
+        key=lambda x: (
+            x.get("oi_year") or 0,
+            x.get("oi_num") or 0,
+            x.get("oi") or "",
+        )
+    )
 
     manifest_payload = {
         "operation_id": operation_id,
@@ -1151,7 +1209,10 @@ def process_log01_files(
             "final_no_conformes_total": len(no_conforme_series),
         },
         "by_oi_origen": by_oi_origen,
-        "by_oi": sorted(by_oi.values(), key=lambda x: (x["oi_num"], x["oi"])),
+        "by_oi": sorted(
+            by_oi.values(),
+            key=lambda x: (x.get("oi_year") or 0, x.get("oi_num") or 0, x.get("oi") or ""),
+        ),
     }
     manifest_json = json.dumps(manifest_payload, ensure_ascii=False, indent=2).encode("utf-8")
 

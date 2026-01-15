@@ -20,6 +20,8 @@ from app.oi_tools.routers import excel as oi_excel
 from app.oi_tools.routers import files as oi_files
 from app.oi_tools.routers import formato_ac_history as formato_ac_history_router
 from app.logistica.routers import log01 as log01_router
+from app.logistica.routers import log02 as log02_router
+
 
 configure_logging()
 
@@ -63,6 +65,8 @@ app.include_router(oi_files.router, prefix="/tools/files", tags=["files"])
 app.include_router(formato_ac_history_router.router)
 
 app.include_router(log01_router.router)
+app.include_router(log02_router.router)
+
 
 
 @app.on_event("startup")

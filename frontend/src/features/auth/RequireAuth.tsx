@@ -13,6 +13,9 @@ function getModuleIdForPath(pathname: string): string | null {
   if (pathname === "/oi/tools/formato-ac/history") return "tools_historial_ac";
   if (pathname === "/oi/tools/consolidacion/correlativo") return "tools_consol_correlativo";
   if (pathname === "/oi/tools/consolidacion/no-correlativo") return "tools_consol_no_correlativo";
+  if (pathname === "/logistica/log01/history") return "logistica_history";
+  if (pathname === "/logistica/log01/excel") return "logistica";
+  if (pathname === "/logistica/log02/pdfs") return "logistica_pdfs";
   if (pathname.startsWith("/logistica/")) return "logistica";
   if (pathname.startsWith("/oi/")) return "oi_formulario";
   if (pathname === "/users") return "users_admin";

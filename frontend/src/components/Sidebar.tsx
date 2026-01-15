@@ -161,7 +161,10 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
   const canListadoOi = isAuth && isAllowed("oi_listado");
   const canUsersAdmin = isAuth && canManageUsers && isAllowed("users_admin");
   const canFutureOt = isAuth && isAllowed("future_ot");
-  const canLogistica = isAuth && isAllowed("logistica");
+  const canLogisticaExcel = isAuth && isAllowed("logistica");
+  const canLogisticaHistory = isAuth && isAllowed("logistica_history");
+  const canLogisticaPdfs = isAuth && isAllowed("logistica_pdfs");
+  const canLogistica = canLogisticaExcel || canLogisticaHistory || canLogisticaPdfs;
   const canFutureSmart = isAuth && isAllowed("future_smart");
 
   const showConsolidacionGroup = canConsolCorrelativo || canConsolNoCorrelativo;
@@ -221,6 +224,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
       permisos: exact("/admin/permisos"),
       log01Excel: exact("/logistica/log01/excel"),
       log01History: exact("/logistica/log01/history"),
+      log02Pdfs: exact("/logistica/log02/pdfs"),
     };
   }, [pathname]);
 
@@ -243,7 +247,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
           activeLeaves.registroOi ||
           activeLeaves.listadoOi,
         usuarios: activeLeaves.users || activeLeaves.password,
-        logistica: activeLeaves.log01Excel || activeLeaves.log01History,
+        logistica: activeLeaves.log01Excel || activeLeaves.log01History || activeLeaves.log02Pdfs,
         administrar: activeLeaves.permisos,
       }) satisfies Record<GroupKey, boolean>,
     [activeLeaves]
@@ -419,20 +423,34 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
             active={activeGroups.logistica}
             onToggle={toggleGroup}
           >
-            <SidebarNavItem
-              to="/logistica/log01/excel"
-              icon="ti-files"
-              label="Consolidación Excel"
-              depth={1}
-              collapsed={collapsed}
-            />
-            <SidebarNavItem
-              to="/logistica/log01/history"
-              icon="ti-view-list-alt"
-              label="Historial de consolidaciones"
-              depth={1}
-              collapsed={collapsed}
-            />
+            {canLogisticaExcel && (
+              <SidebarNavItem
+                to="/logistica/log01/excel"
+                icon="ti-files"
+                label="Consolidacion Excel"
+                depth={1}
+                collapsed={collapsed}
+              />
+            )}
+            {canLogisticaHistory && (
+              <SidebarNavItem
+                to="/logistica/log01/history"
+                icon="ti-view-list-alt"
+                label="Historial de consolidaciones"
+                depth={1}
+                collapsed={collapsed}
+              />
+            )}
+            {canLogisticaPdfs && (
+              <SidebarNavItem
+                to="/logistica/log02/pdfs"
+                icon= "ti-filter"
+                label="Filtrado de Cert.PDFs"
+                depth={1}
+                collapsed={collapsed}
+              />
+
+            )}
           </SidebarGroup>
         )}
 

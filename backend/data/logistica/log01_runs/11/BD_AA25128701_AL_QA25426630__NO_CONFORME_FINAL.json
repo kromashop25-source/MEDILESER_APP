@@ -1,0 +1,2137 @@
+{
+  "operation_id": "d379a37b-e826-49a6-8675-3af48196e433",
+  "generated_at": "2026-01-15T16:54:28Z",
+  "total_no_conforme_final": 426,
+  "items": [
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128755"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128784"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128805"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128816"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128824"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128873"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128931"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128981"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128982"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128983"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128989"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25128992"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129005"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129006"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129008"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129018"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129036"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129090"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129105"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129107"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129128"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129135"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129189"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129208"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129214"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129219"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129242"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129284"
+    },
+    {
+      "oi": "OI-1141-2025",
+      "oi_num": 1141,
+      "serie": "AA25129289"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130585"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130685"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130699"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130705"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130741"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130744"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130762"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130780"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130812"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130832"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130855"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130857"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130859"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25130923"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25131026"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25131037"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25131078"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25131083"
+    },
+    {
+      "oi": "OI-1144-2025",
+      "oi_num": 1144,
+      "serie": "AA25131087"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131715"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131720"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131724"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131725"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131745"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131746"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131747"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131800"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131801"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131810"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131824"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131831"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131837"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131852"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131866"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131892"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131901"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131916"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131937"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131948"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25131978"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25132044"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25132119"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25132147"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25132172"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25132179"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25132180"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25132182"
+    },
+    {
+      "oi": "OI-1146-2025",
+      "oi_num": 1146,
+      "serie": "AA25132196"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132369"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132384"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132408"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132420"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132427"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132456"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132489"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132497"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132511"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132514"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132526"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132527"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132545"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132547"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132556"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132644"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132672"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132680"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132696"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132697"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132709"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132711"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132741"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132765"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132771"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132774"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132788"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132809"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132812"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132840"
+    },
+    {
+      "oi": "OI-1147-2025",
+      "oi_num": 1147,
+      "serie": "AA25132846"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25132905"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25132962"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25132980"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25132982"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25132987"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133006"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133036"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133043"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133062"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133067"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133069"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133073"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133080"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133094"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133100"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133108"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133133"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133137"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133167"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133209"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133238"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133246"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133326"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133333"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133340"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133375"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133376"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133401"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133409"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133435"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133450"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133461"
+    },
+    {
+      "oi": "OI-1148-2025",
+      "oi_num": 1148,
+      "serie": "AA25133464"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133518"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133544"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133548"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133549"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133565"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133570"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133584"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133589"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133594"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133598"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133600"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133604"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133606"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133619"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133650"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133663"
+    },
+    {
+      "oi": "OI-1149-2025",
+      "oi_num": 1149,
+      "serie": "AA25133673"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588203"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588249"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588277"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588294"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588322"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588494"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588503"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588547"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588560"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588569"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588578"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588600"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588613"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588625"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588628"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588666"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588668"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588677"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588755"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588760"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588867"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588874"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25588911"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589133"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589248"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589332"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589361"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589630"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589636"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589708"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589723"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589811"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589928"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589946"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25589951"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590069"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590103"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590106"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590152"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590203"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590310"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590380"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590412"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590465"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590486"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590508"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590574"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590603"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590605"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590633"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590634"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590686"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590712"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590741"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590797"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590935"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590936"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590962"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25590995"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591012"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591024"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591112"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591205"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591253"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591272"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591325"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591348"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591415"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591447"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591479"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591585"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591760"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591801"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591804"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591805"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591807"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591835"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591901"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25591940"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592034"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592045"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592079"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592214"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592516"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592698"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592722"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592913"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25592983"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25593086"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25593088"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25593105"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25593171"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25593202"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "PA25593250"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421134"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421140"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421153"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421169"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421188"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421195"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421243"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421310"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421318"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421359"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421360"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421363"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421367"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421370"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421378"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421436"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421438"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421439"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421507"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421531"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421539"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421593"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421622"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421626"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421675"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421782"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421876"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421952"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25421983"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422009"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422019"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422047"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422100"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422112"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422118"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422119"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422215"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422267"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422319"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422334"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422358"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422369"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422385"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422427"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422450"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422535"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422540"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422545"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422547"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422580"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422618"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422631"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422649"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422682"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422688"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422808"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422870"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422884"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422902"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422913"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422936"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422965"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25422976"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423129"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423162"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423209"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423264"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423345"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423384"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423404"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423412"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423450"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423462"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423575"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423618"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423634"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423640"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423934"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423941"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25423948"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424010"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424073"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424083"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424118"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424127"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424135"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424175"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424214"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424276"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424285"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424288"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424293"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424315"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424326"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424336"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424345"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424351"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424358"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424375"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424402"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424428"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424486"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424488"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424497"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424535"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424538"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424543"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424619"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424632"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424644"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424649"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424661"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424717"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424745"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424750"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424787"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25424946"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425014"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425061"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425097"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425114"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425231"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425258"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425260"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425265"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425277"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425294"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425306"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425347"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425349"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425381"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425405"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425557"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425563"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425600"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425646"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425659"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425686"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425694"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425700"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425701"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425706"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425717"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425739"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425758"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425769"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425806"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425812"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425829"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425840"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425960"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425996"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25425998"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426008"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426073"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426092"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426102"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426148"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426152"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426195"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426222"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426236"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426246"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426261"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426291"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426305"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426342"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426354"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426374"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426387"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426413"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426432"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426450"
+    },
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "serie": "QA25426458"
+    }
+  ]
+}
