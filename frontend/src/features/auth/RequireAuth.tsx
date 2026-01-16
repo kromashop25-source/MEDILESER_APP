@@ -46,7 +46,7 @@ export default function RequireAuth() {
       .catch(async (e: any) => {
         if (cancelled) return;
         const status = e?.response?.status;
-        if (status === 401 || status === 403) {
+        if (status === 401) {
           await handleAuthFailure();
           return;
         }

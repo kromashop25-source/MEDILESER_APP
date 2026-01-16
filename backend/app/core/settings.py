@@ -45,7 +45,8 @@ class Settings(BaseSettings):
     # LOG-02: raíces permitidas para el "explorador" de carpetas.
     # Seguridad: el usuario podrá navegador dentro de esas rutas.
     # Sugerencia: configurar vía VI_LOG02_UNC_ROOTS como JSON:
-    # VI_LOG02_UNC_ROOTS=["\\\\192.168."]
+    # VI_LOG02_UNC_ROOTS=["\\\\192.168.1.237\\data\\MEDILESER_APP","\\\\SERVIDOR\\Compartido\\Certificados"]
+    log02_unc_roots: List[str] = []
 
     # Ruta relativa (desde app/) a la plantilla Excel
     # Nota: el template vive en app/data/templates/vi/

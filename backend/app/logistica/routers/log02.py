@@ -5,9 +5,11 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.auth import get_current_user_session
 from pydantic import BaseModel, Field
+from app.core.settings import get_settings
+
 
 
 router = APIRouter(
@@ -138,3 +140,85 @@ def log02_validar_rutas_unc(payload: Log02ValidarRutasUncRequest) -> Log02Valida
     ok = bool(ok_origen and ok_destino)
 
     return Log02ValidarRutasUncResponse(ok=ok, origenes=origenes, destino=destino)
+
+
+# ====================================
+# Explorador de carpetas (server-side)
+# ====================================
+class Log02ExplorerRootsResponse(BaseModel):
+    roots: List[str]
+
+
+class Log02ExplorerListItem(BaseModel):
+    name: str
+    path: str
+
+
+class Log02ExplorerListResponse(BaseModel):
+    path: str
+    folders: List[Log02ExplorerListItem]
+
+
+def _norm_abs(p: str) -> str:
+    # Normalización simple para Windows/UNC.
+    # No "resolve()" para evitar cambios extra; se apoya en normpath + abspath.
+    s = (p or "").strip()
+    if not s:
+        return ""
+    return os.path.normpath(os.path.abspath(s))
+
+
+def _is_within_allowed(path_abs: str, roots_abs: List[str]) -> bool:
+    if not path_abs:
+        return False
+    for r in roots_abs:
+        try:
+            common = os.path.commonpath([path_abs, r])
+            if common == r:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+@router.get("/explorador/roots", response_model=Log02ExplorerRootsResponse)
+def log02_explorer_roots() -> Log02ExplorerRootsResponse:
+    settings = get_settings()
+    roots = [(x or "").strip() for x in (settings.log02_unc_roots or []) if (x or "").strip()]
+    return Log02ExplorerRootsResponse(roots=roots)
+
+
+@router.get("/explorador/listar", response_model=Log02ExplorerListResponse)
+def log02_explorer_listar(path: str = Query(..., description="Ruta absoluta dentro de raíces permitidas")) -> Log02ExplorerListResponse:
+    settings = get_settings()
+    roots = [(x or "").strip() for x in (settings.log02_unc_roots or []) if (x or "").strip()]
+    if not roots:
+        raise HTTPException(status_code=400, detail="No hay raíces configuradas para LOG-02. Cofigure VI_LOG02_UNC_ROOTS.")
+
+    roots_abs = [_norm_abs(r) for r in roots]
+    path_abs = _norm_abs(path)
+
+    if not _is_within_allowed(path_abs, roots_abs):
+        raise HTTPException(status_code=403, detail="Ruta fuera de las áreas permitidas")
+    
+    p = Path(path_abs)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="La carpeta no existe.")
+    if not p.is_dir():
+        raise HTTPException(status_code=400, detail="La ruta no es una carpeta.")
+    
+    try:
+        folders: List[Log02ExplorerListItem] = []
+        with os.scandir(path_abs) as it:
+            for entry in it:
+                # solo en carpetas
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        folders.append(Log02ExplorerListItem(name=entry.name, path=os.path.join(path_abs, entry.name)))
+                except Exception:
+                    continue
+        # orden alfabético
+        folders.sort(key=lambda x: x.name.lower())
+        return Log02ExplorerListResponse(path=path_abs, folders=folders)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Sin permisos de lectura para listar en carpeta.")

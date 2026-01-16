@@ -468,6 +468,30 @@ export type Log02ValidarRutasUncResponse = {
   destino: Log02RutasCheck;
 };
 
+export type Log02ExplorerRootsResponse = {
+  roots: string[];
+};
+
+export type Log02ExplorerListItem = {
+  name: string;
+  path: string;
+};
+
+export type Log02ExplorerListResponse = {
+  path: string;
+  folders: Log02ExplorerListItem[];
+};
+
+export async function log02ExplorerRoots(): Promise<Log02ExplorerRootsResponse> {
+  const res = await api.get<Log02ExplorerRootsResponse>("/logistica/log02/explorador/roots");
+  return res.data;
+}
+
+export async function log02ExplorerListar(path: string): Promise<Log02ExplorerListResponse> {
+  const res = await api.get<Log02ExplorerListResponse>("/logistica/log02/explorador/listar", { params: { path }});
+  return res.data;
+}
+
 export async function log02ValidarRutasUnc(
   payload: Log02ValidarRutasUncRequest
 ): Promise<Log02ValidarRutasUncResponse> {

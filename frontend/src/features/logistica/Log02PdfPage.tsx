@@ -4,6 +4,9 @@ import type { AxiosError } from "axios";
 import {
   log02ValidarRutasUnc,
   type Log02ValidarRutasUncResponse,
+  log02ExplorerRoots,
+  log02ExplorerListar,
+  type Log02ExplorerListItem,
 } from "../../api/oiTools";
 
 function badge(ok?: boolean | null) {
@@ -12,6 +15,8 @@ function badge(ok?: boolean | null) {
   return "badge bg-secondary";
 }
 
+type ExplorerMode = "origen" | "destino";
+
 export default function Log02PdfPage() {
 
   const [rutasOrigen, setRutasOrigen] = useState<string[]>([""]);
@@ -19,6 +24,17 @@ export default function Log02PdfPage() {
   const [validando, setValidando] = useState<boolean>(false);
   const [error, setError ] = useState<string>("");
   const [resultado, setResultado] = useState<Log02ValidarRutasUncResponse | null>(null);
+
+  // Explorador (modal inline)
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [explorerMode, setExplorerMode] = useState<ExplorerMode>("origen");
+  const [roots, setRoots] = useState<string[]>([]);
+  const [rootSel, setRootSel] = useState<string>("");
+  const [currentPath, setCurrentPath] = useState<string>("");
+  const [folders, setFolders] = useState<Log02ExplorerListItem[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [explorerError, setExplorerError] = useState<string>("");
+
 
   const origenesLimpios = useMemo(
     () => rutasOrigen.map((x) => (x ?? "").trim()),
@@ -44,6 +60,86 @@ export default function Log02PdfPage() {
       next.splice(i, 1);
       return next;
     });
+  }
+
+  async function openExplorer(mode:ExplorerMode) {
+    setExplorerMode(mode);
+    setExplorerError("");
+    setExplorerOpen(true);
+    try {
+      const res = await log02ExplorerRoots();
+      const rs = res.roots || [];
+      setRoots(rs);
+      const first = rs[0] || "";
+      setRootSel(first);
+      setCurrentPath(first);
+      if (first) {
+        await loadFolders(first);
+      } else {
+        setFolders([]);
+        setExplorerError("No hay rutas raíz configuradas para el explorador. Configure VI_LOG02_UNC_ROOTS en el servidor.");
+      }
+    } catch (e) {
+      const ax = e as AxiosError<any>;
+      const detail = 
+      (ax.response?.data?.detail as string) ||
+      ax.message ||
+      "No se pudo cargar las rutas raíz.";
+      setExplorerError(detail);
+      setFolders([]);
+    }
+  }
+
+  async function loadFolders(path: string) {
+    setExplorerError("");
+    if (!path) {
+      setFolders([]);
+      return;
+    }
+    try {
+      setLoadingFolders(true);
+      const res = await log02ExplorerListar(path);
+      setCurrentPath(res.path);
+      setFolders(res.folders || []);
+    } catch (e) {
+      const ax = e as AxiosError<any>;
+      const detail =
+      (ax.response?.data?.detail as string) ||
+      ax.message ||
+      "No se pudo listar la carpeta.";
+      setExplorerError(detail);
+      setFolders([]);
+    } finally {
+      setLoadingFolders(false);
+    }
+  }
+
+  function upOneLevel() {
+    // Subir un nivel: recortamos por separador de Windows "\".
+    // Mantener dentro de la raíz: el backend bloqueará si sale del allowlist.
+    const p = (currentPath || "").replace(/[\\\/]+$/, "");
+    const idx = p.lastIndexOf("\\");
+    if (idx <= 0) return;
+    const parent = p.slice(0, idx);
+    void loadFolders(parent);
+  }
+
+  function selectCurrentFolder() {
+    if (!currentPath) return;
+    if (explorerMode === "destino") {
+      setRutaDestino(currentPath);
+    } else {
+      // agregar como nuevo origen, evitando duplicado exacto
+      setRutasOrigen((prev) =>  {
+        const clean = currentPath.trim();
+        if (!clean) return prev;
+        if (prev.map((x) => (x || "").trim()).includes(clean)) return prev;
+        // si el primer input está vacío, lo reemplazamos
+        if (prev.length === 1 && !(prev[0] || "").trim()) return [clean]
+        return [...prev, clean];
+      });
+    }
+    setExplorerOpen(false);
   }
 
   async function validar() {
@@ -122,6 +218,15 @@ export default function Log02PdfPage() {
                       />
                       <button
                         type="button"
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={() => void openExplorer("origen")}
+                        disabled={validando}
+                        title="Elegir carpeta"
+                      >
+                        Elegir
+                      </button>
+                      <button
+                        type="button"
                         className="btn btn-sm btn-outline-secondary"
                         onClick={addOrigen}
                         disabled={validando}
@@ -148,13 +253,24 @@ export default function Log02PdfPage() {
 
                 <div className="col-12 col-md-8">
                   <label className="form-label">Ruta destino (UNC) — lectura y escritura</label>
-                  <input
-                    className="form-control form-control-sm"
-                    value={rutaDestino}
-                    onChange={(e) => setRutaDestino(e.target.value)}
-                    placeholder="\\\\SERVIDOR\\Compartido\\Salida_LOG02"
-                    disabled={validando}
-                  />
+                  <div className="d-flex gap-10">
+                    <input
+                      className="form-control form-control-sm"
+                      value={rutaDestino}
+                      onChange={(e) => setRutaDestino(e.target.value)}
+                      placeholder="\\\\SERVIDOR\\Compartido\\Salida_LOG02"
+                      disabled={validando}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-primary"
+                      onClick={() => void openExplorer("destino")}
+                      disabled={validando}
+                      title="Elegir carpeta"
+                    >
+                      Elegir
+                    </button>
+                  </div>
                 </div>
 
                 <div className="col-12 col-md-4 d-flex align-items-end">
@@ -228,6 +344,117 @@ export default function Log02PdfPage() {
           </div>
         </div>
       </div>
+      {/* Modal explorador (inline Bootstrap/Adminator) */}
+      {explorerOpen ? (
+        <>
+          <div className="modal fade show" style={{ display: "block" }} role="dialog" aria-modal="true">
+            <div className="modal-dialog modal-lg" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">
+                    {explorerMode === "destino" ? "Elegir carpeta de destino" : "Elegir carpeta de origen"}
+                  </h5>
+                  <button type="button" className="close" aria-label="Close" onClick={() => setExplorerOpen(false)}>
+                    <span aria-hidden="true">&times;</span>
+                  </button>
+                </div>
+
+                <div className="modal-body">
+                  {explorerError ? (
+                    <div className="alert alert-danger" role="alert">
+                      {explorerError}
+                    </div>
+                  ) : null}
+
+                  <div className="row g-2">
+                    <div className="col-12 col-md-6">
+                      <label className="form-label">Raíz</label>
+                      <select
+                        className="form-control form-control-sm"
+                        value={rootSel}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setRootSel(v);
+                          void loadFolders(v);
+                        }}
+                        disabled={!roots.length}
+                      >
+                       {roots.length ? (
+                          roots.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">Sin raíces</option>
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="col-12 col-md-6">
+                      <label className="form-label">Carpeta actual</label>
+                      <input className="form-control form-control-sm" value={currentPath} readOnly />
+                    </div>
+                  </div>
+
+                  <div className="d-flex gap-10 mT-10">
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={upOneLevel} disabled={!currentPath || loadingFolders}>
+                      Subir nivel
+                    </button>
+                    <button type="button" className="btn btn-sm btn-primary" onClick={selectCurrentFolder} disabled={!currentPath || loadingFolders}>
+                      Seleccionar esta carpeta
+                    </button>
+                  </div>
+
+                  <hr />
+
+                  {loadingFolders ? (
+                    <div className="text-muted small">Cargando carpetas...</div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-sm mB-0">
+                        <thead>
+                          <tr className="small">
+                            <th>Subcarpetas</th>
+                            <th style={{ width: 120 }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {folders.length ? (
+                            folders.map((f) => (
+                              <tr key={f.path} className="small">
+                                <td style={{ wordBreak: "break-all" }}>{f.name}</td>
+                                <td>
+                                  <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => void loadFolders(f.path)}>
+                                    Entrar
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr className="small">
+                             <td colSpan={2} className="text-muted">
+                               Sin subcarpetas o sin permisos para listar.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => setExplorerOpen(false)}>
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="modal-backdrop fade show"></div>
+        </>
+      ) : null}
     </div>
   );
 }
