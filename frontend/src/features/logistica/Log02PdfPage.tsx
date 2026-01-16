@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import {
@@ -17,6 +17,8 @@ function badge(ok?: boolean | null) {
 
 type ExplorerMode = "origen" | "destino";
 
+const LS_KEY = "medileser_log02_rutas_v1";
+
 export default function Log02PdfPage() {
 
   const [rutasOrigen, setRutasOrigen] = useState<string[]>([""]);
@@ -24,10 +26,14 @@ export default function Log02PdfPage() {
   const [validando, setValidando] = useState<boolean>(false);
   const [error, setError ] = useState<string>("");
   const [resultado, setResultado] = useState<Log02ValidarRutasUncResponse | null>(null);
+  const [touched, setTouched] = useState<boolean>(false);
+
 
   // Explorador (modal inline)
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [explorerMode, setExplorerMode] = useState<ExplorerMode>("origen");
+  // Si es null => "Agregar origen" (no edita fila existente)
+  const [originEditIndex, setOriginEditIndex] = useState<number | null>(null);
   const [roots, setRoots] = useState<string[]>([]);
   const [rootSel, setRootSel] = useState<string>("");
   const [currentPath, setCurrentPath] = useState<string>("");
@@ -35,11 +41,102 @@ export default function Log02PdfPage() {
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [explorerError, setExplorerError] = useState<string>("");
 
+  // Cargar configuración previa (calidad de vida)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { origenes?: string[]; destino?: string};
+      const origenes = Array.isArray(parsed.origenes) ? parsed.origenes : [];
+      const destino = typeof parsed?.destino === "string" ? parsed.destino : "";
+      if (origenes.length) setRutasOrigen(origenes);
+      if (destino) setRutaDestino(destino);
+    } catch {
+      // ignorar
+    }
+
+  }, []);
+
+  // Persistir configuración
+  useEffect(() => {
+    try {
+      const payload = {
+        origenes: rutasOrigen,
+        destino: rutaDestino,
+      };
+      localStorage.setItem(LS_KEY, JSON.stringify(payload));
+    } catch {
+      // ignorar
+  }
+}, [rutasOrigen, rutaDestino]);
+
+function limpiarConfiguracion() {
+  setRutasOrigen([""]);
+  setRutaDestino("");
+  setResultado(null);
+  setError("");
+  setTouched(false);
+  try {
+    localStorage.removeItem(LS_KEY);
+  } catch {
+    // ignorar
+  }
+}
+
+function quitarDuplicadosUI() {
+  setRutasOrigen((prev) => {
+    const seen = new Set<string>();
+    const next: string[] = [];
+    for (const raw of prev) {
+      const v = (raw || "").trim();
+      if (!v) continue;
+      const k = v.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      next.push(v);
+    }
+    return next.length ? next : [""];
+  });
+}
+
+function abrirAgregarOrigen() {
+  // NO agrega fila aquí. La fila se agrega recién cuando el usuario selecciona una carpeta.
+  setTouched(true);
+  setOriginEditIndex(null);
+  void openExplorer("origen");
+}
+
+function abrirEditarOrigen(i: number) {
+  setTouched(true);
+  setOriginEditIndex(i);
+  void openExplorer("origen");
+}
+
+function abrirDestino() {
+  setTouched(true);
+  setOriginEditIndex(null);
+  void openExplorer("destino");
+}
+
 
   const origenesLimpios = useMemo(
     () => rutasOrigen.map((x) => (x ?? "").trim()),
     [rutasOrigen]
   );
+
+  const origenesNoVacios = useMemo(
+    () => origenesLimpios.filter((x) => x),
+    [origenesLimpios]
+  );
+
+  const destinoLimpio = useMemo(
+    () => (rutaDestino ?? "").trim(),
+    [rutaDestino]
+  );
+
+  const listoParaValidar = useMemo(() => {
+    return origenesNoVacios.length > 0 && !!destinoLimpio;
+  }, [origenesNoVacios.length, destinoLimpio]);
 
   function setOrigenAt(i: number, value: string) {
     setRutasOrigen((prev) => {
@@ -49,13 +146,13 @@ export default function Log02PdfPage() {
     });
   }
 
-  function addOrigen() {
-    setRutasOrigen((prev) => [...prev, ""]);
-  }
 
   function removeOrigen(i: number) {
     setRutasOrigen((prev) => {
-      if (prev.length <= 1) return prev; // mantener al menos 1 input
+      if (prev.length <= 1) {
+        // mantener al menos 1 input: limpiar
+        return [""];
+      }
       const next = prev.slice();
       next.splice(i, 1);
       return next;
@@ -129,24 +226,37 @@ export default function Log02PdfPage() {
     if (explorerMode === "destino") {
       setRutaDestino(currentPath);
     } else {
-      // agregar como nuevo origen, evitando duplicado exacto
       setRutasOrigen((prev) =>  {
         const clean = currentPath.trim();
-        if (!clean) return prev;
-        if (prev.map((x) => (x || "").trim()).includes(clean)) return prev;
-        // si el primer input está vacío, lo reemplazamos
-        if (prev.length === 1 && !(prev[0] || "").trim()) return [clean]
-        return [...prev, clean];
+       if (!clean) return prev;
+
+        const next = prev.slice();
+
+        // Editar fila existente
+        if (originEditIndex !== null && originEditIndex >= 0 && originEditIndex < next.length) {
+          next[originEditIndex] = clean;
+          return next;
+        }
+
+        // Agregar nuevo origen SOLO al seleccionar
+        const exists = next.map((x) => (x || "").trim().toLowerCase()).includes(clean.toLowerCase());
+        if (exists) return next;
+
+        // si la primera fila está vacía, la reemplazamos
+        if (next.length === 1 && !(next[0] || "").trim()) return [clean];
+
+        return [...next, clean];
       });
     }
-    setExplorerOpen(false);
+    setOriginEditIndex(null);
   }
 
   async function validar() {
     setError("");
     setResultado(null);
-    const destinos = (rutaDestino ?? "").trim();
-    const origenes = origenesLimpios.filter((x) => x);
+    setTouched(true)
+    const destinos = destinoLimpio;
+    const origenes = origenesNoVacios
     
     if (!origenes.length) {
       setError("Debes ingresar al menos una ruta de origen.");
@@ -181,6 +291,47 @@ export default function Log02PdfPage() {
 
   }
 
+  const resumenValidacion = useMemo(() => {
+    if (!resultado) return null;
+    const okOrigenes = (resultado.origenes || []).filter((o) => o.existe && o.lectura).length;
+    const totalOrigenes = (resultado.origenes || []).length;
+    const okDestino = !!(resultado.destino?.existe 
+      && resultado.destino?.es_directorio && resultado.destino?.lectura && resultado.destino?.escritura);
+      return { okOrigenes, totalOrigenes, okDestino };
+  }, [resultado]);
+
+  async function copiarDetalle() {
+    if (!resultado) return;
+    const lines: string[] = [];
+    lines.push("LOG-02 - Resultado de validación");
+    lines.push("");
+    for (const o of resultado.origenes || []) {
+      lines.push(
+        `ORIGEN | ${o.ruta} | existe=${o.existe ? "SI" : "NO"} | lectura=${o.lectura ? "SI" : "NO"} | detalle=${o.detalle || ""}`
+      );
+    }
+    const d = resultado.destino;
+    lines.push(
+      `DESTINO | ${d?.ruta || ""} | existe=${d?.existe ? "SI" : "NO"} | lectura=${d?.lectura ? "SI" : "NO"} | escritura=${d?.escritura ? "SI" : "NO"} | detalle=${d?.detalle || ""}`
+    );
+    const text = lines.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // fallback
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy")
+        document.body.removeChild(ta);
+      } catch {
+        // ignorar
+      }
+    }
+  }
+
 
   return (
     <div className="container-fluid">
@@ -210,52 +361,75 @@ export default function Log02PdfPage() {
                   {rutasOrigen.map((value, i) => (
                     <div key={i} className="d-flex gap-10 mB-10">
                       <input
-                        className="form-control form-control-sm"
+                        className={
+                          "form-control form-control-sm" +
+                          (touched && !(origenesLimpios[i] || "") ? " is-invalid" : "")
+                        }
                         value={value}
                         onChange={(e) => setOrigenAt(i, e.target.value)}
                         placeholder="\\\\SERVIDOR\\Compartido\\Certificados"
                         disabled={validando}
                       />
+                      {touched && !(origenesLimpios[i] || "") ? (
+                        <div className="small text-danger mT-5">Requerido</div>
+                      ) : null}
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-primary"
-                        onClick={() => void openExplorer("origen")}
+                        onClick={() => abrirEditarOrigen(i)}
                         disabled={validando}
                         title="Elegir carpeta"
                       >
-                        Elegir
+                        {(value || "").trim() ? "Editar" : "Agregar"}
                       </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={addOrigen}
-                        disabled={validando}
-                        title="Agregar ruta"
-                      >
-                        +
-                      </button>
+                      
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-danger"
                         onClick={() => removeOrigen(i)}
-                        disabled={validando || rutasOrigen.length <= 1}
+                        disabled={validando}
                         title="Quitar ruta"
+                        style= {{ width: 44, textAlign: "center" }}
                       >
                         –
                       </button>
                     </div>
                   ))}
 
+                  <div className="d-flex gap-10">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      onClick={abrirAgregarOrigen}
+                      disabled={validando}
+                      title="Agregar origen"
+                    >
+                      Agregar origen
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={quitarDuplicadosUI}
+                      disabled={validando}
+                      title="Quitar duplicados (solo UI)"
+                    >
+                      Quitar duplicados
+                    </button>
+                  </div>
+
                   <div className="small text-muted">
                     Nota: estas rutas deben ser accesibles <strong>desde el servidor</strong> donde corre el backend.
                   </div>
                 </div>
 
-                <div className="col-12 col-md-8">
+                <div className="col-12">
                   <label className="form-label">Ruta destino (UNC) — lectura y escritura</label>
-                  <div className="d-flex gap-10">
+                  <div className="d-flex gap-10 mB-10">
                     <input
-                      className="form-control form-control-sm"
+                      className={
+                        "form-control form-control-sm " +
+                        (touched && !destinoLimpio ? "is-invalid" : "")
+                      }
                       value={rutaDestino}
                       onChange={(e) => setRutaDestino(e.target.value)}
                       placeholder="\\\\SERVIDOR\\Compartido\\Salida_LOG02"
@@ -264,24 +438,39 @@ export default function Log02PdfPage() {
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-primary"
-                      onClick={() => void openExplorer("destino")}
+                      onClick={abrirDestino}
                       disabled={validando}
-                      title="Elegir carpeta"
+                      title="Editar carpeta"
                     >
-                      Elegir
-                    </button>
+                      {destinoLimpio ? "Editar" : "Agregar"}
+                    </button>                  </div>
+                  {touched && !destinoLimpio ? (
+                    <div className="small text-danger mT-5">Destino requerido.</div>
+                  ) : null}
+                <div className="mT-5">
+                    <div className="small text-muted mB-5">
+                      {listoParaValidar ? "Listo para validar." : "Completa orígenes y destino."}
+                    </div>
+                    <div className="d-flex gap-10">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => void validar()}
+                        disabled={validando || !listoParaValidar}
+                      >
+                        {validando ? "Validando..." : "Validar"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={limpiarConfiguracion}
+                        disabled={validando}
+                        title="Limpia orígenes y destino"
+                      >
+                        Limpiar rutas
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                <div className="col-12 col-md-4 d-flex align-items-end">
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-primary w-100"
-                    onClick={() => void validar()}
-                    disabled={validando}
-                  >
-                    {validando ? "Validando..." : "Validar"}
-                  </button>
                 </div>
               </div>
             </div>
@@ -289,6 +478,22 @@ export default function Log02PdfPage() {
             {resultado ? (
               <div className="mT-20">
                 <h6 className="c-grey-900 mB-10">Resultado de validación</h6>
+                
+                {resumenValidacion ? (
+                  <div className="d-flex flex-wrap gap-10 align-items-center mB-10">
+                    <span className="badge bg-light text-dark">
+                      Orígenes OK: <strong>{resumenValidacion.okOrigenes}</strong> / {resumenValidacion.totalOrigenes}
+                    </span>
+                    <span className={resumenValidacion.okDestino ? "badge bg-success" : "badge bg-danger"}>
+                      Destino: {resumenValidacion.okDestino ? "OK" : "No OK"}
+                    </span>
+                    {!resultado.ok ? (
+                      <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => void copiarDetalle()}>
+                        Copiar detalle
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className="table-responsive">
                   <table className="table table-sm mB-0">
