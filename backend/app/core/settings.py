@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # Orígenes permitidos para CORS (frontend React, etc.)
     cors_origins: List[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
+    # LOG-02: raíces permitidas para el "explorador" de carpetas.
+    # Seguridad: el usuario podrá navegador dentro de esas rutas.
+    # Sugerencia: configurar vía VI_LOG02_UNC_ROOTS como JSON:
+    # VI_LOG02_UNC_ROOTS=["\\\\192.168."]
+
     # Ruta relativa (desde app/) a la plantilla Excel
     # Nota: el template vive en app/data/templates/vi/
     data_template_path: str = "data/templates/vi/PLANTILLA_VI.xlsx"
