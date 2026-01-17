@@ -10,7 +10,7 @@ EJEM: cd /d Z:\PROYECTO\FORMATO_A_C\project_formato_web
 REM 2) Crear el entorno virtual
 py -3.11 -m venv .venv
 REM 3) Activar el entorno
-.\.venv\Scripts\actívate
+.\.venv\Scripts\actívate.bat
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 REM 4) Actualizar instaladores base
