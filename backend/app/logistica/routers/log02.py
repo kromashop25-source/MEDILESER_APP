@@ -2,13 +2,24 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 import os
+import json
 import tempfile
+import threading
+import uuid
+import time
+import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from app.api.auth import get_current_user_session
 from pydantic import BaseModel, Field
 from app.core.settings import get_settings
+from sqlmodel import Session, select
+from app.core.db import engine
+from app.models import Log01Artifact
+from app.oi_tools.services.progress_manager import progress_manager, SENTINEL as PM_SENTINEL
+from app.oi_tools.services.cancel_manager import cancel_manager, CancelToken
 
 
 
@@ -42,6 +53,7 @@ class Log02ValidarRutasUncResponse(BaseModel):
 
 def _clean_path(value: str) -> str:
     return (value or "").strip()
+
 
 def _check_read_dir(path_str: str) -> Log02RutaCheck:
     ruta = _clean_path(path_str)
@@ -123,6 +135,8 @@ def _check_dest_dir(path_str: str) -> Log02RutaCheck:
 
 @router.post("/validar-rutas-unc", response_model=Log02ValidarRutasUncResponse)
 def log02_validar_rutas_unc(payload: Log02ValidarRutasUncRequest) -> Log02ValidarRutasUncResponse:
+    roots_abs = _allowed_roots_abs()
+
     # Normalizar + limitar para evitar abuso accidental
     rutas_origen = [_clean_path(x) for x in (payload.rutas_origen or []) if _clean_path(x)]
     if len(rutas_origen) == 0:
@@ -131,9 +145,34 @@ def log02_validar_rutas_unc(payload: Log02ValidarRutasUncRequest) -> Log02Valida
     else:
         if len(rutas_origen) > 20:
             rutas_origen = rutas_origen[:20]
-        origenes = [_check_read_dir(x) for x in rutas_origen]
+        origenes = []
+        for x in rutas_origen:
+            detail = _check_allowed_detail(x, roots_abs)
+            if detail:
+                origenes.append(
+                    Log02RutaCheck(
+                        ruta=_clean_path(x),
+                        existe=False,
+                        es_directorio=False,
+                        lectura=False,
+                        detalle=detail,
+                    )
+                )
+            else:
+                origenes.append(_check_read_dir(x))
         
-    destino = _check_dest_dir(payload.ruta_destino)
+    dest_detail = _check_allowed_detail(payload.ruta_destino, roots_abs)
+    if dest_detail:
+        destino = Log02RutaCheck(
+            ruta=_clean_path(payload.ruta_destino),
+            existe=False,
+            es_directorio=False,
+            lectura=False,
+            escritura=False,
+            detalle=dest_detail,
+        )
+    else:
+        destino = _check_dest_dir(payload.ruta_destino)
 
     ok_origen = all(o.existe and o.es_directorio and o.lectura for o in origenes) if rutas_origen else False
     ok_destino = bool(destino.existe and destino.es_directorio and destino.lectura and destino.escritura)
@@ -193,13 +232,13 @@ def log02_explorer_listar(path: str = Query(..., description="Ruta absoluta dent
     settings = get_settings()
     roots = [(x or "").strip() for x in (settings.log02_unc_roots or []) if (x or "").strip()]
     if not roots:
-        raise HTTPException(status_code=400, detail="No hay raíces configuradas para LOG-02. Cofigure VI_LOG02_UNC_ROOTS.")
+        raise HTTPException(status_code=400, detail="No hay raíces configuradas para LOG-02. Configure VI_LOG02_UNC_ROOTS.")
 
     roots_abs = [_norm_abs(r) for r in roots]
     path_abs = _norm_abs(path)
 
     if not _is_within_allowed(path_abs, roots_abs):
-        raise HTTPException(status_code=403, detail="Ruta fuera de las áreas permitidas")
+        raise HTTPException(status_code=403, detail="Ruta fuera de las áreas permitidas (VI_LOG02_UNC_ROOTS).")
     
     p = Path(path_abs)
     if not p.exists():
@@ -222,3 +261,402 @@ def log02_explorer_listar(path: str = Query(..., description="Ruta absoluta dent
         return Log02ExplorerListResponse(path=path_abs, folders=folders)
     except PermissionError:
         raise HTTPException(status_code=403, detail="Sin permisos de lectura para listar en carpeta.")
+
+
+# =============================================
+# Copiado de PDFs conformes por OI (PB-LOG-015)
+# =============================================
+
+class Log02CopyConformesStartRequest(BaseModel):
+    run_id: int = Field(..., description="ID de corrida de LOG-01 (historial) para usar sus artefactos (MANIFIESTO/NO_CONFORME_FINAL).")
+    rutas_origen: List[str] = Field(default_factory=list, description="Rutas origen (lectura). Se buscarán carpetas OI-####-YYYY-LOTE-#### dentro de estas rutas.")
+    ruta_destino: str = Field(..., description="Ruta destino (lectura/escritura). Se crearán carpetas por OI (mismo nombre exacto del lote).")
+
+class Log02CopyConformesStartResponse(BaseModel):
+    operation_id: str
+
+def _norm_str(v: Any) -> str:
+    return ("" if v is None else str(v)).strip()
+
+def _read_artifact_bytes(run_id: int, kind: str) -> bytes:
+    """
+    Lee en artefacto LOG-01 desde Log01Artifact (storage_rel_path relativo a settings.data_dir).
+
+    """
+    st = get_settings()
+    with Session(engine) as session:
+        art = session.exec(
+            select(Log01Artifact).where(Log01Artifact.run_id == run_id, Log01Artifact.kind == kind)
+        ).first()
+        if not art:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No se encontró el artefacto requerido ({kind}) para la corrida {run_id}.",
+            )
+        abs_path = (st.data_dir / art.storage_rel_path).resolve()
+        if not abs_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"El artefacto {kind} no existe en disco. Ruta: {abs_path}",
+            )
+        try:
+            return abs_path.read_bytes()
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"No se pudo leer el artefacto {kind}. {type(e).__name__}: {e}",
+            )
+        
+def _allowed_roots_abs() -> List[str]:
+    st = get_settings()
+    roots = [(x or "").strip() for x in (st.log02_unc_roots or []) if (x or "").strip()]
+    return [_norm_abs(r) for r in roots] if roots else []
+
+def _check_allowed_detail(path_str: str, roots_abs: List[str]) -> Optional[str]:
+    """
+    Devuelve un mensaje de detalle si la ruta NO está permitida por VI_LOG02_UNC_ROOTS.
+    - Si no hay roots configuradas, devolvemos detalle (para que el usuario lo corrija).
+    - Si está dentro, devuelve None.
+    """
+    ruta = _clean_path(path_str)
+    if not ruta:
+        return None
+    if not roots_abs:
+        return "No hay raíces configuradas para LOG-02. Configure VI_LOG02_UNC_ROOTS."
+    path_abs = _norm_abs(ruta)
+    if not _is_within_allowed(path_abs, roots_abs):
+        return "Ruta fuera de las áreas permitidas (VI_LOG02_UNC_ROOTS)."
+    return None
+
+
+def _ensure_within_allowed_or_400(path_abs: str, roots_abs: List[str], label: str) -> None:
+    if not roots_abs:
+        return # si no hay allowlist configurada, no bloqueamos (misma lógica que ya usas en roots/listar)
+    p_abs = _norm_abs(path_abs)
+    if not _is_within_allowed(p_abs, roots_abs):
+        raise HTTPException(status_code=403, detail=f"{label}: ruta fuera de las áreas permitidas.")
+    
+
+def _emit(operation_id: str, ev: Dict[str, Any]) -> None:
+    progress_manager.emit(operation_id, ev)
+
+
+def _series_from_filename(name:str) -> str:
+    # Serie = nombre del PDF sin extensión
+    p = Path(name)
+    return p.stem.strip()
+
+
+def _build_no_conforme_map(no_conforme_payload: Dict[str, Any]) -> Dict[str, set[str]]:
+    """
+    Retorna: oi_tag -> set(series_no_conforme)
+    Basado en NO_CONFORME_FINAL.items: [{oi, serie, ...}]
+    """
+    out: Dict[str, set[str]] = {}
+    items = no_conforme_payload.get("items")
+    if not isinstance(items, list):
+        return out
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        oi = _norm_str(it.get("oi"))
+        serie = _norm_str(it.get("serie"))
+        if not oi or not serie:
+            continue
+        out.setdefault(oi, set()).add(serie)
+    return out
+
+def _find_oi_folders_in_origins(oi_tag: str, rutas_origen: List[str]) -> List[Path]:
+    """
+    Busca carpetas tipo: {oi_tag}-LOTE-#### (o variantes que empiecen con oi_tag + '-')
+    solo a 1 nivel dentro de cada ruta origen.
+    """
+    found: List[Path] = []
+    prefix = f"{oi_tag}-".lower()
+    for root in rutas_origen:
+        try:
+            base = Path(root)
+            if not base.exists() or not base.is_dir():
+                continue
+            for entry in base.iterdir():
+                try:
+                    if not entry.is_dir():
+                        continue
+                    name = entry.name.strip()
+                    if name.lower().startswith(prefix):
+                        # prioriza patrón con "LOTE"
+                        found.append(entry)
+                except Exception:
+                    continue
+        except Exception:
+            continue
+    # Orden determístico por ruta
+    found.sort(key=lambda p: str(p).lower())
+    return found
+
+
+def _copy_conformes_worker(
+        *,
+        operation_id: str,
+        cancel_token: CancelToken,
+        run_id: int,
+        rutas_origen: List[str],
+        ruta_destino: str,
+) -> None:
+    """
+    Worker en hilo: copia PDFs conformes por OI, emitiendo progreso NDJSON.
+    Reglas:
+    - Match de carpeta por prefijo OI-####-YYYY (sin lote) sobre carpetas OI-####-YYYY-LOTE-####.
+    - Si una OI tiene 0 carpetas => auditoría 'faltante'
+    - Si una OI tiene >1 carpeta => auditoría 'duplicada' (no copiar)
+    - Destino: crear carpeta con el mismo nombre exacto del lote.
+      Si ya existe => auditoría 'destino duplicado' (no copiar)
+    - Copia solo PDFs cuyo nombre (serie) NO esté en NO_CONFORME para esa OI.
+      (Si hay otros archivos: se omiten.)
+    """
+    try:
+        _emit(operation_id, {"type": "status", "stage": "inicio", "message": "Iniciando copiado de PDFs conformes...", "progress": 0})
+
+        # 1) Cargar artefactos (MANIFIESTO + NO_CONFORME_FINAL) desde LOG-01
+        manifest_bytes = _read_artifact_bytes(run_id, "JSON_MANIFIESTO")
+        no_conf_bytes = _read_artifact_bytes(run_id, "JSON_NO_CONFORME_FINAL")
+
+        try:
+            manifest = json.loads(manifest_bytes.decode("utf-8"))
+        except Exception as e:
+            raise RuntimeError(f"MANIFIESTO inválido. {type(e).__name__}: {e}")
+        try:
+            no_conf = json.loads(no_conf_bytes.decode("utf-8"))
+        except Exception as e:
+            raise RuntimeError(f"NO_CONFORME_FINAL inválido. {type(e).__name__}: {e}")
+
+        by_oi = manifest.get("by_oi")
+        if not isinstance(by_oi, list):
+            raise RuntimeError("MANIFIESTO no contiene 'by_oi' válido.")
+        
+        no_conf_map = _build_no_conforme_map(no_conf)
+
+        # 2) Preparar lista de OIs a procesar (excluye GASELAG)
+        oi_tags: List[str] = []
+        for b in by_oi:
+            if not isinstance(b, dict):
+                continue
+            oi = _norm_str(b.get("oi"))
+            if not oi:
+                continue
+            if oi.upper() == "GASELAG":
+                continue
+            oi_tags.append(oi)
+        # único + orden estable
+        seen: set[str] = set()
+        oi_tags_u: List[str] = []
+        for oi in oi_tags:
+            if oi in seen:
+                continue
+            seen.add(oi)
+            oi_tags_u.append(oi)
+        oi_tags = oi_tags_u
+
+        total_ois = len(oi_tags)
+        if total_ois == 0:
+            raise RuntimeError("No hay OIs BASES en el manifiesto (by_oi)")
+        
+        audit: Dict[str, Any] = {
+            "run_id": run_id,
+            "total_ois": total_ois,
+            "ois_ok": 0,
+            "ois_faltantes": [],
+            "ois_duplicadas": [],
+            "destinos_duplicados": [],
+            "archivos": {
+                "pdf_detectados": 0,
+                "pdf_copiados": 0,
+                "pdf_omitidos_no_conforme": 0,
+                "pdf_omitidos_no_encontrado": 0,  # reservado (si luego manejamos lista esperada)
+                "archivos_no_pdf_omitidos": 0,
+            },
+        }
+
+        # 3) Procesar por OI
+        for i, oi_tag in enumerate(oi_tags, start=1):
+            if cancel_token.is_cancelled():
+                _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                return
+            
+            _emit(operation_id, {"type": "status", "stage": "oi", "oi": oi_tag, "message": f"Buscando carpeta para {oi_tag} ({i}/{total_ois})"})
+
+            folders = _find_oi_folders_in_origins(oi_tag, rutas_origen)
+            if len(folders) == 0:
+                audit["ois_faltantes"].append({"oi": oi_tag, "detalle": "No se encontró carpeta de lote en rutas origen."})
+                _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "OI_SIN_CARPETA", "message": "No se encontró carpeta para la OI en los orígenes."})
+                continue
+            if len(folders) > 1:
+                audit["ois_duplicadas"].append({"oi": oi_tag, "carpetas": [str(p) for p in folders]})
+                _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "OI_CARPETA_DUPLICADA", "message": "Se encontraron múltiples carpetas para la misma OI. No se copiará hasta corregir."})
+                continue
+
+            src_folder = folders[0]
+            dest_folder = Path(ruta_destino) / src_folder.name
+            if dest_folder.exists():
+                audit["destinos_duplicados"].append({"oi": oi_tag, "destino": str(dest_folder)})
+                _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "DESTINO_DUPLICADO", "message": "La carpeta destino ya existe. No se copiará hasta corregir."})
+                continue
+
+            try:
+                dest_folder.mkdir(parents=True, exist_ok=False)
+            except FileExistsError:
+                audit["destinos_duplicados"].append({"oi": oi_tag, "destino": str(dest_folder)})
+                _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "DESTINO_DUPLICADO", "message": "La carpeta destino ya existe. No se copiará hasta corregir."})
+                continue
+            except Exception as e:
+                _emit(operation_id, {"type": "oi_error", "oi": oi_tag, "code": "DESTINO_NO_CREADO", "message": f"No se pudo crear carpeta destino. {type(e).__name__}: {e}"})
+                continue
+
+            no_conf_set = no_conf_map.get(oi_tag, set())
+
+            copied = 0
+            omitted_nc = 0
+            detected_pdf = 0
+            omitted_nonpdf = 0
+
+            # Listado plano de archivos PDF
+            try:
+                for entry in src_folder.iterdir():
+                    if cancel_token.is_cancelled():
+                        _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                        return
+                    
+                    if not entry.is_file():
+                        continue
+                    if entry.suffix.lower() != ".pdf":
+                        omitted_nonpdf += 1
+                        continue
+
+                    detected_pdf += 1
+                    serie = _series_from_filename(entry.name)
+                    if not serie:
+                        omitted_nonpdf += 1
+                        continue
+
+                    if serie in no_conf_set:
+                        omitted_nc += 1
+                        _emit(operation_id, {"type": "file_skip", "oi": oi_tag, "serie": serie, "reason": "NO_CONFORME"})
+                        continue
+
+                    try:
+                        shutil.copy2(str(entry), str(dest_folder/ entry.name))
+                        copied += 1
+                        _emit(operation_id, {"type": "file_ok", "oi": oi_tag, "serie": serie, "file": entry.name})
+                    except Exception as e:
+                        _emit(operation_id, {"type": "file_error", "oi": oi_tag, "serie": serie, "file": entry.name, "message": f"Error copiando PDF. {type(e).__name__}: {e}"})
+                        continue
+            except PermissionError:
+                _emit(operation_id, {"type": "oi_error", "oi": oi_tag, "code": "SIN_PERMISOS_ORIGEN", "message": "Sin permisos para listar/copiar desde la carpeta origen."})
+            except Exception as e:
+                _emit(operation_id, {"type": "oi_error", "oi": oi_tag, "code": "ERROR_ORIGEN", "message": f"Error en carpeta origen. {type(e).__name__}: {e}"})
+
+            audit["archivos"]["pdf_detectados"] += detected_pdf
+            audit["archivos"]["pdf_copiados"] += copied
+            audit["archivos"]["pdf_omitidos_no_conforme"] += omitted_nc
+            audit["archivos"]["archivos_no_pdf_omitidos"] += omitted_nonpdf
+            audit["ois_ok"] += 1
+
+            _emit(operation_id, {"type": "oi_done", "oi": oi_tag, "copiados": copied, "omitidos_no_conforme": omitted_nc, "pdf_detectados": detected_pdf})
+
+            _emit(operation_id, {"type": "status", "stage": "progreso", "progress": float(i * 100 / max(total_ois, 1)), "message": f"Procesadas {i}/{total_ois} OIs"})
+
+        _emit(operation_id, {"type": "complete", "message": "Copiado finalizado.", "audit": audit, "percent": 100.0})
+    except Exception as e:
+        _emit(operation_id, {"type": "error", "message": f"Fallo en copiado: {type(e).__name__}: {e}"})
+    finally:
+        try:
+            progress_manager.finish(operation_id)
+        except Exception:
+            pass
+        try:
+            cancel_manager.remove(operation_id)
+        except Exception:
+            pass
+
+
+@router.post("/copiar-conformes/start", response_model=Log02CopyConformesStartResponse)
+def log02_copiar_conformes_start(payload: Log02CopyConformesStartRequest) -> Log02CopyConformesStartResponse:
+    rutas_origen = [_clean_path(x) for x in (payload.rutas_origen or []) if _clean_path(x)]
+    if not rutas_origen:
+        raise HTTPException(status_code=400, detail="Debe ingresar al menos una ruta de origen.")
+    if len(rutas_origen) > 20:
+        rutas_origen = rutas_origen[:20]
+
+    ruta_destino = _clean_path(payload.ruta_destino)
+    if not ruta_destino:
+        raise HTTPException(status_code=400, detail="Debe ingresar una ruta de destino.")
+    
+    # Validaciones rápida de accesos (mismas reglas que S2-T07)
+    origen_checks = [_check_read_dir(x) for x in rutas_origen]
+    if not all(o.existe and o.es_directorio and o.lectura for o in origen_checks):
+        raise HTTPException(status_code=400, detail="Una o más rutas de origen no son accesibles (lectura).")
+    dest_check = _check_dest_dir(ruta_destino)
+    if not (dest_check.existe and dest_check.es_directorio and dest_check.lectura and dest_check.escritura):
+        raise HTTPException(status_code=400, detail="La ruta destino no es accesible (lectura/escritura).")
+
+    # Enforce allowlist si existe
+    roots_abs = _allowed_roots_abs()
+    for r in rutas_origen:
+        _ensure_within_allowed_or_400(r, roots_abs, "Origen")
+    _ensure_within_allowed_or_400(ruta_destino, roots_abs, "Destino")
+
+    operation_id = str(uuid.uuid4())
+    cancel_token = cancel_manager.create(operation_id)
+
+    # Inicializa canal y lanza hilo
+    progress_manager.ensure(operation_id)
+    th = threading.Thread(
+        target=_copy_conformes_worker,
+        kwargs={
+            "operation_id": operation_id,
+            "cancel_token": cancel_token,
+            "run_id": int(payload.run_id),
+            "rutas_origen": rutas_origen,
+            "ruta_destino": ruta_destino,
+        },
+        daemon=True,
+    )
+    th.start()
+    return Log02CopyConformesStartResponse(operation_id=operation_id)
+
+
+def _ndjson_stream(operation_id: str):
+    sub = progress_manager.subscribe_existing(operation_id)
+    if sub is None:
+        # si no existe aún, lo creamos para poder devolver algo claro
+        channel, history = progress_manager.subscribe(operation_id)
+    else:
+        channel, history = sub
+
+    try:
+        # enviar historial primero
+        for ev in history:
+            yield progress_manager.encode_event(ev)
+        # luego stream en vivo
+        while True:
+            item = channel.queue.get()
+            if item is PM_SENTINEL:
+                break
+            if isinstance(item, dict):
+                yield progress_manager.encode_event(item)
+    finally:
+        try:
+            progress_manager.unsubscribe(operation_id)
+        except Exception:
+            pass
+
+
+@router.get("/copiar-conformes/progress/{operation_id}")
+def log02_copiar_conformes_progress(operation_id: str):
+    return StreamingResponse(_ndjson_stream(operation_id), media_type="application/x-ndjson")
+
+
+@router.post("/copiar-conformes/cancel/{operation_id}")
+def log02_copiar_conformes_cancel(operation_id: str) -> Dict[str, Any]:
+    ok = cancel_manager.cancel(operation_id)
+    return {"ok": bool(ok)}

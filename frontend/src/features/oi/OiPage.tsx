@@ -35,12 +35,14 @@ import {
   createOI, updateOI, generateExcel,
   addBancada, updateBancada, deleteBancada,
   getOiFull, getOi, saveCurrentOI, loadCurrentOI, clearCurrentOI, lockOi, unlockOi, updateBancadaSavedAt, updateOiSavedAt, restoreBancada, restoreOiUpdatedAt,
+  patchOiCode,
   type BancadaRead,
   type BancadaRow,
   type BancadaCreate,
   type BancadaDuplicateEntry,
   type BancadaUpdatePayload,
-  type OIUpdatePayload
+  type OIUpdatePayload,
+  type OIRead
 } from "../../api/oi";
 
 const apiBlockToForm = (block?: BancadaRow["q3"]): BancadaRowForm["q3"] => {
@@ -951,40 +953,100 @@ export default function OiPage() {
       if (!oiId) {
         throw new Error("No hay OI seleccionada para actualizar.");
       }
-      if (!oiVersion) {
-        throw new Error("No se pudo determinar la versión actual de la OI. Recargue la página e inténtelo de nuevo.");
+      const trimmedCode = v.oi?.trim();
+      const normalizedNumeration = v.numeration_type ?? "correlativo";
+      const originalNumeration = originalOI?.numeration_type ?? "correlativo";
+      const hasHeaderChanges =
+        !originalOI ||
+        Number(v.q3) !== Number(originalOI.q3) ||
+        Number(v.alcance) !== Number(originalOI.alcance) ||
+        Number(v.pma) !== Number(originalOI.pma) ||
+        normalizedNumeration !== originalNumeration;
+      const codeChanged = isAdmin && !!trimmedCode && trimmedCode !== (originalOI?.oi ?? "");
+      const shouldUpdateHeader = !codeChanged || hasHeaderChanges;
+
+      const applyUpdatedState = (next: OIRead) => {
+        setOiVersion(next.updated_at ?? next.created_at);
+        setOiSavedAt(next.saved_at ?? null);
+        setOiCreatedAt(next.created_at ?? null);
+        if (next.code) {
+          saveCurrentOI({ id: next.id, code: next.code });
+        }
+        setLockedByUserId(next.locked_by_user_id ?? null);
+        setLockedByName(next.locked_by_full_name ?? null);
+        setReadOnly(next.read_only_for_current_user ?? false);
+        setHasLock((next.locked_by_user_id ?? null) === authUserId);
+      };
+
+      let updated: OIRead | null = null;
+
+      if (shouldUpdateHeader) {
+        if (!oiVersion) {
+          throw new Error("No se pudo determinar la version actual de la OI. Recargue la pagina e intentelo de nuevo.");
+        }
+        const updatePayload: OIUpdatePayload = {
+          q3: Number(v.q3),
+          alcance: Number(v.alcance),
+          pma: Number(v.pma),
+          numeration_type: normalizedNumeration,
+          updated_at: oiVersion,
+        };
+        updated = await updateOI(oiId, updatePayload);
+        applyUpdatedState(updated);
       }
 
-      const trimmedCode = v.oi?.trim();
-      const updatePayload: OIUpdatePayload = {
-        q3: Number(v.q3),
-        alcance: Number(v.alcance),
-        pma: Number(v.pma),
-        numeration_type: v.numeration_type ?? "correlativo",
-        updated_at: oiVersion,
-      };
-      if (isAdmin && trimmedCode && trimmedCode !== (originalOI?.oi ?? "")) {
-        updatePayload.code = trimmedCode;
+      if (codeChanged && trimmedCode) {
+        try {
+          const patched = await patchOiCode(oiId, trimmedCode);
+          updated = patched;
+          applyUpdatedState(patched);
+        } catch (e: any) {
+          if (isNetworkError(e) || isAuthExpiredError(e)) {
+            throw e;
+          }
+          const status = e?.status ?? e?.response?.status;
+          if (status === 409) {
+            toast({
+              kind: "error",
+              title: "Conflicto",
+              message: "Ya existe una OI con ese codigo.",
+            });
+          } else if (status === 403) {
+            toast({
+              kind: "error",
+              title: "No autorizado",
+              message: "No autorizado.",
+            });
+          } else if (status === 422 || status === 400) {
+            toast({
+              kind: "error",
+              title: "Formato",
+              message: "Formato de OI invalido. Debe ser OI-####-YYYY.",
+            });
+          } else {
+            toast({ kind: "error", title: "Error", message: e?.message ?? "Error actualizando OI" });
+          }
+          return false;
+        }
       }
-      const updated = await updateOI(oiId, updatePayload);
-      setOriginalOI(v);
-      // Actualizamos la versión local con lo que devuelve el backend
-      setOiVersion(updated.updated_at ?? updated.created_at)
-      setOiSavedAt(updated.saved_at ?? null);
-      setOiCreatedAt(updated.created_at ?? null);
-      if (updated.code) {
-        saveCurrentOI({ id: updated.id, code: updated.code });
+
+      if (!updated) {
+        setIsEditingOI(false);
+        pendingHeaderSaveRef.current = false;
+        clearHeaderDraft(headerDraftKey);
+        clearPendingAction();
+        setPendingAuthAction(null);
+        toast({ kind: "success", title: "OI actualizada", message: v.oi });
+        return true;
       }
-      setLockedByUserId(updated.locked_by_user_id ?? null);
-      setLockedByName(updated.locked_by_full_name ?? null);
-      setReadOnly(updated.read_only_for_current_user ?? false);
-      setHasLock((updated.locked_by_user_id ?? null) === authUserId);
+
+      setOriginalOI({ ...v, oi: updated.code, numeration_type: normalizedNumeration });
       setIsEditingOI(false);
       pendingHeaderSaveRef.current = false;
       clearHeaderDraft(headerDraftKey);
       clearPendingAction();
       setPendingAuthAction(null);
-      toast({ kind: "success", title: "OI actualizada", message: v.oi});
+      toast({ kind: "success", title: "OI actualizada", message: updated.code ?? v.oi });
       return true;
     } catch (e: any) {
       if (isNetworkError(e)) {
@@ -1747,8 +1809,8 @@ export default function OiPage() {
             disabled={!!oiId ? !(isAdmin && isEditingOI && !isReadOnly) : false}
           />
           {errors.oi && <div className="text-danger small">{errors.oi.message}</div>}
-          {isAdmin ? (
-            <div className="form-text">Solo administradores pueden cambiar el código de OI.</div>
+          {!isAdmin ? (
+            <div className="form-text">Solo administradores pueden cambiar el codigo de OI.</div>
           ) : null}
         </div>
 

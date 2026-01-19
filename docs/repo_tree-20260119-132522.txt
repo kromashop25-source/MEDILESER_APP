@@ -1,0 +1,619 @@
+MEDILESER_APP
+├── .vscode
+│   └── settings.json
+├── app
+│   └── __init__.py
+├── backend
+│   ├── app
+│   │   ├── api
+│   │   │   ├── __init__.py
+│   │   │   ├── admin.py
+│   │   │   ├── auth.py
+│   │   │   ├── catalogs.py
+│   │   │   └── oi.py
+│   │   ├── core
+│   │   │   ├── db.py
+│   │   │   ├── logging_config.py
+│   │   │   ├── permissions.py
+│   │   │   ├── rbac.py
+│   │   │   ├── security.py
+│   │   │   └── settings.py
+│   │   ├── data
+│   │   │   ├── seed
+│   │   │   │   └── initial_rbac.json
+│   │   │   └── templates
+│   │   │       ├── logistica
+│   │   │       │   └── LOG01_PLANTILLA_SALIDA.xlsx
+│   │   │       ├── oi_tools
+│   │   │       │   ├── BASE_TEMPLATE.xlsx
+│   │   │       │   └── FORMULAS_BASE.txt
+│   │   │       └── vi
+│   │   │           └── PLANTILLA_VI.xlsx
+│   │   ├── logistica
+│   │   │   ├── routers
+│   │   │   │   ├── log01.py
+│   │   │   │   └── log02.py
+│   │   │   └── services
+│   │   │       └── log01_consolidate.py
+│   │   ├── oi_tools
+│   │   │   ├── data
+│   │   │   ├── modules
+│   │   │   │   └── oi_merge_b
+│   │   │   │       ├── routers
+│   │   │   │       │   └── __init__.py
+│   │   │   │       ├── services
+│   │   │   │       │   └── __init__.py
+│   │   │   │       ├── static
+│   │   │   │       │   ├── favicon.ico
+│   │   │   │       │   └── Thumbs.db
+│   │   │   │       ├── uploads
+│   │   │   │       │   ├── master_03nagy5h.xlsx
+│   │   │   │       │   ├── master_03nagy5h_R.xlsx
+│   │   │   │       │   ├── master_1204e2cx.xlsx
+│   │   │   │       │   ├── master_1204e2cx_R.xlsx
+│   │   │   │       │   ├── master_84pa1g76.xlsx
+│   │   │   │       │   ├── master_84pa1g76_R.xlsx
+│   │   │   │       │   ├── master_8r8roixm.xlsx
+│   │   │   │       │   ├── master_8r8roixm_R.xlsx
+│   │   │   │       │   ├── master_9zvzvm9m.xlsx
+│   │   │   │       │   ├── master_9zvzvm9m_R.xlsx
+│   │   │   │       │   ├── master_aj2rquc4.xlsx
+│   │   │   │       │   ├── master_aj2rquc4_R.xlsx
+│   │   │   │       │   ├── master_c49i6x8f.xlsx
+│   │   │   │       │   ├── master_c49i6x8f_R.xlsx
+│   │   │   │       │   ├── master_df56sp5p.xlsx
+│   │   │   │       │   ├── master_fjfimmbx.xlsx
+│   │   │   │       │   ├── master_fjfimmbx_R.xlsx
+│   │   │   │       │   ├── master_ho3udx_q.xlsx
+│   │   │   │       │   ├── master_ho3udx_q_R.xlsx
+│   │   │   │       │   ├── master_irvsvb7l.xlsx
+│   │   │   │       │   ├── master_irvsvb7l_R.xlsx
+│   │   │   │       │   ├── master_kv6c3qn3.xlsx
+│   │   │   │       │   ├── master_kv6c3qn3_R.xlsx
+│   │   │   │       │   ├── master_lp1cjxgx.xlsx
+│   │   │   │       │   ├── master_lp1cjxgx_R.xlsx
+│   │   │   │       │   ├── master_mez4g3sj.xlsx
+│   │   │   │       │   ├── master_mez4g3sj_R.xlsx
+│   │   │   │       │   ├── master_ow157jkz.xlsx
+│   │   │   │       │   ├── master_ow157jkz_R.xlsx
+│   │   │   │       │   ├── master_plld6uwr.xlsx
+│   │   │   │       │   ├── master_plld6uwr_R.xlsx
+│   │   │   │       │   ├── master_qf8vmvja.xlsx
+│   │   │   │       │   ├── master_qf8vmvja_R.xlsx
+│   │   │   │       │   ├── master_u4yy5f99.xlsx
+│   │   │   │       │   ├── master_xwy366b7.xlsx
+│   │   │   │       │   ├── master_xwy366b7_R.xlsx
+│   │   │   │       │   ├── master_yb4ekkat.xlsx
+│   │   │   │       │   ├── master_yb4ekkat_R.xlsx
+│   │   │   │       │   ├── tecnico_1_02ws_sgu.xlsx
+│   │   │   │       │   ├── tecnico_1_0ncsc6xn.xlsx
+│   │   │   │       │   ├── tecnico_1_1i8ejph0.xlsx
+│   │   │   │       │   ├── tecnico_1_31ec1inn.xlsx
+│   │   │   │       │   ├── tecnico_1_4qoig7nx.xlsx
+│   │   │   │       │   ├── tecnico_1_4zvu5ucl.xlsx
+│   │   │   │       │   ├── tecnico_1_7c7o07x3.xlsx
+│   │   │   │       │   ├── tecnico_1__lrzp8j8.xlsx
+│   │   │   │       │   ├── tecnico_1_dgy2awzx.xlsx
+│   │   │   │       │   ├── tecnico_1_gwlan5_r.xlsx
+│   │   │   │       │   ├── tecnico_1_ldbbbsc5.xlsx
+│   │   │   │       │   ├── tecnico_1_mzy10vav.xlsx
+│   │   │   │       │   ├── tecnico_1_rp2pl0qu.xlsx
+│   │   │   │       │   ├── tecnico_1_sdpuy2qy.xlsx
+│   │   │   │       │   ├── tecnico_1_v6w2664w.xlsx
+│   │   │   │       │   ├── tecnico_1_xkg7mz5t.xlsx
+│   │   │   │       │   ├── tecnico_1_xt4qsn3z.xlsx
+│   │   │   │       │   ├── tecnico_1_ytczks7k.xlsx
+│   │   │   │       │   ├── tecnico_1_zbfk7ka_.xlsx
+│   │   │   │       │   ├── tecnico_1_zyop7jum.xlsx
+│   │   │   │       │   ├── tecnico_2_24xa8j9v.xlsx
+│   │   │   │       │   ├── tecnico_2_3lc4oq8a.xlsx
+│   │   │   │       │   ├── tecnico_2_3vvje63p.xlsx
+│   │   │   │       │   ├── tecnico_2_5blzcvmu.xlsx
+│   │   │   │       │   ├── tecnico_2_67fcqu88.xlsx
+│   │   │   │       │   ├── tecnico_2_aawshknd.xlsx
+│   │   │   │       │   ├── tecnico_2_apvekvms.xlsx
+│   │   │   │       │   ├── tecnico_2_c84vn1pf.xlsx
+│   │   │   │       │   ├── tecnico_2_dqf2tm_g.xlsx
+│   │   │   │       │   ├── tecnico_2_f1i5nrp1.xlsx
+│   │   │   │       │   ├── tecnico_2_ga8o1l8v.xlsx
+│   │   │   │       │   ├── tecnico_2_j856zppn.xlsx
+│   │   │   │       │   ├── tecnico_2_kwqxtlqz.xlsx
+│   │   │   │       │   ├── tecnico_2_l0si_fkv.xlsx
+│   │   │   │       │   ├── tecnico_2_npndkh_z.xlsx
+│   │   │   │       │   ├── tecnico_2_nrmm24q_.xlsx
+│   │   │   │       │   ├── tecnico_2_rk_cqy_5.xlsx
+│   │   │   │       │   ├── tecnico_2_rqxy8jf6.xlsx
+│   │   │   │       │   ├── tecnico_2_vp856q02.xlsx
+│   │   │   │       │   ├── tecnico_2_wnhl6dej.xlsx
+│   │   │   │       │   ├── tecnico_3_06ht3m_c.xlsx
+│   │   │   │       │   ├── tecnico_3_1d6yyc0j.xlsx
+│   │   │   │       │   ├── tecnico_3__81viiw2.xlsx
+│   │   │   │       │   ├── tecnico_3_cahay_qj.xlsx
+│   │   │   │       │   ├── tecnico_3_ep0q271a.xlsx
+│   │   │   │       │   ├── tecnico_3_eqcvj74v.xlsx
+│   │   │   │       │   ├── tecnico_3_hmwu7bi0.xlsx
+│   │   │   │       │   ├── tecnico_3_jij6p_zu.xlsx
+│   │   │   │       │   ├── tecnico_3_mqllqalw.xlsx
+│   │   │   │       │   ├── tecnico_3_n1vqseo9.xlsx
+│   │   │   │       │   ├── tecnico_3_xti6cpm_.xlsx
+│   │   │   │       │   ├── tecnico_3_xur4_xgv.xlsx
+│   │   │   │       │   ├── tecnico_3_y346y7k9.xlsx
+│   │   │   │       │   ├── tecnico_3_zcrpztj_.xlsx
+│   │   │   │       │   ├── tecnico_4_12fc_dt1.xlsx
+│   │   │   │       │   ├── tecnico_4_1tknj5j2.xlsx
+│   │   │   │       │   ├── tecnico_4_4r201jfd.xlsx
+│   │   │   │       │   ├── tecnico_4_7bcow8h9.xlsx
+│   │   │   │       │   ├── tecnico_4__twl1xd5.xlsx
+│   │   │   │       │   ├── tecnico_4_er9en9hm.xlsx
+│   │   │   │       │   ├── tecnico_4_fibjmv4_.xlsx
+│   │   │   │       │   ├── tecnico_4_mobnp_nu.xlsx
+│   │   │   │       │   ├── tecnico_4_mwl1pc7h.xlsx
+│   │   │   │       │   ├── tecnico_4_qkuvlj4w.xlsx
+│   │   │   │       │   ├── tecnico_4_qxfxqupw.xlsx
+│   │   │   │       │   ├── tecnico_4_w13tgfvg.xlsx
+│   │   │   │       │   ├── tecnico_4_w8hbdai1.xlsx
+│   │   │   │       │   ├── tecnico_4_wr0mcold.xlsx
+│   │   │   │       │   ├── tecnico_5_6y6wcmt3.xlsx
+│   │   │   │       │   ├── tecnico_5_ajwhyfgd.xlsx
+│   │   │   │       │   ├── tecnico_5_anmoichi.xlsx
+│   │   │   │       │   ├── tecnico_5_ar7fcjt6.xlsx
+│   │   │   │       │   ├── tecnico_5_bbaffp3m.xlsx
+│   │   │   │       │   ├── tecnico_5_ca680r6l.xlsx
+│   │   │   │       │   ├── tecnico_5_fq7o32ou.xlsx
+│   │   │   │       │   ├── tecnico_5_hvftn62o.xlsx
+│   │   │   │       │   ├── tecnico_5_j5wg0boo.xlsx
+│   │   │   │       │   ├── tecnico_5_jabcsu_9.xlsx
+│   │   │   │       │   ├── tecnico_5_o9j7qz8m.xlsx
+│   │   │   │       │   ├── tecnico_5_qbs2crgp.xlsx
+│   │   │   │       │   ├── tecnico_5_zg7fleee.xlsx
+│   │   │   │       │   ├── tecnico_6_7fodofi6.xlsx
+│   │   │   │       │   ├── tecnico_6_7uzqwxhu.xlsx
+│   │   │   │       │   ├── tecnico_6_8vrgmlt_.xlsx
+│   │   │   │       │   ├── tecnico_6_eu6l_8rc.xlsx
+│   │   │   │       │   ├── tecnico_6_ki3td67u.xlsx
+│   │   │   │       │   ├── tecnico_6_md5yhtkf.xlsx
+│   │   │   │       │   ├── tecnico_6_rlv78ub9.xlsx
+│   │   │   │       │   ├── tecnico_6_tdlrxi83.xlsx
+│   │   │   │       │   ├── tecnico_7_2l2nu50p.xlsx
+│   │   │   │       │   ├── tecnico_7_siodwrhj.xlsx
+│   │   │   │       │   ├── tecnico_7_wu3sb9rq.xlsx
+│   │   │   │       │   └── tecnico_8_pd_zvl7z.xlsx
+│   │   │   │       ├── __init__.py
+│   │   │   │       ├── main.py
+│   │   │   │       ├── merge.py
+│   │   │   │       ├── merge_b.py
+│   │   │   │       └── templates_inline.py
+│   │   │   ├── routers
+│   │   │   │   ├── excel.py
+│   │   │   │   ├── files.py
+│   │   │   │   ├── formato_ac_history.py
+│   │   │   │   ├── integrations.py
+│   │   │   │   ├── oi_merge.py
+│   │   │   │   └── updates.py
+│   │   │   ├── services
+│   │   │   │   ├── integrations
+│   │   │   │   │   └── vima_to_lista.py
+│   │   │   │   ├── updates
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   ├── cf_dump.py
+│   │   │   │   │   ├── style_dump.py
+│   │   │   │   │   └── update_base_by_model.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── cancel_manager.py
+│   │   │   │   ├── excel_io.py
+│   │   │   │   ├── excel_password.py
+│   │   │   │   ├── excel_styles.py
+│   │   │   │   ├── formato_ac_history.py
+│   │   │   │   ├── progress_manager.py
+│   │   │   │   └── validate.py
+│   │   │   ├── tests
+│   │   │   │   ├── test_cf_apply.py
+│   │   │   │   ├── test_change_password.py
+│   │   │   │   ├── test_excel_inspect.py
+│   │   │   │   ├── test_server.py
+│   │   │   │   ├── test_update_validate_cell.py
+│   │   │   │   ├── test_upload.py
+│   │   │   │   ├── test_validate.py
+│   │   │   │   ├── test_version.py
+│   │   │   │   ├── test_vima_to_list.py
+│   │   │   │   ├── test_vima_to_lista_api.py
+│   │   │   │   └── test_vima_to_lista_incremental.py
+│   │   │   └── utils
+│   │   │       ├── __init__.py
+│   │   │       └── refs.py
+│   │   ├── services
+│   │   │   ├── excel_service.py
+│   │   │   └── rules_service.py
+│   │   ├── static
+│   │   │   └── vi_frontend
+│   │   │       ├── adminator
+│   │   │       │   ├── assets
+│   │   │       │   │   ├── static
+│   │   │       │   │   │   ├── fonts
+│   │   │       │   │   │   │   └── icons
+│   │   │       │   │   │   │       ├── fontawesome
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.eot
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.svg
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.ttf
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.woff
+│   │   │       │   │   │   │       │   ├── fontawesome-webfont.woff2
+│   │   │       │   │   │   │       │   └── FontAwesome.otf
+│   │   │       │   │   │   │       └── themify
+│   │   │       │   │   │   │           ├── themify.eot
+│   │   │       │   │   │   │           ├── themify.svg
+│   │   │       │   │   │   │           ├── themify.ttf
+│   │   │       │   │   │   │           └── themify.woff
+│   │   │       │   │   │   └── images
+│   │   │       │   │   │       ├── datatables
+│   │   │       │   │   │       │   ├── sort_asc.png
+│   │   │       │   │   │       │   ├── sort_asc_disabled.png
+│   │   │       │   │   │       │   ├── sort_both.png
+│   │   │       │   │   │       │   ├── sort_desc.png
+│   │   │       │   │   │       │   └── sort_desc_disabled.png
+│   │   │       │   │   │       ├── 404.png
+│   │   │       │   │   │       ├── 500.png
+│   │   │       │   │   │       ├── bg.jpg
+│   │   │       │   │   │       ├── logo-circle.svg
+│   │   │       │   │   │       ├── logo-gradient.svg
+│   │   │       │   │   │       ├── logo-outline.svg
+│   │   │       │   │   │       ├── logo.png
+│   │   │       │   │   │       └── logo.svg
+│   │   │       │   │   ├── fontawesome-webfont.svg
+│   │   │       │   │   └── themify.svg
+│   │   │       │   ├── 1e59d2330b4c6deb84b3.ttf
+│   │   │       │   ├── 20fd1704ea223900efa9.woff2
+│   │   │       │   ├── 29b39089170885ae2967.woff
+│   │   │       │   ├── 404.html
+│   │   │       │   ├── 500.html
+│   │   │       │   ├── 8b43027f47b20503057d.eot
+│   │   │       │   ├── 9bad94440d49256265a5.eot
+│   │   │       │   ├── basic-table.html
+│   │   │       │   ├── blank.html
+│   │   │       │   ├── buttons.html
+│   │   │       │   ├── calendar.html
+│   │   │       │   ├── charts.html
+│   │   │       │   ├── chat.html
+│   │   │       │   ├── compose.html
+│   │   │       │   ├── datatable.html
+│   │   │       │   ├── eda8b94308c6f538f04a.ttf
+│   │   │       │   ├── email.html
+│   │   │       │   ├── f691f37e57f04c152e23.woff
+│   │   │       │   ├── forms.html
+│   │   │       │   ├── google-maps.html
+│   │   │       │   ├── index.html
+│   │   │       │   ├── main.js
+│   │   │       │   ├── main.js.LICENSE.txt
+│   │   │       │   ├── signin.html
+│   │   │       │   ├── signup.html
+│   │   │       │   ├── style.css
+│   │   │       │   ├── ui.html
+│   │   │       │   └── vector-maps.html
+│   │   │       ├── assets
+│   │   │       │   ├── index-BxqLcx0v.css
+│   │   │       │   └── index-rrXT6aBw.js
+│   │   │       ├── medileser
+│   │   │       │   ├── banner.jpg
+│   │   │       │   ├── logo-vertical.jpg
+│   │   │       │   ├── Spinner-Logo-Medileser.gif
+│   │   │       │   └── Thumbs.db
+│   │   │       ├── favicon.ico
+│   │   │       ├── index.html
+│   │   │       └── vite.svg
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   ├── models.py
+│   │   └── schemas.py
+│   ├── data
+│   │   ├── logistica
+│   │   │   └── log01_runs
+│   │   │       ├── 1
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       ├── 10
+│   │   │       │   ├── BD_AA25130585_AL_AA25133464.xlsx
+│   │   │       │   ├── BD_AA25130585_AL_AA25133464__MANIFIESTO.json
+│   │   │       │   └── BD_AA25130585_AL_AA25133464__NO_CONFORME_FINAL.json
+│   │   │       ├── 11
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       ├── 12
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 13
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 14
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 15
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 2
+│   │   │       │   ├── BD_AA25128701_AL_AA25130500.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25130500__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25130500__NO_CONFORME_FINAL.json
+│   │   │       ├── 3
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       ├── 4
+│   │   │       │   ├── BD_AA25128701_AL_KA25079700.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_KA25079700__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_KA25079700__NO_CONFORME_FINAL.json
+│   │   │       ├── 5
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
+│   │   │       ├── 6
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
+│   │   │       ├── 7
+│   │   │       │   ├── BD_PA25588101_AL_QA25426630.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_QA25426630__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       ├── 8
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       └── 9
+│   │   │           ├── BD_AA25129302_AL_AA25129900.xlsx
+│   │   │           ├── BD_AA25129302_AL_AA25129900__MANIFIESTO.json
+│   │   │           └── BD_AA25129302_AL_AA25129900__NO_CONFORME_FINAL.json
+│   │   ├── oi_tools
+│   │   │   └── formato_ac_runs
+│   │   │       ├── 1
+│   │   │       │   └── LISTA_SALIDA.xlsx
+│   │   │       └── 2
+│   │   │           └── M19 20mm R160 (SETIEMBRE) copia 2.xlsx
+│   │   └── vi.db
+│   ├── data_backup_20251217-084310
+│   │   ├── vi.db
+│   │   ├── vi.db-shm
+│   │   └── vi.db-wal
+│   ├── .env.example
+│   ├── check_db_integrity.py
+│   ├── icon_vi.ico
+│   ├── make_exe.bat
+│   ├── Registro_VI.spec
+│   ├── single_instance.py
+│   └── vi_tray_app.py
+├── deploy
+├── docs
+│   ├── oi_tools
+│   │   └── docs
+│   │       ├── INTEGRACION_VIMA_LISTA.md
+│   │       ├── README_servidor_base.md
+│   │       ├── README_UI.md
+│   │       ├── repo_tree-20251015-092551.txt
+│   │       ├── repo_tree-20251017-081847.txt
+│   │       ├── repo_tree-20251020-093709.txt
+│   │       ├── repo_tree-20251020-145340.txt
+│   │       ├── repo_tree-20251027-114847.txt
+│   │       ├── repo_tree-20251028-071413.txt
+│   │       ├── repo_tree-20251030-142159.txt
+│   │       ├── repo_tree-20251031-124032.txt
+│   │       └── styleguide.html
+│   ├── Acuerdos_de_Afinamiento_VI.md
+│   ├── API_Contracts.md
+│   ├── Base Comercial OI-1141-2025.xlsx
+│   ├── Base Comercial OI-1171-2025.xlsx
+│   ├── BD_92014813_LOTE 5400_PA25588101 AL PA25593500.xlsx
+│   ├── BD_AA25128701_AL_AA25129300.xlsx
+│   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   ├── Bitácora de Requerimientos.xlsx
+│   ├── Diccionario_Form_Excel.md
+│   ├── Manual_Usuario_Formato_VI.md
+│   ├── medileser_app_2026-01-13_220004.sql
+│   ├── MEDILESER_APP_BITACORA _SCRUM.xlsx
+│   ├── Pruebas_Desempeño_Excel.md
+│   ├── Pruebas_E2E_Excel.md
+│   ├── repo_tree-20260112-131628.txt
+│   └── repo_tree-20260115-091159.txt
+├── frontend
+│   ├── public
+│   │   ├── adminator
+│   │   │   ├── assets
+│   │   │   │   ├── static
+│   │   │   │   │   ├── fonts
+│   │   │   │   │   │   └── icons
+│   │   │   │   │   │       ├── fontawesome
+│   │   │   │   │   │       │   ├── fontawesome-webfont.eot
+│   │   │   │   │   │       │   ├── fontawesome-webfont.svg
+│   │   │   │   │   │       │   ├── fontawesome-webfont.ttf
+│   │   │   │   │   │       │   ├── fontawesome-webfont.woff
+│   │   │   │   │   │       │   ├── fontawesome-webfont.woff2
+│   │   │   │   │   │       │   └── FontAwesome.otf
+│   │   │   │   │   │       └── themify
+│   │   │   │   │   │           ├── themify.eot
+│   │   │   │   │   │           ├── themify.svg
+│   │   │   │   │   │           ├── themify.ttf
+│   │   │   │   │   │           └── themify.woff
+│   │   │   │   │   └── images
+│   │   │   │   │       ├── datatables
+│   │   │   │   │       │   ├── sort_asc.png
+│   │   │   │   │       │   ├── sort_asc_disabled.png
+│   │   │   │   │       │   ├── sort_both.png
+│   │   │   │   │       │   ├── sort_desc.png
+│   │   │   │   │       │   └── sort_desc_disabled.png
+│   │   │   │   │       ├── 404.png
+│   │   │   │   │       ├── 500.png
+│   │   │   │   │       ├── bg.jpg
+│   │   │   │   │       ├── logo-circle.svg
+│   │   │   │   │       ├── logo-gradient.svg
+│   │   │   │   │       ├── logo-outline.svg
+│   │   │   │   │       ├── logo.png
+│   │   │   │   │       └── logo.svg
+│   │   │   │   ├── fontawesome-webfont.svg
+│   │   │   │   └── themify.svg
+│   │   │   ├── 1e59d2330b4c6deb84b3.ttf
+│   │   │   ├── 20fd1704ea223900efa9.woff2
+│   │   │   ├── 29b39089170885ae2967.woff
+│   │   │   ├── 404.html
+│   │   │   ├── 500.html
+│   │   │   ├── 8b43027f47b20503057d.eot
+│   │   │   ├── 9bad94440d49256265a5.eot
+│   │   │   ├── basic-table.html
+│   │   │   ├── blank.html
+│   │   │   ├── buttons.html
+│   │   │   ├── calendar.html
+│   │   │   ├── charts.html
+│   │   │   ├── chat.html
+│   │   │   ├── compose.html
+│   │   │   ├── datatable.html
+│   │   │   ├── eda8b94308c6f538f04a.ttf
+│   │   │   ├── email.html
+│   │   │   ├── f691f37e57f04c152e23.woff
+│   │   │   ├── forms.html
+│   │   │   ├── google-maps.html
+│   │   │   ├── index.html
+│   │   │   ├── main.js
+│   │   │   ├── main.js.LICENSE.txt
+│   │   │   ├── signin.html
+│   │   │   ├── signup.html
+│   │   │   ├── style.css
+│   │   │   ├── ui.html
+│   │   │   └── vector-maps.html
+│   │   ├── medileser
+│   │   │   ├── banner.jpg
+│   │   │   ├── logo-vertical.jpg
+│   │   │   ├── Spinner-Logo-Medileser.gif
+│   │   │   └── Thumbs.db
+│   │   ├── favicon.ico
+│   │   └── vite.svg
+│   ├── src
+│   │   ├── api
+│   │   │   ├── admin.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── catalogs.ts
+│   │   │   ├── client.ts
+│   │   │   ├── integrations.ts
+│   │   │   ├── oi.ts
+│   │   │   └── oiTools.ts
+│   │   ├── app
+│   │   │   └── router.tsx
+│   │   ├── assets
+│   │   │   └── react.svg
+│   │   ├── components
+│   │   │   ├── PasswordInput.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── Spinner.tsx
+│   │   │   ├── Toast.tsx
+│   │   │   └── Topbar.tsx
+│   │   ├── features
+│   │   │   ├── admin
+│   │   │   │   └── AdminPermisosPage.tsx
+│   │   │   ├── auth
+│   │   │   │   ├── ChangePasswordPage.tsx
+│   │   │   │   ├── LoginPage.tsx
+│   │   │   │   └── RequireAuth.tsx
+│   │   │   ├── home
+│   │   │   │   └── HomePage.tsx
+│   │   │   ├── logistica
+│   │   │   │   ├── Log01ExcelPage.tsx
+│   │   │   │   ├── Log01HistoryPage.tsx
+│   │   │   │   └── Log02PdfPage.tsx
+│   │   │   ├── oi
+│   │   │   │   ├── BancadaModal.tsx
+│   │   │   │   ├── OiListPage.tsx
+│   │   │   │   ├── OiPage.tsx
+│   │   │   │   ├── PasswordModal.tsx
+│   │   │   │   └── schema.ts
+│   │   │   ├── oi_tools
+│   │   │   │   ├── components
+│   │   │   │   │   ├── FilePickerModal.tsx
+│   │   │   │   │   ├── filePickerUtils.ts
+│   │   │   │   │   ├── MultiFilePicker.tsx
+│   │   │   │   │   └── SingleFilePicker.tsx
+│   │   │   │   ├── ActualizacionBasePage.tsx
+│   │   │   │   ├── ConsolidacionCorrelativoPage.tsx
+│   │   │   │   ├── ConsolidacionNoCorrelativoPage.tsx
+│   │   │   │   ├── ConsolidacionOisPage.tsx
+│   │   │   │   ├── ExcelToolsPage.tsx
+│   │   │   │   ├── FormatoAcHistoryPage.tsx
+│   │   │   │   ├── OiFilesModal.tsx
+│   │   │   │   ├── progressTranslations.ts
+│   │   │   │   └── VimaToListaPage.tsx
+│   │   │   └── users
+│   │   │       └── UsersPage.tsx
+│   │   ├── layouts
+│   │   │   └── AdminatorLayout.tsx
+│   │   ├── styles
+│   │   │   └── adminator.css
+│   │   ├── utils
+│   │   │   └── recoveryDraft.ts
+│   │   ├── App.css
+│   │   ├── App.tsx
+│   │   ├── index.css
+│   │   └── main.tsx
+│   ├── .gitignore
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── README.md
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── reports
+│   ├── trazabilidad
+│   │   ├── reporte_1_3_4_20251215_1952.md
+│   │   ├── reporte_1_3_4_20251215_2034.md
+│   │   ├── reporte_1_3_4_20251215_2035.md
+│   │   ├── reporte_1_3_4_20251216_1315.md
+│   │   ├── reporte_1_3_4_20251216_1317.md
+│   │   ├── reporte_1_3_4_20251216_1651.md
+│   │   ├── reporte_1_3_4_20251216_1802.md
+│   │   ├── reporte_1_3_4_20251216_1832.md
+│   │   ├── reporte_1_3_4_20251216_1835.md
+│   │   ├── reporte_1_3_4_20251216_1836.md
+│   │   ├── reporte_1_3_4_20251216_1847.md
+│   │   ├── reporte_1_3_4_20251216_1849.md
+│   │   ├── reporte_1_3_4_20251216_2014.md
+│   │   ├── reporte_1_3_4_20251216_2016.md
+│   │   ├── reporte_1_3_4_20251216_2026.md
+│   │   ├── reporte_1_3_4_20251217_1228.md
+│   │   ├── reporte_1_3_4_20251217_1229.md
+│   │   ├── reporte_1_3_4_20251217_1801.md
+│   │   ├── traza_1_3_4_20251215_1952.jsonl
+│   │   ├── traza_1_3_4_20251215_2034.jsonl
+│   │   ├── traza_1_3_4_20251215_2035.jsonl
+│   │   ├── traza_1_3_4_20251216_1315.jsonl
+│   │   ├── traza_1_3_4_20251216_1317.jsonl
+│   │   ├── traza_1_3_4_20251216_1651.jsonl
+│   │   ├── traza_1_3_4_20251216_1802.jsonl
+│   │   ├── traza_1_3_4_20251216_1832.jsonl
+│   │   ├── traza_1_3_4_20251216_1835.jsonl
+│   │   ├── traza_1_3_4_20251216_1836.jsonl
+│   │   ├── traza_1_3_4_20251216_1847.jsonl
+│   │   ├── traza_1_3_4_20251216_1849.jsonl
+│   │   ├── traza_1_3_4_20251216_2014.jsonl
+│   │   ├── traza_1_3_4_20251216_2016.jsonl
+│   │   ├── traza_1_3_4_20251216_2026.jsonl
+│   │   ├── traza_1_3_4_20251217_1228.jsonl
+│   │   ├── traza_1_3_4_20251217_1229.jsonl
+│   │   └── traza_1_3_4_20251217_1801.jsonl
+│   └── LOG01_OUTPUT_TEST.xlsx
+├── scripts
+│   ├── migrate_sqlite_to_mysql.py
+│   └── print_repo_tree.py
+├── .env
+├── .gitignore
+├── backup_medileser.ps1
+├── BASE.sql
+├── build_frontend_and_copy.bat
+├── DATA MEDILESER.sql
+├── INSTALACION.md
+├── INSTALAR VENV.txt
+├── instalar_dependencias.bat
+├── README.md
+├── requirements.txt
+├── RESULTADOS BD.txt
+└── run_backend.bat

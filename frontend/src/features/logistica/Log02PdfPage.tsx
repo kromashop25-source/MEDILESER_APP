@@ -249,6 +249,8 @@ function abrirDestino() {
       });
     }
     setOriginEditIndex(null);
+    // Cerrar modal al seleccionar
+    setExplorerOpen(false);
   }
 
   async function validar() {
