@@ -3,10 +3,16 @@ import { api } from "./client";
 import { getAuth } from "./auth";
 import type { ProgressEvent } from "./integrations";
 
-const isDev = import.meta.env.DEV;
-const logDev = (...args: unknown[]) => {
-  if (isDev) console.info(...args);
-};
+
+
+function isAbortLikeError(err: unknown): boolean {
+  const e = err as any;
+  const name = String(e?.name || "");
+  const msg = String(e?.message || e || "");
+  // Navegadores: AbortError / DOMException.
+  return name === "AbortError" || /aborted/i.test(msg) || /abort/i.test(msg);
+  // Algunos entornos: "BodyStreamBuffer was aborted"
+}
 
 export type MergeUploadLimits = {
   max_file_mb: number;
@@ -69,23 +75,45 @@ async function readNdjsonStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    let idx: number;
-    while ((idx = buffer.indexOf("\n")) >= 0) {
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
-      if (!line) continue;
+  try {
+    while (true) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
       try {
-        onEvent(JSON.parse(line));
+        chunk = await reader.read();
+      } catch (err) {
+        if (isAbortLikeError(err)) return;
+        throw err;
+      }
+
+      const { value, done } = chunk;
+      if (done) break;
+      if (!value || value.length === 0) continue;
+
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        try {
+          onEvent(JSON.parse(line));
+        } catch {
+          // ignore malformed lines
+        }
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      try {
+        onEvent(JSON.parse(tail));
       } catch {
         // ignore malformed lines
       }
     }
+  } catch (err) {
+    if (isAbortLikeError(err)) return;
+    throw err;
   }
 }
 
@@ -161,30 +189,50 @@ export async function subscribeLog01Progress(
   const reader = res.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
-  let sawFirstByte = false;
+  
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    if (!sawFirstByte && value && value.length) {
-      logDev("[LOG01] progress first byte");
-      sawFirstByte = true;
-    }
-
-    buffer += decoder.decode(value, { stream: true });
-    let idx: number;
-    while ((idx = buffer.indexOf("\n")) >= 0) {
-      const line = buffer.slice(0, idx).trim();
-      buffer = buffer.slice(idx + 1);
-      if (!line) continue;
+  try {
+    while (true) {
+      let chunk: ReadableStreamReadResult<Uint8Array>;
       try {
-        const ev = JSON.parse(line) as ProgressEvent;
-        logDev("[LOG01] progress event =", ev);
-        onEvent(ev);
-      } catch {
-        // ignore malformed lines
+        chunk = await reader.read();
+      } catch (err) {
+        // Si el stream fue abortado/cerrado por el cliente o el navegador, no lo tratamos como error.
+        if (isAbortLikeError(err)) return;
+        throw err;
+      }
+
+      const { value, done } = chunk;
+      if (done) break;
+      if (!value || value.length === 0) continue;
+
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        try {
+          onEvent(JSON.parse(line));
+        } catch {
+          // ignorar líneas malformadas
+        }
       }
     }
+
+    // procesar último fragmento si quedó sin salto de línea
+    const tail = buffer.trim();
+    if (tail) {
+      try {
+        onEvent(JSON.parse(tail));
+      } catch {
+        // ignorar
+      }
+    }
+  } catch (err) {
+    // Si fue abort/cierre, no elevamos error
+    if (isAbortLikeError(err)) return;
+    throw err;
   }
 }
 
@@ -501,6 +549,61 @@ export async function log02ValidarRutasUnc(
   );
   return res.data;
 }
+
+// ============================================
+// LOG-02 (PB-LOG-015) - Copiar PDFs conformes
+// ============================================
+export type Log02CopyConformesStarRequest = {
+  run_id: number;
+  rutas_origen: string[];
+  ruta_destino: string;
+};
+
+export type Log02CopyConformesStartResponse = {
+  operation_id: string;
+};
+
+export async function log02CopyConformesStart(
+  payload: Log02CopyConformesStarRequest,
+  signal?: AbortSignal
+): Promise<Log02CopyConformesStartResponse> {
+  const res = await api.post<Log02CopyConformesStartResponse>(
+    "/logistica/log02/copiar-conformes/start",
+    payload,
+    { signal }
+  );
+  return res.data;
+}
+
+export async function subscribeLog02CopyConformesProgress(
+  operationId: string,
+  onEvent: (ev: ProgressEvent) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const url = buildUrl(`/logistica/log02/copiar-conformes/progress/${operationId}`);
+  const token = getAuth()?.token;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Accept: "application/x-ndjson",
+      "Cache-Control": "no-cache",
+    },
+    signal,
+  });
+
+  if (!res.ok) {
+    const code = res.headers.get("X-Code") ?? undefined;
+    throw asErrorWithCode(`No se pudo abrir el stream (${res.status})`, res.status, code);
+  }
+
+  await readNdjsonStream(res, onEvent);
+}
+
+export async function log02CopyConformesCancel(operationId: string): Promise<void> {
+  await api.post(`/logistica/log02/copiar-conformes/cancel/${encodeURIComponent(operationId)}`);
+} 
 
 
 // ================================

@@ -290,7 +290,7 @@ MEDILESER_APP
 │   │   │       │   └── vector-maps.html
 │   │   │       ├── assets
 │   │   │       │   ├── index-BxqLcx0v.css
-│   │   │       │   └── index-rrXT6aBw.js
+│   │   │       │   └── index-DYJD8Iem.js
 │   │   │       ├── medileser
 │   │   │       │   ├── banner.jpg
 │   │   │       │   ├── logo-vertical.jpg
@@ -315,14 +315,23 @@ MEDILESER_APP
 │   │   │       │   ├── BD_AA25130585_AL_AA25133464__MANIFIESTO.json
 │   │   │       │   └── BD_AA25130585_AL_AA25133464__NO_CONFORME_FINAL.json
 │   │   │       ├── 11
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
 │   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
 │   │   │       ├── 12
+│   │   │       │   ├── BD_AA25128701_AL_AA25131100.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25131100__MANIFIESTO.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25131100__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
 │   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
 │   │   │       ├── 13
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
 │   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
@@ -400,6 +409,7 @@ MEDILESER_APP
 │   │       ├── repo_tree-20251030-142159.txt
 │   │       ├── repo_tree-20251031-124032.txt
 │   │       └── styleguide.html
+│   ├── 19012026 1_41pm.sql
 │   ├── Acuerdos_de_Afinamiento_VI.md
 │   ├── API_Contracts.md
 │   ├── Base Comercial OI-1141-2025.xlsx
@@ -415,7 +425,8 @@ MEDILESER_APP
 │   ├── Pruebas_Desempeño_Excel.md
 │   ├── Pruebas_E2E_Excel.md
 │   ├── repo_tree-20260112-131628.txt
-│   └── repo_tree-20260115-091159.txt
+│   ├── repo_tree-20260115-091159.txt
+│   └── repo_tree-20260119-132522.txt
 ├── frontend
 │   ├── public
 │   │   ├── adminator

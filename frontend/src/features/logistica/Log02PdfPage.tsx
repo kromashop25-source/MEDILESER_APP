@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import {
@@ -7,6 +7,11 @@ import {
   log02ExplorerRoots,
   log02ExplorerListar,
   type Log02ExplorerListItem,
+  log01HistoryList,
+  type Log01HistoryListItem,
+  log02CopyConformesStart,
+  subscribeLog02CopyConformesProgress,
+  log02CopyConformesCancel,
 } from "../../api/oiTools";
 
 function badge(ok?: boolean | null) {
@@ -18,6 +23,37 @@ function badge(ok?: boolean | null) {
 type ExplorerMode = "origen" | "destino";
 
 const LS_KEY = "medileser_log02_rutas_v1";
+const PERU_TZ = "America/Lima";
+
+function formatDateTime(value?: string | null): string {
+  if (!value) return "N/D";
+  const hasTz =
+    /[zZ]$/.test(value) || /[+-]\d{2}:\d{2}$/.test(value) || /[+-]\d{4}$/.test(value);
+  const safe = hasTz ? value : `${value}Z`;
+  const d = new Date(safe);
+  if (Number.isNaN(d.getTime())) return String(value);
+
+  const fmt = new Intl.DateTimeFormat("es-PE", {
+    timeZone: PERU_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const parts = fmt.formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || "";
+  return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
+}
+
+function isAbortLikeError(err: unknown): boolean {
+  const e = err as any;
+  const name = String(e?.name || "");
+  const msg = String(e?.message || e || "");
+  return name === "AbortError" || /aborted/i.test(msg) || /abort/i.test(msg);
+}
 
 export default function Log02PdfPage() {
 
@@ -27,6 +63,40 @@ export default function Log02PdfPage() {
   const [error, setError ] = useState<string>("");
   const [resultado, setResultado] = useState<Log02ValidarRutasUncResponse | null>(null);
   const [touched, setTouched] = useState<boolean>(false);
+
+  // ====================================
+  // Selección de corrida LOG-01 (run_id)
+  // ====================================
+  const [runModalOpen, setRunModalOpen] = useState<boolean>(false);
+  const [runsLoading, setRunsLoading] = useState<boolean>(false);
+  const [runsError, setRunsError] = useState<string>("");
+  const [runs, setRuns] = useState<Log01HistoryListItem[]>([]);
+  const [runSelected, setRunSelected] = useState<Log01HistoryListItem | null>(null);
+
+  // filtros opcionales del modal
+  const [runQ, setRunQ] = useState<string>("");
+  const [runDateFrom, setRunDateFrom] = useState<string>("");
+  const [runDateTo, setRunDateTo] = useState<string>("");
+  const [runSource, setRunSource] = useState<string>("");
+  const [runStatus, setRunStatus] = useState<string>("COMPLETADO"); // exitosas por defecto
+
+  // ====================
+  // Copiado (PB-LOG-015)
+  // ====================
+  const [copying, setCopying] = useState<boolean>(false);
+  const [copyOperationId, setCopyOperationId] = useState<string>("");
+  const [copyProgress, setCopyProgress] = useState<number>(0);
+  const [copyStage, setCopyStage] = useState<string>("");
+  const [copyMessage, setCopyMessage] = useState<string>("");
+  const [copyOi, setCopyOi] = useState<string>("");
+  const [copyWarnings, setCopyWarnings] = useState<Array<{ oi: string; code?: string; message: string }>>([]);
+  const [copyErrors, setCopyErrors] = useState<Array<{ oi?: string; file?: string; message: string }>>([]);
+  const [copyAudit, setCopyAudit] = useState<any | null>(null);
+
+  const copyAbortRef = useRef<AbortController | null>(null);
+  const copyCancelRef = useRef<boolean>(false);
+  const copyCompletedRef = useRef<boolean>(false);
+  const mountedRef = useRef<boolean>(true);
 
 
   // Explorador (modal inline)
@@ -46,11 +116,16 @@ export default function Log02PdfPage() {
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as { origenes?: string[]; destino?: string};
+      const parsed = JSON.parse(raw) as { origenes?: string[]; destino?: string; run_id?: number };
       const origenes = Array.isArray(parsed.origenes) ? parsed.origenes : [];
       const destino = typeof parsed?.destino === "string" ? parsed.destino : "";
+      const runId = typeof parsed?.run_id === "number" ? parsed.run_id : null;
       if (origenes.length) setRutasOrigen(origenes);
       if (destino) setRutaDestino(destino);
+      if (runId !== null) {
+        // placeholder mínimo; se reemplaza cuando carguemos lista
+        setRunSelected({ id: runId} as any)
+      }
     } catch {
       // ignorar
     }
@@ -63,12 +138,25 @@ export default function Log02PdfPage() {
       const payload = {
         origenes: rutasOrigen,
         destino: rutaDestino,
+        run_id: runSelected?.id ?? null,
       };
       localStorage.setItem(LS_KEY, JSON.stringify(payload));
     } catch {
       // ignorar
   }
-}, [rutasOrigen, rutaDestino]);
+}, [rutasOrigen, rutaDestino, runSelected?.id]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (copyCancelRef.current || copyCompletedRef.current) {
+        try {
+          copyAbortRef.current?.abort();
+        } catch {}
+      }
+    };
+  }, []);
 
 function limpiarConfiguracion() {
   setRutasOrigen([""]);
@@ -76,6 +164,15 @@ function limpiarConfiguracion() {
   setResultado(null);
   setError("");
   setTouched(false);
+  setRunSelected(null);
+  setCopyAudit(null);
+  setCopyWarnings([]);
+  setCopyErrors([]);
+  setCopyMessage("");
+  setCopyStage("");
+  setCopyProgress(0);
+  setCopyOi("");
+  setCopyOperationId("");
   try {
     localStorage.removeItem(LS_KEY);
   } catch {
@@ -116,6 +213,79 @@ function abrirDestino() {
   setTouched(true);
   setOriginEditIndex(null);
   void openExplorer("destino");
+}
+
+// =========================
+// Modal de corridas LOG-01
+// =========================
+async function cargarUltimasCorridasExitosas(limit = 5) {
+  setRunsError("");
+  setRunsLoading(true);
+  try {
+    const data = await log01HistoryList({
+      limit,
+      offset: 0,
+      include_deleted: false,
+      status: "COMPLETADO",
+    });
+    const items = Array.isArray(data?.items) ? data.items : [];
+    setRuns(items);
+    if (!runSelected?.id && items.length) {
+      setRunSelected(items[0]);
+    } else if (!runSelected?.id && !items.length) {
+      const match = items.find((x) => x.id === runSelected?.id);
+      if (match) setRunSelected(match);
+    }
+  } catch (e) {
+    const ax = e as AxiosError<any>;
+    const detail =
+      (ax.response?.data?.detail as string) ||
+      ax.message ||
+      "No se pudo cargar las corridas.";
+    setRunsError(detail);
+    setRuns([]);
+  } finally {
+    setRunsLoading(false);
+  }
+}
+
+async function buscarCorridasConFiltros() {
+  setRunsError("");
+  setRunsLoading(true);
+  try {
+    const data = await log01HistoryList({
+      limit: 20,
+      offset: 0,
+      include_deleted: false,
+      q: runQ.trim() || undefined,
+      dateFrom: runDateFrom.trim() || undefined,
+      dateTo: runDateTo.trim() || undefined,
+      source: runSource.trim() || undefined,
+      status: runStatus.trim() || undefined,
+    });
+    const items = Array.isArray(data?.items) ? data.items : [];
+    setRuns(items);
+  } catch (e)  {
+    const ax = e as AxiosError<any>;
+    const detail =
+      (ax.response?.data?.detail as string) ||
+      ax.message ||
+      "No se pudo cargar las corridas.";
+    setRunsError(detail);
+    setRuns([]);
+  } finally {
+    setRunsLoading(false);
+  }
+}
+
+function abrirModalCorridas() {
+  setRunModalOpen(true);
+  void cargarUltimasCorridasExitosas(5);
+}
+
+function seleccionarCorrida(it: Log01HistoryListItem) {
+  setRunSelected(it);
+  setRunModalOpen(false);
 }
 
 
@@ -293,6 +463,148 @@ function abrirDestino() {
 
   }
 
+  const puedeIniciarCopiado = useMemo(() => {
+    return !!resultado?.ok && !!runSelected?.id && !copying;
+  }, [resultado?.ok, runSelected?.id, copying]);
+
+  function aplicarProgreso(ev: any) {
+    const raw = ev?.percent ?? ev?.progress;
+    const pct = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    if (Number.isFinite(pct)) {
+      const safe = Math.max(0, Math.min(100, pct));
+      setCopyProgress(safe);
+    }
+  }
+
+  function onCopyEvent(ev: any) {
+    const type = String(ev?.type || "");
+    aplicarProgreso(ev);
+
+    if (type === "status" || type === "progress") {
+      const stage = ev?.stage ? String(ev.stage) : type;
+      if (stage) setCopyStage(stage);
+      if (typeof ev?.message === "string" && ev.message) setCopyMessage(ev.message);
+      return;
+    }
+    if (type === "oi") {
+      if (typeof ev?.oi === "string") setCopyOi(ev.oi);
+      return;
+    }
+    if (type === "oi_warn") {
+      const oi = String(ev?.oi || "");
+      const msg = String(ev?.message || "");
+      const code = ev?.code ? String(ev.code) : undefined;
+      if (oi && msg) setCopyWarnings((prev) => [... prev, { oi, code, message: msg}]);
+      return;
+    }
+    if (type === "oi_error" || type === "file_error") {
+      const oi = ev?.oi ? String(ev.oi) : undefined;
+      const file = ev?.file ? String(ev.file) : undefined;
+      const msg = String(ev?.message || "Error");
+      setCopyErrors((prev) => [...prev, { oi, file, message: msg}]);
+      return;
+    }
+    if (type === "error") {
+      const msg = String(ev?.message || "Fallo en el proceso.");
+      setCopyErrors((prev) => [...prev, { message: msg}]);
+      setCopyMessage(msg);
+      setCopyStage("error");
+      return;
+    }
+    if (type === "complete") {
+      copyCompletedRef.current = true;
+      if (typeof ev?.message === "string") setCopyMessage(ev.message);
+      setCopyStage("completado");
+      setCopyProgress(100);
+      setCopyAudit(ev?.audit ?? null);
+      setCopying(false);
+      return;
+    }
+  }
+
+  async function iniciarCopiado() {
+    setError("");
+    if (!resultado?.ok) {
+      setError("Debes validar rutas correctamente antes de iniciar el copiado.");
+      return;
+    }
+    if (!runSelected?.id) {
+      setError("Debes seleccionar una corrida de LOG-01 (Historial) para usar su manifiesto.");
+      return;
+    }
+
+    const origenes = origenesNoVacios;
+    const destino = destinoLimpio;
+    if (!origenes.length || !destino) {
+      setError("Completa orígenes y destino antes de iniciar.");
+      return;
+    }
+
+    copyCancelRef.current = false;
+    copyCompletedRef.current = false;
+    setCopyErrors([]);
+    setCopyWarnings([]);
+    setCopyAudit(null);
+    setCopyStage("inicio");
+    setCopyMessage("inicio");
+    setCopyMessage("Iniciando copiado...");
+    setCopyProgress(0);
+    setCopyOi("");
+    setCopyOperationId("");
+    setCopying(true);
+
+    try {
+      const start = await log02CopyConformesStart({
+        run_id: runSelected.id,
+        rutas_origen: origenes,
+        ruta_destino: destino,
+      });
+
+      const opId = start.operation_id;
+      setCopyOperationId(opId);
+
+      const ac = new AbortController();
+      copyAbortRef.current = ac;
+      
+      await subscribeLog02CopyConformesProgress(
+        opId,
+        (ev) => {
+          if (!mountedRef.current) return;
+          onCopyEvent(ev as any);
+        },
+        ac.signal
+      );
+    } catch (e) {
+      if (copyCancelRef.current || copyCompletedRef.current || isAbortLikeError(e)) return;
+      const ax = e as AxiosError<any>;
+      const detail=
+        (ax.response?.data?.detail as string) ||
+        ax.message ||
+        "No se pudo iniciar/leer el progreso.";
+        setCopyErrors((prev) => [...prev, { message: detail}]);
+        setCopyStage("error");
+        setCopyMessage(detail);
+    } finally {
+      if (mountedRef.current) setCopying(false);
+    }
+  }
+
+  async function cancelarCopiado() {
+    if (!copyOperationId) return;
+    copyCancelRef.current = true;
+    try {
+      await log02CopyConformesCancel(copyOperationId);
+    } catch {
+      // si falla el cancel, igual abortamos el stram local
+    }
+    try {
+      copyAbortRef.current?.abort();
+    } catch {}
+    setCopying(false);
+    setCopyStage("cancelado");
+    setCopyMessage("Cancelado por el usuario.");
+  }
+
   const resumenValidacion = useMemo(() => {
     if (!resultado) return null;
     const okOrigenes = (resultado.origenes || []).filter((o) => o.existe && o.lectura).length;
@@ -391,7 +703,7 @@ function abrirDestino() {
                         onClick={() => removeOrigen(i)}
                         disabled={validando}
                         title="Quitar ruta"
-                        style= {{ width: 44, textAlign: "center" }}
+                        style={{ width: 52, textAlign: "center" }}
                       >
                         –
                       </button>
@@ -496,6 +808,371 @@ function abrirDestino() {
                     ) : null}
                   </div>
                 ) : null}
+
+                {/* ========================= */}
+            {/* PB-LOG-015 - Copiado PDFs */}
+            {/* ========================= */}
+            <div className="mT-25">
+              <h6 className="c-grey-900 mB-10">Copiado de PDFs conformes por OI (PB-LOG-015)</h6>
+
+              <div className="d-flex flex-wrap align-items-center justify-content-between gap-10">
+                <div className="small text-muted">
+                  Corrida LOG-01 seleccionada:{" "}
+                  {runSelected?.id ? (
+                    <span className="badge bg-light text-dark">
+                      #{runSelected.id}
+                      {runSelected?.created_at ? ` · ${formatDateTime(runSelected.created_at)}` : ""}
+                      {runSelected?.source ? ` · ${runSelected.source}` : ""}
+                      {runSelected?.status ? ` · ${runSelected.status}` : ""}
+                    </span>
+                  ) : (
+                    <span className="badge bg-warning text-dark">No seleccionada</span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={abrirModalCorridas}
+                  disabled={copying}
+                >
+                  {runSelected?.id ? "Cambiar corrida" : "Elegir corrida"}
+                </button>
+              </div>
+
+              {!runSelected?.id ? (
+                <div className="alert alert-warning mT-10" role="alert">
+                  Debes seleccionar una corrida de LOG-01 (historial) para usar su manifiesto y NO CONFORME.
+                </div>
+              ) : null}
+
+              <div className="d-flex flex-wrap gap-10 mT-10">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={() => void iniciarCopiado()}
+                  disabled={!puedeIniciarCopiado}
+                >
+                  {copying ? "Copiando..." : "Iniciar copiado"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-danger"
+                  onClick={() => void cancelarCopiado()}
+                  disabled={!copying || !copyOperationId}
+                >
+                  Cancelar
+                </button>
+              </div>
+
+              <div className="mT-10">
+                <h6 className="c-grey-900 mB-10 d-flex align-items-center gap-2">
+                  <span>Progreso</span>
+                  {copying ? (
+                    <img
+                      className="vi-progress-spinner"
+                      src="/medileser/Spinner-Logo-Medileser.gif"
+                      alt="Procesando"
+                    />
+                  ) : null}
+                </h6>
+                {copyStage || copyMessage ? (
+                  <div className="small text-muted">
+                    <strong>Estado:</strong> {copyStage || "—"}
+                    {copyOi ? (
+                      <span>
+                        {" "}
+                        · <strong>OI:</strong> {copyOi}
+                      </span>
+                    ) : null}
+                    {copyMessage ? <span> · {copyMessage}</span> : null}
+                  </div>
+                ) : null}
+                <div className="progress" style={{ height: 10 }}>
+                  <div
+                    className="progress-bar"
+                    role="progressbar"
+                    style={{ width: `${Math.max(0, Math.min(100, copyProgress))}%` }}
+                    aria-valuenow={copyProgress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+                <div className="small text-muted mT-5">{copyProgress.toFixed(0)}%</div>
+              </div>
+
+              {copyErrors.length ? (
+                <div className="alert alert-danger mT-10" role="alert">
+                  <strong>Se detectaron errores:</strong>
+                  <ul className="mB-0 mT-5">
+                    {copyErrors.slice(-8).map((x, idx) => (
+                      <li key={`ce-${idx}`}>
+                        {x.oi ? `[${x.oi}] ` : ""}
+                        {x.file ? `${x.file}: ` : ""}
+                        {x.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {copyWarnings.length ? (
+                <div className="alert alert-warning mT-10" role="alert">
+                  <strong>Advertencias:</strong>
+                  <ul className="mB-0 mT-5">
+                    {copyWarnings.slice(-8).map((x, idx) => (
+                      <li key={`cw-${idx}`}>
+                        [{x.oi}] {x.code ? `${x.code}: ` : ""}
+                        {x.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {copyAudit ? (
+                <div className="mT-15">
+                  <h6 className="c-grey-900 mB-10">Auditoría de copiado</h6>
+                  <div className="row g-2">
+                    <div className="col-12 col-md-4">
+                      <div className="alert alert-light mB-0">
+                        <div>
+                          <strong>Total OIs:</strong> {copyAudit?.total_ois ?? "N/D"}
+                        </div>
+                        <div>
+                          <strong>OIs OK:</strong> {copyAudit?.ois_ok ?? "N/D"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-8">
+                      <div className="alert alert-light mB-0">
+                        <div className="d-flex flex-wrap gap-10">
+                          <span>
+                            <strong>PDF detectados:</strong> {copyAudit?.archivos?.pdf_detectados ?? "N/D"}
+                          </span>
+                          <span>
+                            <strong>PDF copiados:</strong> {copyAudit?.archivos?.pdf_copiados ?? "N/D"}
+                          </span>
+                          <span>
+                            <strong>Omitidos NO CONFORME:</strong> {copyAudit?.archivos?.pdf_omitidos_no_conforme ?? "N/D"}
+                          </span>
+                          <span>
+                            <strong>No PDF omitidos:</strong> {copyAudit?.archivos?.archivos_no_pdf_omitidos ?? "N/D"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(copyAudit?.ois_faltantes?.length ||
+                    copyAudit?.ois_duplicadas?.length ||
+                    copyAudit?.destinos_duplicados?.length) ? (
+                    <div className="mT-10">
+                      {copyAudit?.ois_faltantes?.length ? (
+                        <div className="alert alert-warning" role="alert">
+                          <strong>OIs sin carpeta:</strong>
+                          <ul className="mB-0 mT-5">
+                            {copyAudit.ois_faltantes.slice(0, 10).map((x: any, idx: number) => (
+                              <li key={`of-${idx}`}>
+                                {x?.oi} — {x?.detalle || ""}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {copyAudit?.ois_duplicadas?.length ? (
+                        <div className="alert alert-warning" role="alert">
+                          <strong>OIs con múltiples carpetas (duplicadas):</strong>
+                          <ul className="mB-0 mT-5">
+                            {copyAudit.ois_duplicadas.slice(0, 10).map((x: any, idx: number) => (
+                              <li key={`od-${idx}`}>
+                                {x?.oi} — {Array.isArray(x?.carpetas) ? x.carpetas.join(" | ") : ""}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {copyAudit?.destinos_duplicados?.length ? (
+                        <div className="alert alert-warning" role="alert">
+                          <strong>Destinos ya existentes:</strong>
+                          <ul className="mB-0 mT-5">
+                            {copyAudit.destinos_duplicados.slice(0, 10).map((x: any, idx: number) => (
+                              <li key={`dd-${idx}`}>
+                                {x?.oi} — {x?.destino || ""}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* Modal corridas LOG-01 (inline Bootstrap/Adminator) */}
+      {runModalOpen ? (
+        <>
+          <div className="modal fade show" style={{ display: "block" }} role="dialog" aria-modal="true">
+            <div className="modal-dialog modal-lg" role="document">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Seleccionar corrida de LOG-01 (Historial)</h5>
+                  <button type="button" className="close" aria-label="Close" onClick={() => setRunModalOpen(false)}>
+                    <span aria-hidden="true">&times;</span>
+                  </button>
+                </div>
+
+                <div className="modal-body">
+                  <div className="text-muted small mB-10">
+                    Por defecto se cargan las <strong>últimas 5 corridas completadas</strong>. Puedes usar filtros si lo
+                    necesitas.
+                  </div>
+
+                  {runsError ? (
+                    <div className="alert alert-danger" role="alert">
+                      {runsError}
+                    </div>
+                  ) : null}
+
+                  <form
+                    className="row g-2 align-items-end"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void buscarCorridasConFiltros();
+                    }}
+                  >
+                    <div className="col-12 col-md-4">
+                      <label className="form-label">Buscar</label>
+                      <input
+                        className="form-control form-control-sm"
+                        value={runQ}
+                        onChange={(e) => setRunQ(e.target.value)}
+                        placeholder="Serie / OI / usuario..."
+                      />
+                    </div>
+                    <div className="col-6 col-md-2">
+                      <label className="form-label">Desde</label>
+                      <input
+                        className="form-control form-control-sm"
+                        type="date"
+                        value={runDateFrom}
+                        onChange={(e) => setRunDateFrom(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-6 col-md-2">
+                      <label className="form-label">Hasta</label>
+                      <input
+                        className="form-control form-control-sm"
+                        type="date"
+                        value={runDateTo}
+                        onChange={(e) => setRunDateTo(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-6 col-md-2">
+                      <label className="form-label">Origen</label>
+                      <input
+                        className="form-control form-control-sm"
+                        value={runSource}
+                        onChange={(e) => setRunSource(e.target.value)}
+                        placeholder="AUTO/BASES/..."
+                      />
+                    </div>
+                    <div className="col-6 col-md-2">
+                      <label className="form-label">Estado</label>
+                      <input
+                        className="form-control form-control-sm"
+                        value={runStatus}
+                        onChange={(e) => setRunStatus(e.target.value)}
+                        placeholder="COMPLETADO"
+                      />
+                    </div>
+
+                    <div className="col-12 d-flex gap-10">
+                      <button type="submit" className="btn btn-sm btn-primary" disabled={runsLoading}>
+                        {runsLoading ? "Buscando..." : "Aplicar filtros"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => {
+                          setRunQ("");
+                          setRunDateFrom("");
+                          setRunDateTo("");
+                          setRunSource("");
+                          setRunStatus("COMPLETADO");
+                          void cargarUltimasCorridasExitosas(5);
+                        }}
+                        disabled={runsLoading}
+                      >
+                        Ver últimas 5 exitosas
+                      </button>
+                    </div>
+                  </form>
+
+                  <hr />
+
+                  {runsLoading ? (
+                    <div className="text-muted small">Cargando corridas...</div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-sm mB-0">
+                        <thead>
+                          <tr className="small">
+                            <th style={{ width: 90 }}>ID</th>
+                            <th>Creado</th>
+                            <th style={{ width: 120 }}>Origen</th>
+                            <th style={{ width: 140 }}>Estado</th>
+                            <th style={{ width: 120 }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {runs.length ? (
+                            runs.map((it) => (
+                              <tr key={it.id} className="small">
+                                <td>
+                                  <strong>#{it.id}</strong>
+                                </td>
+                                <td>{formatDateTime(it.created_at)}</td>
+                                <td>{it.source || "N/D"}</td>
+                                <td>{it.status || "N/D"}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => seleccionarCorrida(it)}
+                                  >
+                                    Usar
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr className="small">
+                              <td colSpan={5} className="text-muted">
+                                Sin resultados.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => setRunModalOpen(false)}>
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="modal-backdrop fade show"></div>
+        </>
+      ) : null}
+            </div>
 
                 <div className="table-responsive">
                   <table className="table table-sm mB-0">
