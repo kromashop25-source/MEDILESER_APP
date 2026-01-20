@@ -653,7 +653,40 @@ def _ndjson_stream(operation_id: str):
 
 @router.get("/copiar-conformes/progress/{operation_id}")
 def log02_copiar_conformes_progress(operation_id: str):
-    return StreamingResponse(_ndjson_stream(operation_id), media_type="application/x-ndjson")
+    # Headers anti-buffering (útil para proxies/middlewares que podrían agrupar chunks)
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Connection": "keep-alive",
+    }
+    return StreamingResponse(
+        _ndjson_stream(operation_id),
+        media_type="application/x-ndjson",
+        headers=headers,
+    )
+
+
+@router.get("/copiar-conformes/poll/{operation_id}")
+def log02_copiar_conformes_poll(operation_id: str, cursor: int = -1):
+    channel, events, cursor_next = progress_manager.get_events_since(operation_id, cursor)
+    done = channel.closed
+    summary = None
+    if events:
+        for ev in reversed(events):
+            if ev.get("type") == "complete":
+                summary = ev.get("audit")
+                break
+    if summary is None and done and channel.history:
+        for ev in reversed(channel.history):
+            if ev.get("type") == "complete":
+                summary = ev.get("audit")
+                break
+    return {
+        "cursor_next": cursor_next,
+        "events": events,
+        "done": done,
+        "summary": summary,
+    }
 
 
 @router.post("/copiar-conformes/cancel/{operation_id}")

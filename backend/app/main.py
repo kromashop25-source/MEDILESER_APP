@@ -109,101 +109,143 @@ else:
     logger.warning("Frontend path not found: %s", frontend_root)
 
 
-# 🔹 NUEVO: middleware de logging y manejo de errores
-@app.middleware("http")
-async def logging_and_error_middleware(request: Request, call_next):
-    """
-    - Loguea cada petición HTTP con método, path, status y tiempo.
-    - Captura errores HTTP controlados (HTTPException).
-    - Captura errores inesperados y devuelve 500 estándar.
-    """
-    request_id = str(uuid.uuid4())
-    start_time = time.perf_counter()
+# 🔹 Middleware ASGI (no BaseHTTPMiddleware) para NO afectar StreamingResponse (NDJSON)
+#    - Logging por request (al finalizar respuesta)
+#    - Manejo de errores: HTTPException -> JSON {detail}, Exception -> 500 estándar
+#    - Agrega X-Request-ID en todas las respuestas
 
-    try:
-        response = await call_next(request)
-    except HTTPException as exc:
-        process_ms = (time.perf_counter() - start_time) * 1000
-        logger.warning(
-            "HTTPException",
-            extra={
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": exc.status_code,
-                "detail": str(exc.detail),
-                "process_ms": round(process_ms, 2),
-            },
-        )
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail},
-        )
-    except Exception as exc:  # noqa: BLE001
-        process_ms = (time.perf_counter() - start_time) * 1000
-        logger.exception(
-            "Unhandled error",
-            extra={
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "process_ms": round(process_ms, 2),
-            },
-        )
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Error interno en el servidor. Intente nuevamente."},
-        )
-
-    process_ms = (time.perf_counter() - start_time) * 1000
-    logger.info(
-        "HTTP request completed",
-        extra={
-            "request_id": request_id,
-            "method": request.method,
-            "path": request.url.path,
-            "status_code": response.status_code,
-            "process_ms": round(process_ms, 2),
-        },
-    )
-
-    response.headers["X-Request-ID"] = request_id
-    return response
+from starlette.types import ASGIApp, Scope, Receive, Send  # type: ignore
 
 
-# 🔹 Tu middleware SPA se mantiene igual, solo queda debajo
-@app.middleware("http")
-async def spa_for_react_routes(request: Request, call_next):
-    """
-    Ensure browser navigation to SPA routes returns index.html.
-    """
-    accept = request.headers.get("accept", "")
-    path = request.url.path.rstrip("/")
+class LoggingAndErrorASGIMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-    if path.startswith("/logistica/log01/history"):
-        if request.method != "GET" or "text/html" not in accept or path != "/logistica/log01/history":
-            return await call_next(request)
-    if (
-        path.startswith("/logistica/log01/progress")
-        or path.startswith("/logistica/log01/poll")
-        or path.startswith("/logistica/log01/start")
-        or path.startswith("/logistica/log01/upload")
-        or path.startswith("/logistica/log01/result")
-        or path.startswith("/logistica/log01/cancel")
-    ):
-        return await call_next(request)
-    
-    # Agregué "/login" y "/" por seguridad para la navegación directa
-    spa_paths = {"/home", "/oi", "/oi/list", "/login", "/password", "/users", "/admin/permisos"}
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-    if (
-        request.method == "GET"
-        and "text/html" in accept
-        and (path in spa_paths or path.startswith("/oi") or path.startswith("/admin") or path.startswith("/logistica"))
+        request_id = str(uuid.uuid4())
+        start_time = time.perf_counter()
+        status_code: int | None = None
 
-    ):
-        index_file = frontend_root / "index.html"
-        if index_file.exists():
-            return FileResponse(index_file)
+        async def send_wrapper(message):
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = int(message.get("status", 0))
+                headers = list(message.get("headers", []))
+                headers.append((b"x-request-id", request_id.encode("utf-8")))
+                message["headers"] = headers
+            await send(message)
 
-    return await call_next(request)
+            # Log al final de la respuesta (incluye streaming)
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                process_ms = (time.perf_counter() - start_time) * 1000
+                logger.info(
+                    "HTTP request completed",
+                    extra={
+                        "request_id": request_id,
+                        "method": scope.get("method"),
+                        "path": scope.get("path"),
+                        "status_code": status_code,
+                        "process_ms": round(process_ms, 2),
+                    },
+                )
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        except HTTPException as exc:
+            process_ms = (time.perf_counter() - start_time) * 1000
+            logger.warning(
+                "HTTPException",
+                extra={
+                    "request_id": request_id,
+                    "method": scope.get("method"),
+                    "path": scope.get("path"),
+                    "status_code": exc.status_code,
+                    "detail": str(exc.detail),
+                    "process_ms": round(process_ms, 2),
+                },
+            )
+            response = JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            response.headers["X-Request-ID"] = request_id
+            await response(scope, receive, send)
+        except Exception:  # noqa: BLE001
+            process_ms = (time.perf_counter() - start_time) * 1000
+            logger.exception(
+                "Unhandled error",
+                extra={
+                    "request_id": request_id,
+                    "method": scope.get("method"),
+                    "path": scope.get("path"),
+                    "process_ms": round(process_ms, 2),
+                },
+            )
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": "Error interno en el servidor. Intente nuevamente."},
+            )
+            response.headers["X-Request-ID"] = request_id
+            await response(scope, receive, send)
+
+
+class SpaForReactRoutesASGIMiddleware:
+    def __init__(self, app: ASGIApp, frontend_root: Path) -> None:
+        self.app = app
+        self.frontend_root = frontend_root
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "GET")
+        path = (scope.get("path") or "").rstrip("/")
+
+        # Headers (lowercase) -> string
+        headers = {}
+        for k, v in (scope.get("headers") or []):
+            try:
+                headers[k.decode("latin-1").lower()] = v.decode("latin-1")
+            except Exception:
+                continue
+        accept = headers.get("accept", "")
+
+        # Excepciones específicas LOG-01 (no interferir con endpoints)
+        if path.startswith("/logistica/log01/history"):
+            if method != "GET" or "text/html" not in accept or path != "/logistica/log01/history":
+                await self.app(scope, receive, send)
+                return
+
+        if (
+            path.startswith("/logistica/log01/progress")
+            or path.startswith("/logistica/log01/poll")
+            or path.startswith("/logistica/log01/start")
+            or path.startswith("/logistica/log01/upload")
+            or path.startswith("/logistica/log01/result")
+            or path.startswith("/logistica/log01/cancel")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        # Navegación SPA (incluye logistica)
+        spa_paths = {"/home", "/oi", "/oi/list", "/login", "/password", "/users", "/admin/permisos"}
+
+        if (
+            method == "GET"
+            and "text/html" in accept
+            and (path in spa_paths or path.startswith("/oi") or path.startswith("/admin") or path.startswith("/logistica"))
+        ):
+            index_file = self.frontend_root / "index.html"
+            if index_file.exists():
+                return await FileResponse(index_file)(scope, receive, send)
+
+        await self.app(scope, receive, send)
+
+
+# Orden:
+# - SPA debe ir "adentro" (para decidir rutas HTML)
+# - Logging/Error debe ir "afuera" (para loguear también respuestas SPA)
+app.add_middleware(SpaForReactRoutesASGIMiddleware, frontend_root=frontend_root)
+app.add_middleware(LoggingAndErrorASGIMiddleware)

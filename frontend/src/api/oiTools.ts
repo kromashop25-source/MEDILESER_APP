@@ -563,6 +563,13 @@ export type Log02CopyConformesStartResponse = {
   operation_id: string;
 };
 
+export type Log02CopyConformesPollResponse = {
+  cursor_next: number;
+  events: any[];
+  done: boolean;
+  summary?: unknown;
+};
+
 export async function log02CopyConformesStart(
   payload: Log02CopyConformesStarRequest,
   signal?: AbortSignal
@@ -599,6 +606,29 @@ export async function subscribeLog02CopyConformesProgress(
   }
 
   await readNdjsonStream(res, onEvent);
+}
+
+export async function pollLog02CopyConformesProgress(
+  operationId: string,
+  cursor: number,
+  signal?: AbortSignal
+): Promise<Log02CopyConformesPollResponse> {
+  const url = buildUrl(
+    `/logistica/log02/copiar-conformes/poll/${operationId}?cursor=${encodeURIComponent(cursor)}`
+  );
+  const token = getAuth()?.token;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    signal,
+  });
+
+  if (!res.ok) {
+    const code = res.headers.get("X-Code") ?? undefined;
+    throw asErrorWithCode(`No se pudo hacer poll (${res.status})`, res.status, code);
+  }
+
+  return (await res.json()) as Log02CopyConformesPollResponse;
 }
 
 export async function log02CopyConformesCancel(operationId: string): Promise<void> {

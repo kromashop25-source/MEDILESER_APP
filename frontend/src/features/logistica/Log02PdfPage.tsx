@@ -11,6 +11,7 @@ import {
   type Log01HistoryListItem,
   log02CopyConformesStart,
   subscribeLog02CopyConformesProgress,
+  pollLog02CopyConformesProgress,
   log02CopyConformesCancel,
 } from "../../api/oiTools";
 
@@ -96,6 +97,13 @@ export default function Log02PdfPage() {
   const copyAbortRef = useRef<AbortController | null>(null);
   const copyCancelRef = useRef<boolean>(false);
   const copyCompletedRef = useRef<boolean>(false);
+  const pollTimerRef = useRef<number | null>(null);
+  const pollAbortRef = useRef<AbortController | null>(null);
+  const pollInFlightRef = useRef<boolean>(false);
+  const pollingActiveRef = useRef<boolean>(false);
+  const pollCursorRef = useRef<number>(-1);
+  const lastCursorRef = useRef<number>(-1);
+  const pollOperationIdRef = useRef<string>("");
   const mountedRef = useRef<boolean>(true);
 
 
@@ -150,6 +158,7 @@ export default function Log02PdfPage() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      stopPolling("unmount");
       if (copyCancelRef.current || copyCompletedRef.current) {
         try {
           copyAbortRef.current?.abort();
@@ -467,6 +476,15 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     return !!resultado?.ok && !!runSelected?.id && !copying;
   }, [resultado?.ok, runSelected?.id, copying]);
 
+  function shouldSkipEvent(ev: any) {
+    const cursor = ev?.cursor;
+    if (typeof cursor !== "number") return false;
+    if (cursor <= lastCursorRef.current) return true;
+    lastCursorRef.current = cursor;
+    if (cursor > pollCursorRef.current) pollCursorRef.current = cursor;
+    return false;
+  }
+
   function aplicarProgreso(ev: any) {
     const raw = ev?.percent ?? ev?.progress;
     const pct = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
@@ -484,6 +502,14 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       const stage = ev?.stage ? String(ev.stage) : type;
       if (stage) setCopyStage(stage);
       if (typeof ev?.message === "string" && ev.message) setCopyMessage(ev.message);
+      if (stage) {
+        const stageNorm = stage.toLowerCase();
+        if (stageNorm === "cancelado" || stageNorm === "cancelled") {
+          copyCancelRef.current = true;
+          setCopying(false);
+          stopPolling("cancelled");
+        }
+      }
       return;
     }
     if (type === "oi") {
@@ -509,6 +535,8 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       setCopyErrors((prev) => [...prev, { message: msg}]);
       setCopyMessage(msg);
       setCopyStage("error");
+      setCopying(false);
+      stopPolling("error_event");
       return;
     }
     if (type === "complete") {
@@ -518,8 +546,89 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       setCopyProgress(100);
       setCopyAudit(ev?.audit ?? null);
       setCopying(false);
+      stopPolling("complete");
       return;
     }
+  }
+
+  function handleCopyEvent(ev: any) {
+    if (shouldSkipEvent(ev)) return;
+    onCopyEvent(ev);
+  }
+
+  function stopPolling(reason: string) {
+    void reason;
+    if (!pollingActiveRef.current) return;
+    pollingActiveRef.current = false;
+    if (pollTimerRef.current != null) {
+      window.clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    try {
+      pollAbortRef.current?.abort();
+    } catch {}
+    pollAbortRef.current = null;
+    pollInFlightRef.current = false;
+  }
+
+  function schedulePoll(delayMs: number) {
+    if (!pollingActiveRef.current) return;
+    if (pollTimerRef.current != null) window.clearTimeout(pollTimerRef.current);
+    pollTimerRef.current = window.setTimeout(() => {
+      void pollOnce();
+    }, delayMs);
+  }
+
+  async function pollOnce() {
+    if (!pollingActiveRef.current || pollInFlightRef.current) return;
+    const operationId = pollOperationIdRef.current;
+    if (!operationId) {
+      stopPolling("no_operation_id");
+      return;
+    }
+    pollInFlightRef.current = true;
+    try {
+      const res = await pollLog02CopyConformesProgress(
+        operationId,
+        pollCursorRef.current,
+        pollAbortRef.current?.signal
+      );
+      pollCursorRef.current = res.cursor_next;
+      for (const ev of res.events || []) {
+        handleCopyEvent(ev);
+      }
+      if (res.done && (!res.events || res.events.length === 0)) {
+        stopPolling("done");
+        return;
+      }
+    } catch (err) {
+      if (copyCancelRef.current || copyCompletedRef.current) return;
+      const name = (err as any)?.name as string | undefined;
+      if (name !== "AbortError") {
+        const ax = err as AxiosError<any>;
+        const detail =
+          (ax.response?.data?.detail as string) ||
+          ax.message ||
+          "No se pudo leer el progreso.";
+        setCopyErrors((prev) => [...prev, { message: detail }]);
+        setCopyStage("error");
+        setCopyMessage(detail);
+        setCopying(false);
+        stopPolling("poll_error");
+      }
+    } finally {
+      pollInFlightRef.current = false;
+      if (pollingActiveRef.current) schedulePoll(350);
+    }
+  }
+
+  function startPolling(operationId: string, reason: string) {
+    void reason;
+    if (pollingActiveRef.current) return;
+    pollingActiveRef.current = true;
+    pollOperationIdRef.current = operationId;
+    pollAbortRef.current = new AbortController();
+    schedulePoll(0);
   }
 
   async function iniciarCopiado() {
@@ -551,6 +660,9 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     setCopyProgress(0);
     setCopyOi("");
     setCopyOperationId("");
+    stopPolling("reset");
+    pollCursorRef.current = -1;
+    lastCursorRef.current = -1;
     setCopying(true);
 
     try {
@@ -565,15 +677,25 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
       const ac = new AbortController();
       copyAbortRef.current = ac;
-      
-      await subscribeLog02CopyConformesProgress(
+
+      const streamPromise = subscribeLog02CopyConformesProgress(
         opId,
         (ev) => {
           if (!mountedRef.current) return;
-          onCopyEvent(ev as any);
+          handleCopyEvent(ev as any);
         },
         ac.signal
       );
+      streamPromise
+        .then(() => {
+          if (!copyCompletedRef.current && !copyCancelRef.current) {
+            startPolling(opId, "stream_closed");
+          }
+        })
+        .catch((err) => {
+          if (isAbortLikeError(err) || copyCancelRef.current || copyCompletedRef.current) return;
+          startPolling(opId, "stream_error");
+        });
     } catch (e) {
       if (copyCancelRef.current || copyCompletedRef.current || isAbortLikeError(e)) return;
       const ax = e as AxiosError<any>;
@@ -584,8 +706,8 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         setCopyErrors((prev) => [...prev, { message: detail}]);
         setCopyStage("error");
         setCopyMessage(detail);
-    } finally {
-      if (mountedRef.current) setCopying(false);
+      stopPolling("start_error");
+      setCopying(false);
     }
   }
 
@@ -600,6 +722,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     try {
       copyAbortRef.current?.abort();
     } catch {}
+    stopPolling("user_cancel");
     setCopying(false);
     setCopyStage("cancelado");
     setCopyMessage("Cancelado por el usuario.");
