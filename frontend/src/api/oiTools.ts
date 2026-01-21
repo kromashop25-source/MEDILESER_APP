@@ -96,7 +96,22 @@ async function readNdjsonStream(
         buffer = buffer.slice(idx + 1);
         if (!line) continue;
         try {
-          onEvent(JSON.parse(line));
+          const ev = JSON.parse(line) as any;
+
+          // (Opcional) si no quieres que la UI vea heartbeats:
+          // if (ev?.type === "ping") continue;
+
+          // Normalizar nombres de progreso para compatibilidad:
+          // - backend puede emitir "progress"
+          // - algunas UIs solo consumen "percent"
+          if (ev && ev.progress != null && ev.percent == null) {
+            ev.percent = ev.progress;
+          }
+          if (ev && ev.percent != null && ev.progress == null) {
+            ev.progress = ev.percent;
+          }
+
+          onEvent(ev);
         } catch {
           // ignore malformed lines
         }
@@ -106,7 +121,19 @@ async function readNdjsonStream(
     const tail = buffer.trim();
     if (tail) {
       try {
-        onEvent(JSON.parse(tail));
+        const ev = JSON.parse(tail) as any;
+
+        // (Opcional) ignorar heartbeats:
+        // if (ev?.type === "ping") return;
+
+        if (ev && ev.progress != null && ev.percent == null) {
+          ev.percent = ev.progress;
+        }
+        if (ev && ev.percent != null && ev.progress == null) {
+          ev.progress = ev.percent;
+        }
+
+        onEvent(ev);
       } catch {
         // ignore malformed lines
       }
@@ -497,7 +524,7 @@ export async function log01HistoryDelete(runId: number, reason?: string): Promis
 // LOG-02 (Logística) - Validación rutas UNC
 // =========================================
 export type Log02RutasCheck = {
-  ruta: String;
+  ruta: string;
   existe: boolean;
   es_directorio: boolean;
   lectura: boolean;
@@ -553,7 +580,7 @@ export async function log02ValidarRutasUnc(
 // ============================================
 // LOG-02 (PB-LOG-015) - Copiar PDFs conformes
 // ============================================
-export type Log02CopyConformesStarRequest = {
+export type Log02CopyConformesStartRequest = {
   run_id: number;
   rutas_origen: string[];
   ruta_destino: string;
@@ -571,7 +598,7 @@ export type Log02CopyConformesPollResponse = {
 };
 
 export async function log02CopyConformesStart(
-  payload: Log02CopyConformesStarRequest,
+  payload: Log02CopyConformesStartRequest,
   signal?: AbortSignal
 ): Promise<Log02CopyConformesStartResponse> {
   const res = await api.post<Log02CopyConformesStartResponse>(

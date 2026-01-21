@@ -189,6 +189,7 @@ function limpiarConfiguracion() {
   }
 }
 
+
 function quitarDuplicadosUI() {
   setRutasOrigen((prev) => {
     const seen = new Set<string>();
@@ -241,8 +242,8 @@ async function cargarUltimasCorridasExitosas(limit = 5) {
     setRuns(items);
     if (!runSelected?.id && items.length) {
       setRunSelected(items[0]);
-    } else if (!runSelected?.id && !items.length) {
-      const match = items.find((x) => x.id === runSelected?.id);
+    } else if (runSelected?.id && items.length) {
+      const match = items.find((x) => x.id === runSelected.id);
       if (match) setRunSelected(match);
     }
   } catch (e) {
@@ -495,6 +496,10 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
   }
 
   function onCopyEvent(ev: any) {
+    // --- DEBUG START ---
+    console.log("Evento recibido:", ev); 
+    // --- DEBUG END ---
+    
     const type = String(ev?.type || "");
     aplicarProgreso(ev);
 
@@ -655,7 +660,6 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     setCopyWarnings([]);
     setCopyAudit(null);
     setCopyStage("inicio");
-    setCopyMessage("inicio");
     setCopyMessage("Iniciando copiado...");
     setCopyProgress(0);
     setCopyOi("");
