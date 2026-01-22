@@ -25,6 +25,17 @@ type ExplorerMode = "origen" | "destino";
 
 const LS_KEY = "medileser_log02_rutas_v1";
 const PERU_TZ = "America/Lima";
+const DEBUG_PROGRESS =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).get("debugProgress") === "1";
+const DEBUG_PROGRESS_PREFIX = "[log02-copy-progress]";
+const STREAM_SILENCE_MS = 2000;
+const POLL_INTERVAL_MS = 500;
+
+function debugProgress(...args: any[]) {
+  if (!DEBUG_PROGRESS) return;
+  console.log(DEBUG_PROGRESS_PREFIX, ...args);
+}
 
 function formatDateTime(value?: string | null): string {
   if (!value) return "N/D";
@@ -104,6 +115,10 @@ export default function Log02PdfPage() {
   const pollCursorRef = useRef<number>(-1);
   const lastCursorRef = useRef<number>(-1);
   const pollOperationIdRef = useRef<string>("");
+  const streamWatchdogRef = useRef<number | null>(null);
+  const streamActiveRef = useRef<boolean>(false);
+  const streamOperationIdRef = useRef<string>("");
+  const lastStreamEventAtRef = useRef<number>(0);
   const mountedRef = useRef<boolean>(true);
 
 
@@ -159,11 +174,7 @@ export default function Log02PdfPage() {
     return () => {
       mountedRef.current = false;
       stopPolling("unmount");
-      if (copyCancelRef.current || copyCompletedRef.current) {
-        try {
-          copyAbortRef.current?.abort();
-        } catch {}
-      }
+      stopStream("unmount");
     };
   }, []);
 
@@ -477,9 +488,18 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     return !!resultado?.ok && !!runSelected?.id && !copying;
   }, [resultado?.ok, runSelected?.id, copying]);
 
-  function shouldSkipEvent(ev: any) {
-    const cursor = ev?.cursor;
-    if (typeof cursor !== "number") return false;
+  function getEventCursor(ev: any): number | null {
+    const raw = ev?.cursor;
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (typeof raw === "string") {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  }
+
+  function shouldSkipEvent(cursor: number | null): boolean {
+    if (cursor == null) return false;
     if (cursor <= lastCursorRef.current) return true;
     lastCursorRef.current = cursor;
     if (cursor > pollCursorRef.current) pollCursorRef.current = cursor;
@@ -487,19 +507,20 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
   }
 
   function aplicarProgreso(ev: any) {
-    const raw = ev?.percent ?? ev?.progress;
+    const raw = ev?.progress ?? ev?.percent;
     const pct = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
     if (Number.isFinite(pct)) {
       const safe = Math.max(0, Math.min(100, pct));
-      setCopyProgress(safe);
+      setCopyProgress((prev) => {
+        if (DEBUG_PROGRESS && prev !== safe) {
+          debugProgress("setCopyProgress", { prev, next: safe });
+        }
+        return safe;
+      });
     }
   }
 
   function onCopyEvent(ev: any) {
-    // --- DEBUG START ---
-    console.log("Evento recibido:", ev); 
-    // --- DEBUG END ---
-    
     const type = String(ev?.type || "");
     aplicarProgreso(ev);
 
@@ -513,6 +534,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
           copyCancelRef.current = true;
           setCopying(false);
           stopPolling("cancelled");
+          stopStream("cancelled");
         }
       }
       return;
@@ -542,6 +564,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       setCopyStage("error");
       setCopying(false);
       stopPolling("error_event");
+      stopStream("error_event");
       return;
     }
     if (type === "complete") {
@@ -552,12 +575,32 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       setCopyAudit(ev?.audit ?? null);
       setCopying(false);
       stopPolling("complete");
+      stopStream("complete");
       return;
     }
   }
 
-  function handleCopyEvent(ev: any) {
-    if (shouldSkipEvent(ev)) return;
+  function handleCopyEvent(ev: any, source: "stream" | "poll" = "stream") {
+    const cursor = getEventCursor(ev);
+    const type = String(ev?.type || "");
+    const stage = ev?.stage ? String(ev.stage) : "";
+    if (DEBUG_PROGRESS) {
+      debugProgress("event", {
+        source,
+        type,
+        stage,
+        progress: ev?.progress,
+        percent: ev?.percent,
+        cursor,
+      });
+    }
+    const lastCursor = lastCursorRef.current;
+    if (shouldSkipEvent(cursor)) {
+      if (DEBUG_PROGRESS) {
+        debugProgress("skip_event", { source, cursor, lastCursor });
+      }
+      return;
+    }
     onCopyEvent(ev);
   }
 
@@ -574,6 +617,51 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     } catch {}
     pollAbortRef.current = null;
     pollInFlightRef.current = false;
+  }
+
+  function clearStreamWatchdog() {
+    if (streamWatchdogRef.current != null) {
+      window.clearTimeout(streamWatchdogRef.current);
+      streamWatchdogRef.current = null;
+    }
+  }
+
+  function markStreamClosed(reason: string) {
+    void reason;
+    streamActiveRef.current = false;
+    streamOperationIdRef.current = "";
+    clearStreamWatchdog();
+  }
+
+  function stopStream(reason: string) {
+    void reason;
+    markStreamClosed(reason);
+    try {
+      copyAbortRef.current?.abort();
+    } catch {}
+  }
+
+  function scheduleStreamWatchdog(operationId: string) {
+    if (!streamActiveRef.current) return;
+    clearStreamWatchdog();
+    streamWatchdogRef.current = window.setTimeout(() => {
+      if (!streamActiveRef.current) return;
+      const idleMs = Date.now() - lastStreamEventAtRef.current;
+      if (idleMs >= STREAM_SILENCE_MS) {
+        debugProgress("stream_silent_fallback", { idleMs, operationId });
+        stopStream("stream_silent");
+        if (!copyCompletedRef.current && !copyCancelRef.current) {
+          startPolling(operationId, "stream_silent");
+        }
+        return;
+      }
+      scheduleStreamWatchdog(operationId);
+    }, STREAM_SILENCE_MS);
+  }
+
+  function noteStreamEvent(operationId: string) {
+    lastStreamEventAtRef.current = Date.now();
+    if (streamActiveRef.current) scheduleStreamWatchdog(operationId);
   }
 
   function schedulePoll(delayMs: number) {
@@ -600,7 +688,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       );
       pollCursorRef.current = res.cursor_next;
       for (const ev of res.events || []) {
-        handleCopyEvent(ev);
+        handleCopyEvent(ev, "poll");
       }
       if (res.done && (!res.events || res.events.length === 0)) {
         stopPolling("done");
@@ -623,7 +711,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       }
     } finally {
       pollInFlightRef.current = false;
-      if (pollingActiveRef.current) schedulePoll(350);
+      if (pollingActiveRef.current) schedulePoll(POLL_INTERVAL_MS);
     }
   }
 
@@ -633,6 +721,9 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     pollingActiveRef.current = true;
     pollOperationIdRef.current = operationId;
     pollAbortRef.current = new AbortController();
+    if (DEBUG_PROGRESS) {
+      debugProgress("start_polling", { operationId, reason });
+    }
     schedulePoll(0);
   }
 
@@ -664,6 +755,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     setCopyProgress(0);
     setCopyOi("");
     setCopyOperationId("");
+    stopStream("reset");
     stopPolling("reset");
     pollCursorRef.current = -1;
     lastCursorRef.current = -1;
@@ -681,23 +773,33 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
       const ac = new AbortController();
       copyAbortRef.current = ac;
+      streamActiveRef.current = true;
+      streamOperationIdRef.current = opId;
+      lastStreamEventAtRef.current = Date.now();
+      scheduleStreamWatchdog(opId);
 
       const streamPromise = subscribeLog02CopyConformesProgress(
         opId,
         (ev) => {
           if (!mountedRef.current) return;
-          handleCopyEvent(ev as any);
+          noteStreamEvent(opId);
+          handleCopyEvent(ev as any, "stream");
         },
         ac.signal
       );
       streamPromise
         .then(() => {
+          markStreamClosed("stream_closed");
           if (!copyCompletedRef.current && !copyCancelRef.current) {
             startPolling(opId, "stream_closed");
           }
         })
         .catch((err) => {
-          if (isAbortLikeError(err) || copyCancelRef.current || copyCompletedRef.current) return;
+          if (isAbortLikeError(err) || copyCancelRef.current || copyCompletedRef.current) {
+            markStreamClosed("stream_aborted");
+            return;
+          }
+          markStreamClosed("stream_error");
           startPolling(opId, "stream_error");
         });
     } catch (e) {
@@ -710,6 +812,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         setCopyErrors((prev) => [...prev, { message: detail}]);
         setCopyStage("error");
         setCopyMessage(detail);
+      stopStream("start_error");
       stopPolling("start_error");
       setCopying(false);
     }
@@ -726,6 +829,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     try {
       copyAbortRef.current?.abort();
     } catch {}
+    stopStream("user_cancel");
     stopPolling("user_cancel");
     setCopying(false);
     setCopyStage("cancelado");

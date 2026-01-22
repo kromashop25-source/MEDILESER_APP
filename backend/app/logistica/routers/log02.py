@@ -892,7 +892,7 @@ def _ndjson_stream(operation_id: str):
 def log02_copiar_conformes_progress(operation_id: str):
     # Headers anti-buffering: ayudan si hay proxies/middlewares (p.ej. GZip) que agrupan chunks.
     headers = {
-        "Cache-Control": "no-store",
+        "Cache-Control": "no-cache, no-store, must-revalidate, no-transform",
         "Pragma": "no-cache",
         "X-Accel-Buffering": "no",
         "Connection": "keep-alive",
