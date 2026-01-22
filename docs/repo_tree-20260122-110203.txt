@@ -289,8 +289,8 @@ MEDILESER_APP
 │   │   │       │   ├── ui.html
 │   │   │       │   └── vector-maps.html
 │   │   │       ├── assets
-│   │   │       │   ├── index-BxqLcx0v.css
-│   │   │       │   └── index-DYJD8Iem.js
+│   │   │       │   ├── index-1DGdt3TH.js
+│   │   │       │   └── index-BxqLcx0v.css
 │   │   │       ├── medileser
 │   │   │       │   ├── banner.jpg
 │   │   │       │   ├── logo-vertical.jpg
@@ -307,6 +307,9 @@ MEDILESER_APP
 │   │   ├── logistica
 │   │   │   └── log01_runs
 │   │   │       ├── 1
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
 │   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
@@ -336,13 +339,35 @@ MEDILESER_APP
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
 │   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
 │   │   │       ├── 14
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
 │   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
 │   │   │       ├── 15
+│   │   │       │   ├── BD_AA25131916_AL_AA25133604.xlsx
+│   │   │       │   ├── BD_AA25131916_AL_AA25133604__MANIFIESTO.json
+│   │   │       │   ├── BD_AA25131916_AL_AA25133604__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
 │   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 16
+│   │   │       │   ├── BD_AA25128701_AL_AA25129900.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25129900__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25129900__NO_CONFORME_FINAL.json
+│   │   │       ├── 17
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       ├── 18
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       ├── 19
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
 │   │   │       ├── 2
 │   │   │       │   ├── BD_AA25128701_AL_AA25130500.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25130500__MANIFIESTO.json
@@ -424,9 +449,7 @@ MEDILESER_APP
 │   ├── MEDILESER_APP_BITACORA _SCRUM.xlsx
 │   ├── Pruebas_Desempeño_Excel.md
 │   ├── Pruebas_E2E_Excel.md
-│   ├── repo_tree-20260112-131628.txt
-│   ├── repo_tree-20260115-091159.txt
-│   └── repo_tree-20260119-132522.txt
+│   └── repo_tree-20260120-151732.txt
 ├── frontend
 │   ├── public
 │   │   ├── adminator

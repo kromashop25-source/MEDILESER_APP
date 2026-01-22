@@ -120,6 +120,8 @@ export default function Log02PdfPage() {
   const streamOperationIdRef = useRef<string>("");
   const lastStreamEventAtRef = useRef<number>(0);
   const mountedRef = useRef<boolean>(true);
+  const activeOperationIdRef = useRef<string>("");
+
 
 
   // Explorador (modal inline)
@@ -173,6 +175,7 @@ export default function Log02PdfPage() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      activeOperationIdRef.current = "";
       stopPolling("unmount");
       stopStream("unmount");
     };
@@ -532,6 +535,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         const stageNorm = stage.toLowerCase();
         if (stageNorm === "cancelado" || stageNorm === "cancelled") {
           copyCancelRef.current = true;
+          activeOperationIdRef.current = "";        
           setCopying(false);
           stopPolling("cancelled");
           stopStream("cancelled");
@@ -605,7 +609,9 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
   }
 
   function stopPolling(reason: string) {
-    void reason;
+    if (DEBUG_PROGRESS) {
+      debugProgress("stop_polling", { reason, operationId: pollOperationIdRef.current});
+    }
     if (!pollingActiveRef.current) return;
     pollingActiveRef.current = false;
     if (pollTimerRef.current != null) {
@@ -617,6 +623,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     } catch {}
     pollAbortRef.current = null;
     pollInFlightRef.current = false;
+    pollOperationIdRef.current = "";
   }
 
   function clearStreamWatchdog() {
@@ -627,18 +634,23 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
   }
 
   function markStreamClosed(reason: string) {
-    void reason;
+    if (DEBUG_PROGRESS) {
+      debugProgress("stream_closed", { reason, operationId: streamOperationIdRef.current});
+    }
     streamActiveRef.current = false;
     streamOperationIdRef.current = "";
     clearStreamWatchdog();
   }
 
   function stopStream(reason: string) {
-    void reason;
+    if (DEBUG_PROGRESS) {
+      debugProgress("stop_stream", { reason, operationId: streamOperationIdRef.current});
+    }
     markStreamClosed(reason);
     try {
       copyAbortRef.current?.abort();
     } catch {}
+    copyAbortRef.current = null;
   }
 
   function scheduleStreamWatchdog(operationId: string) {
@@ -679,6 +691,10 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       stopPolling("no_operation_id");
       return;
     }
+    if (activeOperationIdRef.current !== operationId) {
+      stopPolling("operation_mismatch");
+      return;
+    }
     pollInFlightRef.current = true;
     try {
       const res = await pollLog02CopyConformesProgress(
@@ -717,10 +733,13 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
   function startPolling(operationId: string, reason: string) {
     void reason;
+    if (activeOperationIdRef.current !== operationId) return;
     if (pollingActiveRef.current) return;
     pollingActiveRef.current = true;
     pollOperationIdRef.current = operationId;
     pollAbortRef.current = new AbortController();
+    // Asegurar cursor coherente si el stream alcanzó a emitir algo antes del fallback.
+    pollCursorRef.current = Math.max(pollCursorRef.current, lastCursorRef.current);
     if (DEBUG_PROGRESS) {
       debugProgress("start_polling", { operationId, reason });
     }
@@ -757,6 +776,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     setCopyOperationId("");
     stopStream("reset");
     stopPolling("reset");
+    activeOperationIdRef.current = "";
     pollCursorRef.current = -1;
     lastCursorRef.current = -1;
     setCopying(true);
@@ -770,6 +790,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
       const opId = start.operation_id;
       setCopyOperationId(opId);
+      activeOperationIdRef.current = opId;
 
       const ac = new AbortController();
       copyAbortRef.current = ac;
@@ -782,6 +803,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         opId,
         (ev) => {
           if (!mountedRef.current) return;
+          if (activeOperationIdRef.current !== opId) return;
           noteStreamEvent(opId);
           handleCopyEvent(ev as any, "stream");
         },
@@ -789,12 +811,14 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       );
       streamPromise
         .then(() => {
+          if (activeOperationIdRef.current !== opId) return;
           markStreamClosed("stream_closed");
           if (!copyCompletedRef.current && !copyCancelRef.current) {
             startPolling(opId, "stream_closed");
           }
         })
         .catch((err) => {
+          if (activeOperationIdRef.current !== opId) return;
           if (isAbortLikeError(err) || copyCancelRef.current || copyCompletedRef.current) {
             markStreamClosed("stream_aborted");
             return;
@@ -821,6 +845,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
   async function cancelarCopiado() {
     if (!copyOperationId) return;
     copyCancelRef.current = true;
+    activeOperationIdRef.current = "";
     try {
       await log02CopyConformesCancel(copyOperationId);
     } catch {
