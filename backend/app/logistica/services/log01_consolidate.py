@@ -1117,7 +1117,7 @@ def process_log01_files(
     }
     no_conforme_json = json.dumps(no_conforme_payload, ensure_ascii=False, indent=2).encode("utf-8")
 
-    # Manifiesto por OI (listas de NO CONFORME para LOG-02)
+    # Manifiesto por OI (listas para LOG-02)
     by_oi: Dict[tuple[int, int], Dict[str, Any]] = {}
     for serie, info in series.items():
         oi_key = (info.oi_year, info.oi_num)
@@ -1128,14 +1128,20 @@ def process_log01_files(
                 "oi_num": info.oi_num,
                 "oi_year": info.oi_year,
                 "series_no_conforme": [],
+                "series_conforme": [],
             },
         )
         if info.estado == "NO CONFORME":
             bucket["series_no_conforme"].append(serie)
+        else:
+            bucket["series_conforme"].append(serie)
 
     for bucket in by_oi.values():
         bucket["series_no_conforme"].sort(key=_natural_key)
         bucket["total_no_conforme"] = len(bucket["series_no_conforme"])
+        bucket["series_conforme"].sort(key=_natural_key)
+        bucket["total_conforme"] = len(bucket["series_conforme"])
+        bucket["total_series"] = bucket["total_no_conforme"] + bucket["total_conforme"]
 
     by_oi_origen_map: Dict[str, Dict[str, Any]] = {}
     for a in audit_by_oi:

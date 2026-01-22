@@ -13,7 +13,7 @@ class ProgressChannel:
     __slots__ = ("queue", "history", "closed", "subscribers", "last_touch", "seq")
 
     def __init__(self) -> None:
-        self.queue: "queue.SimpleQueue[Any]" = queue.SimpleQueue()
+        self.queue: "queue.Queue[Any]" = queue.Queue()
         self.history: List[Dict[str, Any]] = []
         self.closed: bool = False
         self.subscribers: int = 0
@@ -184,7 +184,20 @@ class ProgressManager:
 
     @staticmethod
     def encode_event(event: Dict[str, Any]) -> bytes:
-        return (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+        """Codifica un evento como una sola línea NDJSON.
+
+        Nota: si tienes GZipMiddleware (u otro proxy con buffering) activado, es común que el
+        navegador no reciba chunks pequeños en tiempo real. Para forzar flush temprano, se
+        rellena cada línea a un tamaño mínimo (solo en el wire; el dict del evento NO cambia).
+        """
+        s = json.dumps(event, ensure_ascii=False)
+
+        # Padding anti-buffering (<= mínimo típico de GZipMiddleware: 500bytes)
+        MIN_CHUNK = 1024
+        if len(s) < MIN_CHUNK:
+            s = s + (" " * (MIN_CHUNK - len(s)))
+
+        return (s + "\n").encode("utf-8")
 
 
 progress_manager = ProgressManager()

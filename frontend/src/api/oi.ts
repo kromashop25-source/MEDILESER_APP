@@ -75,6 +75,18 @@ export async function updateOI(id: number, payload: OIUpdatePayload): Promise<OI
   }
 }
 
+export async function patchOiCode(oiId: number, code: string): Promise<OIRead> {
+  try {
+    const { data } = await api.patch<OIRead>(`/oi/${oiId}/code`, { code });
+    return data;
+  } catch (e: any) {
+    const msg = e?.response?.data?.detail ?? e?.message ?? "No se pudo actualizar el codigo de la OI";
+    const err = new Error(msg) as Error & { status?: number };
+    err.status = e?.response?.status;
+    throw err;
+  }
+}
+
 export async function restoreOiUpdatedAt(
   oiId: number,
   payload: OIRestoreUpdatedAtPayload

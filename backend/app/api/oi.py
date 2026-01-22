@@ -80,6 +80,9 @@ def _get_session_from_header(authorization: str | None, *, allow_expired: bool =
 
 OI_CODE_RE = re.compile(r"^OI-\d{4}-\d{4}$")
 
+class OICodeUpdate(BaseModel):
+    code: str
+
 def _oi_bancada_onclause() -> ColumnElement:
     return cast(ColumnElement, Bancada.oi_id == OI.id)
 
@@ -687,13 +690,6 @@ def update_oi(
                 status_code=422,
                 detail="Código OI inválido (formato OI-####-YYYY).",
             )
-        existing_id = session.exec(
-            select(OI.id)
-            .where(OI.code == code_payload)
-            .where(OI.id != oi_id)
-        ).first()
-        if existing_id is not None:
-            raise HTTPException(status_code=409, detail="OI ya existe.")
         oi.code = code_payload
 
     presion = pma_to_pressure(payload.pma)
@@ -712,6 +708,42 @@ def update_oi(
     session.add(oi)
     session.commit()
     session.refresh(oi)
+    return _build_oi_read(oi, session, sess)
+
+
+@router.patch("/{oi_id:int}/code", response_model=OIRead)
+def update_oi_code(
+    oi_id: int,
+    payload: OICodeUpdate,
+    session: Session = Depends(get_session),
+    authorization: str | None = Header(default=None),
+):
+    oi = session.get(OI, oi_id)
+    if not oi:
+        raise HTTPException(status_code=404, detail="OI no encontrada")
+
+    sess = _get_session_from_header(authorization)
+    _ensure_oi_access(oi, sess)
+    if not _is_admin(sess):
+        raise HTTPException(status_code=403, detail="Solo administradores pueden modificar el codigo de OI.")
+    lock_state = _ensure_lock_allows_write(oi, sess, session)
+
+    code_payload = payload.code.strip() if payload.code else ""
+    if not OI_CODE_RE.match(code_payload):
+        raise HTTPException(
+            status_code=422,
+            detail="Codigo OI invalido (formato OI-####-YYYY).",
+        )
+
+    if code_payload != oi.code:
+        now = datetime.utcnow()
+        oi.code = code_payload
+        oi.updated_at = now
+        _touch_or_take_lock(oi, sess, lock_state)
+        session.add(oi)
+        session.commit()
+        session.refresh(oi)
+
     return _build_oi_read(oi, session, sess)
 
 

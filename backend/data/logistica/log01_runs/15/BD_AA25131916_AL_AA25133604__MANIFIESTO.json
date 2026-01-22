@@ -1,0 +1,68 @@
+{
+  "operation_id": "e8532aeb-2bfe-4d0f-a1f6-e78534ca8970",
+  "generated_at": "2026-01-20T21:27:37Z",
+  "output_excel": "BD_AA25131916_AL_AA25133604.xlsx",
+  "source": "AUTO",
+  "totals": {
+    "files_total": 2,
+    "files_ok": 2,
+    "files_error": 0,
+    "rows_read": 3,
+    "series_total_dedup": 3,
+    "series_conformes": 3,
+    "series_no_conformes_final": 0,
+    "series_duplicates_eliminated": 0,
+    "files_rejected": 0,
+    "origin_no_conformes_total": 0,
+    "final_no_conformes_total": 0
+  },
+  "by_oi_origen": [
+    {
+      "oi": "OI-1231-2025",
+      "oi_num": 1231,
+      "oi_year": 2025,
+      "source_files": [
+        "Base Comercial OI-1231-2025.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1232-2025",
+      "oi_num": 1232,
+      "oi_year": 2025,
+      "source_files": [
+        "Base Comercial OI-1232-2025.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    }
+  ],
+  "by_oi": [
+    {
+      "oi": "OI-1231-2025",
+      "oi_num": 1231,
+      "oi_year": 2025,
+      "series_no_conforme": [],
+      "series_conforme": [
+        "AA25133604"
+      ],
+      "total_no_conforme": 0,
+      "total_conforme": 1,
+      "total_series": 1
+    },
+    {
+      "oi": "OI-1232-2025",
+      "oi_num": 1232,
+      "oi_year": 2025,
+      "series_no_conforme": [],
+      "series_conforme": [
+        "AA25131916",
+        "AA25132119"
+      ],
+      "total_no_conforme": 0,
+      "total_conforme": 2,
+      "total_series": 2
+    }
+  ]
+}
