@@ -67,6 +67,33 @@ function isAbortLikeError(err: unknown): boolean {
   return name === "AbortError" || /aborted/i.test(msg) || /abort/i.test(msg);
 }
 
+function isTypingElement(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = (el.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return true;
+  // contenteditable (por si en tu UI existe alguno)
+  if ((el as any).isContentEditable) return true;
+  return false;
+}
+
+async function copyTextSafe(txt?: string | null) {
+   const value = (txt || "").trim();
+   if (!value) return;
+   try {
+     await navigator.clipboard.writeText(value);
+     return;
+   } catch {
+     // fallback simple
+     const ta = document.createElement("textarea");
+     ta.value = value;
+     document.body.appendChild(ta);
+     ta.select();
+     document.execCommand("copy");
+     document.body.removeChild(ta);
+   }
+ }
+
 export default function Log02PdfPage() {
 
   const [rutasOrigen, setRutasOrigen] = useState<string[]>([""]);
@@ -135,6 +162,27 @@ export default function Log02PdfPage() {
   const [folders, setFolders] = useState<Log02ExplorerListItem[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [explorerError, setExplorerError] = useState<string>("");
+  const [selectedFolderPath, setSelectedFolderPath] = useState<string>("");
+  const [folderQuery, setFolderQuery] = useState<string>("");
+  const [gotoPath, setGotoPath] = useState<string>("");
+
+  const filteredFolders = useMemo(() => {
+    const q = folderQuery.trim().toLocaleLowerCase();
+    if (!q) return folders;
+    return folders.filter((f) => (f.name || "").toLocaleLowerCase().includes(q));
+  }, [folders, folderQuery]);
+
+  // Mantener selección consistente al filtrar/cambiar carpeta
+  useEffect(() => {
+    if (!explorerOpen) return;
+    if (!filteredFolders.length) {
+      if (selectedFolderPath) setSelectedFolderPath("");
+      return;
+    }
+    const exists = selectedFolderPath && filteredFolders.some((f) => f.path === selectedFolderPath);
+    if (!exists) setSelectedFolderPath(filteredFolders[0].path);
+  }, [explorerOpen, filteredFolders, selectedFolderPath]);
+
 
   // Cargar configuración previa (calidad de vida)
   useEffect(() => {
@@ -353,10 +401,74 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     });
   }
 
+  // Teclas rápidas del explorador (modal)
+  // - ESC: cerrar
+  // - ↑/↓: mover selección
+  // - Enter: entrar a la carpeta seleccionada
+  useEffect(() => {
+    if (!explorerOpen) return;
+    
+    function focusRowByIndex(i: number) {
+      try {
+        const el = document.querySelector(`[data-folder-idx="${i}"]`) as HTMLElement | null;
+        if (el) {
+          el.focus();
+          // evitar saltos bruscos; solo alinear si está fuera de vista
+          el.scrollIntoView({ block: "nearest" });
+        }
+      } catch {
+        // ignorar
+      }
+    }
+
+    const onKey = (e: KeyboardEvent) => {
+      // ESC siempre debe funcionar, incluso si el foco está en un input
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setExplorerOpen(false);
+        return;
+      }
+
+      // No interferir con inputs (búsqueda / goto / etc.)
+      if (isTypingElement(e.target)) return;
+
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (!filteredFolders.length) return;
+        e.preventDefault();
+
+        const curIdx = filteredFolders.findIndex((f) => f.path === selectedFolderPath);
+        const baseIdx = curIdx >= 0 ? curIdx : 0;
+        const nextIdx =
+          e.key === "ArrowDown"
+            ? Math.min(filteredFolders.length - 1, baseIdx + 1)
+            : Math.max(0, baseIdx - 1);
+
+        const next = filteredFolders[nextIdx];
+        if (!next) return;
+
+        setSelectedFolderPath(next.path);
+        requestAnimationFrame(() => focusRowByIndex(nextIdx));
+        return;
+      }
+
+      if (e.key === "Enter") {
+        if (!selectedFolderPath) return;
+        const found = filteredFolders.find((f) => f.path === selectedFolderPath);
+        if (!found) return;
+        e.preventDefault();
+        void loadFolders(found.path);
+        return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [explorerOpen, selectedFolderPath, loadingFolders]);
+
   async function openExplorer(mode:ExplorerMode) {
     setExplorerMode(mode);
     setExplorerError("");
     setExplorerOpen(true);
+    setFolderQuery("");
     try {
       const res = await log02ExplorerRoots();
       const rs = res.roots || [];
@@ -364,6 +476,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       const first = rs[0] || "";
       setRootSel(first);
       setCurrentPath(first);
+      setGotoPath(first);
       if (first) {
         await loadFolders(first);
       } else {
@@ -389,9 +502,13 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     }
     try {
       setLoadingFolders(true);
+      setSelectedFolderPath("")
       const res = await log02ExplorerListar(path);
       setCurrentPath(res.path);
-      setFolders(res.folders || []);
+      setGotoPath(res.path);
+      const nextFolders = res.folders || [];
+      setFolders(nextFolders);
+      setSelectedFolderPath(nextFolders[0]?.path || "");
     } catch (e) {
       const ax = e as AxiosError<any>;
       const detail =
@@ -405,6 +522,55 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     }
   }
 
+  function buildBreadcrumbs(pathRaw: string) {
+    const p = (pathRaw || "").replace(/[\\\/]+$/, "");
+    const isUnc = p.startsWith("\\\\");
+    const segs = p.split("\\").filter((s) => s.length > 0);
+    if (segs.length === 0) return [];
+
+    const crumbs: Array<{ label: string; path: string}> = [];
+    if (isUnc) {
+      // \\server\share\...
+      const server = segs[0] || "";
+      const share = segs[1] || "";
+      if (server) {
+        const base = `\\\\${server}`;
+        crumbs.push({ label: `\\\\${server}`, path: base});
+      }
+      if (server && share) {
+        let acc = `\\\\${server}\\${share}`;
+        crumbs.push({ label: share, path: acc });
+        // resto de segmentos: \\server\share\...
+        for (let i = 2; i < segs.length; i++) {
+          acc = `${acc}\\${segs[i]}`;
+          crumbs.push({ label: segs[i], path: acc });
+        }
+      }
+      return crumbs;
+    }
+
+    // Drive path: D:\...
+    let acc = segs[0];
+    crumbs.push({ label: segs[0], path: segs[0]});
+    for (let i = 1; i < segs.length; i++) {
+      acc = `${acc}\\${segs[i]}`;
+      crumbs.push({ label: segs[i], path: acc });
+    }
+    return crumbs;
+  }
+
+  async function onGoToPath() {
+    const p = (gotoPath || "").trim();
+    if (!p) return;
+    await loadFolders(p);
+  }
+
+  async function copyCurrentPath() {
+    const txt = (currentPath || "").trim();
+    if (!txt) return;
+    await copyTextSafe(txt);
+  }
+
   function upOneLevel() {
     // Subir un nivel: recortamos por separador de Windows "\".
     // Mantener dentro de la raíz: el backend bloqueará si sale del allowlist.
@@ -415,14 +581,25 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     void loadFolders(parent);
   }
 
-  function selectCurrentFolder() {
-    if (!currentPath) return;
+  /**
+   * Selecciona una carpeta para destino/origen y cierra el modal.
+   * Si se pasa `pathOverride`, se usa ese path; si no, se usa `currentPath`.
+   *
+   * UX esperada:
+   * - Click en fila: resalta (selectedFolderPath)
+   * - Enter/Doble click: entra
+   * - Botón "Seleccionar": usa carpeta resaltada si existe; si no, la actual.
+   */
+  function selectCurrentFolder(pathOverride?: string) {
+    const picked = (pathOverride ?? currentPath ?? "").trim();
+    if (!picked) return;
+
     if (explorerMode === "destino") {
-      setRutaDestino(currentPath);
+      setRutaDestino(picked);
     } else {
-      setRutasOrigen((prev) =>  {
-        const clean = currentPath.trim();
-       if (!clean) return prev;
+      setRutasOrigen((prev) => {
+        const clean = picked.trim();
+        if (!clean) return prev;
 
         const next = prev.slice();
 
@@ -433,7 +610,9 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         }
 
         // Agregar nuevo origen SOLO al seleccionar
-        const exists = next.map((x) => (x || "").trim().toLowerCase()).includes(clean.toLowerCase());
+        const exists = next
+          .map((x) => (x || "").trim().toLowerCase())
+          .includes(clean.toLowerCase());
         if (exists) return next;
 
         // si la primera fila está vacía, la reemplazamos
@@ -442,9 +621,17 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         return [...next, clean];
       });
     }
+
     setOriginEditIndex(null);
-    // Cerrar modal al seleccionar
     setExplorerOpen(false);
+  }
+
+  function selectSelectedOrCurrentFolder() {
+    // Si hay una subcarpeta seleccionada (resaltada), se elige esa.
+    // Caso contrario, se elige la carpeta actual (currentPath).
+    const candidate = (selectedFolderPath || currentPath || "").trim();
+    if (!candidate) return;
+    selectCurrentFolder(candidate);
   }
 
   async function validar() {
@@ -885,22 +1072,19 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       `DESTINO | ${d?.ruta || ""} | existe=${d?.existe ? "SI" : "NO"} | lectura=${d?.lectura ? "SI" : "NO"} | escritura=${d?.escritura ? "SI" : "NO"} | detalle=${d?.detalle || ""}`
     );
     const text = lines.join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // fallback
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy")
-        document.body.removeChild(ta);
-      } catch {
-        // ignorar
-      }
-    }
+    await copyTextSafe(text);
   }
+
+  async function copiarEstadoCopiado() {
+     const lines: string[] = [];
+     lines.push("LOG-02 - Estado de copiado (PB-LOG-015)");
+     lines.push(`operation_id: ${copyOperationId || "N/D"}`);
+     lines.push(`progreso: ${Number.isFinite(copyProgress) ? copyProgress.toFixed(0) : "0"}%`);
+     lines.push(`estado: ${copyStage || "—"}`);
+     if (copyOi) lines.push(`OI: ${copyOi}`);
+     if (copyMessage) lines.push(`mensaje: ${copyMessage}`);
+     await copyTextSafe(lines.join("\n"));
+   }
 
 
   return (
@@ -927,42 +1111,58 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
               <div className="row g-2">
                 <div className="col-12">
                   <label className="form-label">Rutas origen (UNC) — lectura</label>
-
                   {rutasOrigen.map((value, i) => (
-                    <div key={i} className="d-flex gap-10 mB-10">
-                      <input
-                        className={
-                          "form-control form-control-sm" +
-                          (touched && !(origenesLimpios[i] || "") ? " is-invalid" : "")
-                        }
-                        value={value}
-                        onChange={(e) => setOrigenAt(i, e.target.value)}
-                        placeholder="\\\\SERVIDOR\\Compartido\\Certificados"
-                        disabled={validando}
-                      />
-                      {touched && !(origenesLimpios[i] || "") ? (
-                        <div className="small text-danger mT-5">Requerido</div>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-primary"
-                        onClick={() => abrirEditarOrigen(i)}
-                        disabled={validando}
-                        title="Elegir carpeta"
-                      >
-                        {(value || "").trim() ? "Editar" : "Agregar"}
-                      </button>
-                      
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={() => removeOrigen(i)}
-                        disabled={validando}
-                        title="Quitar ruta"
-                        style={{ width: 52, textAlign: "center" }}
-                      >
-                        –
-                      </button>
+                  <div key={i} className="mB-10">
+                      <div className="d-flex gap-10 align-items-center">
+                        <div className="flex-grow-1">
+                          <input
+                            className={
+                              "form-control form-control-sm" +
+                              (touched && !(origenesLimpios[i] || "") ? " is-invalid" : "")
+                            }
+                            value={value}
+                            onChange={(e) => setOrigenAt(i, e.target.value)}
+                            placeholder="\\\\SERVIDOR\\Compartido\\Certificados"
+                            disabled={validando}
+                          />
+                          {touched && !(origenesLimpios[i] || "") ? (
+                            <div className="small text-danger mT-5">Requerido</div>
+                          ) : null}
+                        </div>
+
+                        <div className="btn-group" role="group" aria-label="Acciones origen">
+                          <button
+                             type="button"
+                            className="btn btn-sm btn-outline-secondary"
+                            onClick={() => void copyTextSafe((value || "").trim())}
+                            disabled={validando || !(value || "").trim()}
+                            title="Copiar ruta"
+                            style={{ minWidth: 84 }}
+                          >
+                            Copiar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary"
+                            onClick={() => abrirEditarOrigen(i)}
+                            disabled={validando}
+                            title="Elegir carpeta"
+                            style={{ minWidth: 84 }}
+                          >
+                            {(value || "").trim() ? "Editar" : "Agregar"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() => removeOrigen(i)}
+                            disabled={validando}
+                            title="Quitar ruta"
+                            style={{ minWidth: 52 }}
+                          >
+                            –
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ))}
 
@@ -995,28 +1195,46 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                 <div className="col-12">
                   <label className="form-label">Ruta destino (UNC) — lectura y escritura</label>
                   <div className="d-flex gap-10 mB-10">
-                    <input
-                      className={
-                        "form-control form-control-sm " +
-                        (touched && !destinoLimpio ? "is-invalid" : "")
-                      }
-                      value={rutaDestino}
-                      onChange={(e) => setRutaDestino(e.target.value)}
-                      placeholder="\\\\SERVIDOR\\Compartido\\Salida_LOG02"
-                      disabled={validando}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-primary"
-                      onClick={abrirDestino}
-                      disabled={validando}
-                      title="Editar carpeta"
-                    >
-                      {destinoLimpio ? "Editar" : "Agregar"}
-                    </button>                  </div>
-                  {touched && !destinoLimpio ? (
-                    <div className="small text-danger mT-5">Destino requerido.</div>
-                  ) : null}
+                    <div className="flex-grow-1">
+                      <input
+                        className={
+                          "form-control form-control-sm " +
+                          (touched && !destinoLimpio ? "is-invalid" : "")
+                        }
+                        value={rutaDestino}
+                        onChange={(e) => setRutaDestino(e.target.value)}
+                        placeholder="\\\\SERVIDOR\\Compartido\\Salida_LOG02"
+                        disabled={validando}
+                      />
+                      {touched && !destinoLimpio ? (
+                        <div className="small text-danger mT-5">Destino requerido.</div>
+                      ) : null}
+                    </div>
+
+                    <div className="btn-group" role="group" aria-label="Acciones destino">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => void copyTextSafe(destinoLimpio)}
+                        disabled={validando || !destinoLimpio}
+                        title="Copiar ruta"
+                        style={{ minWidth: 84 }}
+                      >
+                        Copiar
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-primary"
+                        onClick={abrirDestino}
+                        disabled={validando}
+                        title="Elegir carpeta"
+                        style={{ minWidth: 84 }}
+                      >
+                        {destinoLimpio ? "Editar" : "Agregar"}
+                      </button>
+                    </div>
+                  </div>
+                  
                 <div className="mT-5">
                     <div className="small text-muted mB-5">
                       {listoParaValidar ? "Listo para validar." : "Completa orígenes y destino."}
@@ -1131,6 +1349,20 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                       alt="Procesando"
                     />
                   ) : null}
+                  {copyOperationId ? (
+                    <span className="badge bg-light text-dark">
+                      op: <strong>{copyOperationId}</strong>
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary ms-auto"
+                    onClick={() => void copiarEstadoCopiado()}
+                    disabled={!copyStage && !copyMessage && !copyOperationId}
+                    title="Copiar estado del progreso"
+                  >
+                    Copiar estado
+                  </button>
                 </h6>
                 {copyStage || copyMessage ? (
                   <div className="small text-muted">
@@ -1494,9 +1726,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                   <h5 className="modal-title">
                     {explorerMode === "destino" ? "Elegir carpeta de destino" : "Elegir carpeta de origen"}
                   </h5>
-                  <button type="button" className="close" aria-label="Close" onClick={() => setExplorerOpen(false)}>
-                    <span aria-hidden="true">&times;</span>
-                  </button>
+                  <button type="button" className="btn-close" aria-label="Cerrar" onClick={() => setExplorerOpen(false)} />
                 </div>
 
                 <div className="modal-body">
@@ -1537,16 +1767,115 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                     </div>
                   </div>
 
+                  {/* Breadcrumbs */}
+                    <div className="mT-10">
+                      <label className="form-label mB-5">Navegación</label>
+                      <div
+                        className="p-10"
+                        style={{
+                        background: "#f8f9fa",
+                        border: "1px solid #e9ecef",
+                        borderRadius: 6,
+                      }}
+                    >
+                      <div className="d-flex flex-wrap align-items-center gap-10">
+                        {buildBreadcrumbs(currentPath).map((c, idx, arr) => (
+                          <span key={`${c.path}-${idx}`} className="small d-inline-flex align-items-center">
+                            <button
+                              type="button"
+                              className="btn btn-link p-0 align-baseline"
+                              onClick={() => void loadFolders(c.path)}
+                              disabled={loadingFolders}
+                              title={`Ir a: ${c.path}`}
+                            >
+                              {c.label}
+                            </button>
+                            {idx < arr.length - 1 ? (
+                              <span className="text-muted mX-5">/</span>
+                            ) : null}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="small text-muted mT-5">
+                        Tip: Click en una sección para saltar a esa carpeta.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Go to + copy */}
+                  <div className="row g-2 mT-10">
+                    <div className="col-12 col-md-8">
+                      <label className="form-label">Ir a ruta</label>
+                      <div className="input-group input-group-sm">
+                        <input
+                          className="form-control"
+                          value={gotoPath}
+                          onChange={(e) => setGotoPath(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void onGoToPath();
+                            }
+                          }}
+                          placeholder="Pega una ruta (UNC o local) dentro de las raíces permitidas"
+                          disabled={loadingFolders}
+                        />
+                        <button type="button" className="btn btn-outline-primary" onClick={() => void onGoToPath()} disabled={loadingFolders || !gotoPath.trim()}>
+                          Ir
+                        </button>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <label className="form-label">Acciones</label>
+                      {/* Alineación: hacemos que el contenedor tenga el mismo "alto" visual que el input-group */}
+                      <div
+                        className="d-flex align-items-end"
+                        style={{ minHeight: 31 }} // altura típica de input-group-sm (aprox)
+                      >
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => void copyCurrentPath()}
+                          disabled={!currentPath || loadingFolders}
+                          title="Copiar la ruta actual al portapapeles"
+                        >
+                          Copiar ruta
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="d-flex gap-10 mT-10">
                     <button type="button" className="btn btn-sm btn-outline-secondary" onClick={upOneLevel} disabled={!currentPath || loadingFolders}>
                       Subir nivel
                     </button>
-                    <button type="button" className="btn btn-sm btn-primary" onClick={selectCurrentFolder} disabled={!currentPath || loadingFolders}>
-                      Seleccionar esta carpeta
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary"
+                      onClick={selectSelectedOrCurrentFolder}
+                      disabled={(!currentPath && !selectedFolderPath) || loadingFolders}
+                    >
+                      {selectedFolderPath ? "Seleccionar carpeta seleccionada" : "Seleccionar esta carpeta"}
                     </button>
                   </div>
 
                   <hr />
+
+                  <div className="row g-2 mB-10">
+                    <div className="col-12 col-md-8">
+                      <label className="form-label">Buscar subcarpeta</label>
+                      <input
+                        className="form-control form-control-sm"
+                        value={folderQuery}
+                        onChange={(e) => setFolderQuery(e.target.value)}
+                        placeholder="Filtrar por nombre…"
+                        disabled={loadingFolders}
+                      />
+                      <div className="form-text">
+                        Mostrando {filteredFolders.length} de {folders.length}
+                      </div>
+                    </div>
+                  </div>
 
                   {loadingFolders ? (
                     <div className="text-muted small">Cargando carpetas...</div>
@@ -1560,12 +1889,52 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                           </tr>
                         </thead>
                         <tbody>
-                          {folders.length ? (
-                            folders.map((f) => (
-                              <tr key={f.path} className="small">
+                          {filteredFolders.length ? (
+                            filteredFolders.map((f, idx) => (
+                              <tr
+                                key={f.path}
+                                className={"small" + (selectedFolderPath === f.path ? " table-active" : "")}
+                                role="button"
+                                tabIndex={0}
+                                data-folder-idx={idx}
+                                title="Click para seleccionar · Doble click para entrar"
+                                style={{ cursor: loadingFolders ? "default" : "pointer" }}
+                                onClick={(e) => {
+                                  if (loadingFolders) return;
+                                  setSelectedFolderPath(f.path);
+                                  (e.currentTarget as HTMLElement).focus();
+                                }}
+                                onDoubleClick={() => {
+                                  if (loadingFolders) return;
+                                  void loadFolders(f.path);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (loadingFolders) return;
+                                  // Enter: entrar
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    void loadFolders(f.path);
+                                    return;
+                                  }
+                                  // Space: seleccionar (útil si navegas con tab/teclado)
+                                  if (e.key === " " || e.key === "Spacebar") {
+                                    e.preventDefault();
+                                    setSelectedFolderPath(f.path);
+                                    return;
+                                  }
+                                }}
+                              >
                                 <td style={{ wordBreak: "break-all" }}>{f.name}</td>
                                 <td>
-                                  <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => void loadFolders(f.path)}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void loadFolders(f.path);
+                                    }}
+                                    disabled={loadingFolders}
+                                  >
                                     Entrar
                                   </button>
                                 </td>
@@ -1574,7 +1943,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                           ) : (
                             <tr className="small">
                              <td colSpan={2} className="text-muted">
-                               Sin subcarpetas o sin permisos para listar.
+                               Sin resultados para el filtro, o sin subcarpetas/permisos para listar.
                               </td>
                             </tr>
                           )}
@@ -1592,7 +1961,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show"></div>
+          <div className="modal-backdrop fade show" onClick={() => setExplorerOpen(false)}></div>
         </>
       ) : null}
     </div>
