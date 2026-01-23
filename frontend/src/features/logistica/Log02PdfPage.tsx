@@ -14,6 +14,7 @@ import {
   pollLog02CopyConformesProgress,
   log02CopyConformesCancel,
 } from "../../api/oiTools";
+import { translateProgressStage  } from "../oi_tools/progressTranslations";
 
 function badge(ok?: boolean | null) {
   if (ok === true) return "badge bg-success";
@@ -22,6 +23,10 @@ function badge(ok?: boolean | null) {
 }
 
 type ExplorerMode = "origen" | "destino";
+
+// Wizard UI
+type WizardStep = 1 | 2 | 3;
+const MAX_LIVE_EVENTS = 250;
 
 const LS_KEY = "medileser_log02_rutas_v1";
 const PERU_TZ = "America/Lima";
@@ -166,6 +171,21 @@ export default function Log02PdfPage() {
   const [folderQuery, setFolderQuery] = useState<string>("");
   const [gotoPath, setGotoPath] = useState<string>("");
 
+  // WIZARD UI
+  const [wizardStep, setWizardStep] = useState<WizardStep>(1);
+  const [liveOpen, setLiveOpen] = useState<boolean>(false);
+  const [liveEvents, setLiveEvents] = useState<
+  Array<{
+    ts: number;
+    source: "stream" | "poll";
+    type: string;
+    stage?: string;
+    message?: string;
+    oi?: string;
+    progress?: number;
+  }>
+  >([]);
+
   const filteredFolders = useMemo(() => {
     const q = folderQuery.trim().toLocaleLowerCase();
     if (!q) return folders;
@@ -244,6 +264,9 @@ function limpiarConfiguracion() {
   setCopyProgress(0);
   setCopyOi("");
   setCopyOperationId("");
+  setWizardStep(1);
+  setLiveEvents([]);
+  setLiveOpen(false);
   try {
     localStorage.removeItem(LS_KEY);
   } catch {
@@ -358,6 +381,8 @@ function abrirModalCorridas() {
 function seleccionarCorrida(it: Log01HistoryListItem) {
   setRunSelected(it);
   setRunModalOpen(false);
+  // Wizard: avanzar al paso 3 cuando ya hay corrida
+  setWizardStep((prev) => (prev < 3 ? 3 : prev));
 }
 
 
@@ -659,6 +684,9 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       setResultado(res);
       if (!res.ok) {
         setError("Validación incompleta: revisa los detalles de permisos y existencia.");
+      } else {
+        // Wizard: avanzar al paso 2 cuando las rutas quedan OK
+        setWizardStep((prev) => (prev < 2 ? 2 : prev));
       }
     } catch (e) {
       const ax = e as AxiosError<any>;
@@ -676,6 +704,16 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
   const puedeIniciarCopiado = useMemo(() => {
     return !!resultado?.ok && !!runSelected?.id && !copying;
+  }, [resultado?.ok, runSelected?.id, copying]);
+
+  // Wizard: auto-avance hacia adelante (sin forzar retroceso)
+  useEffect(() => {
+    setWizardStep((prev) => {
+      if (copying) return 3;
+      if (resultado?.ok && runSelected?.id && prev < 3) return 3;
+      if (resultado?.ok && !runSelected?.id && prev < 2) return 2;
+      return prev;
+    });
   }, [resultado?.ok, runSelected?.id, copying]);
 
   function getEventCursor(ev: any): number | null {
@@ -793,6 +831,35 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       return;
     }
     onCopyEvent(ev);
+
+    // Live log (soporte): registrar eventos relevantes sin saturar memoria
+    const shouldLog =
+      type === "status" ||
+      type === "progress" ||
+      type === "oi" ||
+      type === "oi_warn" ||
+      type === "oi_error" ||
+      type === "file_error" ||
+      type === "error" ||
+      type === "complete";
+    if (shouldLog) {
+      const msg = typeof ev?.message === "string" ? ev.message : undefined;
+      const stg = typeof stage === "string" && stage ? stageLabel(stage) : undefined;
+      const oi = typeof ev?.oi ===  "string" ? ev.oi : undefined;
+      const raw = ev?.progress ?? ev?.percent;
+      const pct = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+      const progress = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : undefined;
+      setLiveEvents((prev) => {
+        const next = [
+          ...prev,
+          { ts: Date.now(), source, type, stage: stg, message: msg, oi, progress},
+        ];
+        if (next.length > MAX_LIVE_EVENTS) {
+          next.splice(0, next.length - MAX_LIVE_EVENTS);
+        }
+        return next;
+      });
+    }
   }
 
   function stopPolling(reason: string) {
@@ -961,6 +1028,8 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     setCopyProgress(0);
     setCopyOi("");
     setCopyOperationId("");
+    setLiveEvents([]);
+    setLiveOpen(false);
     stopStream("reset");
     stopPolling("reset");
     activeOperationIdRef.current = "";
@@ -1086,6 +1155,77 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
      await copyTextSafe(lines.join("\n"));
    }
 
+  function parseCopyKpis(message: string) {
+    const msg = String(message || "");
+    const pdfMatch = msg.match(/(\d+)\s*\/\s*(\d+)\s*PDFs?/i);
+    const oiMatch =
+      msg.match(/(\d+)\s*\/\s*(\d+)\s*(?:OIs?|OI)/i) ||
+      msg.match(/\b(\d+)\s*\/\s*(\d+)\b/);
+    const pdf = pdfMatch ? { done: Number(pdfMatch[1]), total: Number(pdfMatch[2]) } : null;
+    const oi = oiMatch ? { done: Number(oiMatch[1]), total: Number(oiMatch[2]) } : null;
+    return { pdf, oi };
+  }
+
+  const copyKpis = useMemo(() => {
+    const k = parseCopyKpis(copyMessage || "");
+    return {
+      pdfDone: k.pdf?.done,
+      pdfTotal: k.pdf?.total,
+      oiDone: k.oi?.done,
+      oiTotal: k.oi?.total,
+    };
+  }, [copyMessage]);
+
+  function stageLabel(stageRaw: string) {
+    const s = (stageRaw || "").trim();
+    if (!s) return "—";
+    return translateProgressStage ? translateProgressStage(s) : s;
+  }
+
+  async function copyLiveLogToClipboard() {
+    const lines: string[] = [];
+    lines.push("LOG-02 - Detalle en vivo (últimos eventos)");
+    lines.push("");
+    for (const ev of liveEvents.slice(-80)) {
+      const d = new Date(ev.ts);
+      const ts = d.toLocaleString("es-PE", { timeZone: PERU_TZ, hour12: false });
+      lines.push(
+        `${ts} | ${ev.source} | ${ev.type}${ev.stage ? ` | ${ev.stage}` : ""}${
+          ev.oi ? ` | oi=${ev.oi}` : ""
+        }${typeof ev.progress === "number" ? ` | ${Math.round(ev.progress)}%` : ""}${
+          ev.message ? ` | ${ev.message}` : ""
+        }`
+      );
+    }
+    const text = lines.join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+        // ignorar
+      }
+    }
+  }
+
+  const canGoStep2 = !!resultado?.ok;
+  const canGoStep3 = !!resultado?.ok && !!runSelected?.id;
+
+  function goStep(step: WizardStep) {
+    if (step === 2 && !canGoStep2) return;
+    if (step === 3 && !canGoStep3) return;
+    setWizardStep(step);
+  }
+
+  const copyStartTitle =
+    !resultado?.ok ? "Falta validar rutas" : !runSelected?.id ? "Falta seleccionar corrida" : "";
+
 
   return (
     <div className="container-fluid">
@@ -1105,401 +1245,734 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
               </div>
             ) : null}
 
-            <div className="mT-15">
-              <h6 className="c-grey-900 mB-10">Rutas UNC</h6>
+            {/* Stepper */}
+            <div className="vi-wizard-header mT-15">
+              <ul className="nav nav-pills vi-stepper" role="tablist" aria-label="Flujo LOG-02">
+                <li className="nav-item" role="presentation">
+                  <button
+                    type="button"
+                    className={"nav-link " +(wizardStep === 1 ? "active" : "")}
+                    onClick={() => goStep(1)}
+                  >
+                    <span className="vi-step-num">1</span> Rutas
+                  </button>
+                </li>
+                <li className="nav-item" role="presentation">
+                  <button
+                    type="button"
+                    className={"nav-link " + (wizardStep === 2 ? "active" : "")}
+                    onClick={() => goStep(2)}
+                    disabled={!canGoStep2}
+                    title={!canGoStep2 ? "Primero valida rutas" : ""}
+                  >
+                    <span className="vi-step-num">2</span> Corrida LOG-01
+                  </button>
+                </li>
+                <li className="nav-item" role="presentation">
+                  <button
+                    type="button"
+                    className={"nav-link " + (wizardStep === 3 ? "active" : "")}
+                    onClick={() => goStep(3)}
+                    disabled={!canGoStep3}
+                    title={!canGoStep3 ? "Falta validar rutas o elegir corrida" : ""}
+                  >
+                    <span className="vi-step-num">3</span> Ejecución
+                  </button>
+                </li>
+              </ul>
+              <div className="small text-muted mT-5">
+                Flujo recomendado: <strong>1) Validar rutas</strong> → <strong>2) Elegir corrida</strong> →{" "}
+                <strong>3) Iniciar copiado</strong>.
+              </div>
+            </div>
 
-              <div className="row g-2">
-                <div className="col-12">
-                  <label className="form-label">Rutas origen (UNC) — lectura</label>
-                  {rutasOrigen.map((value, i) => (
-                  <div key={i} className="mB-10">
-                      <div className="d-flex gap-10 align-items-center">
-                        <div className="flex-grow-1">
-                          <input
-                            className={
-                              "form-control form-control-sm" +
-                              (touched && !(origenesLimpios[i] || "") ? " is-invalid" : "")
-                            }
-                            value={value}
-                            onChange={(e) => setOrigenAt(i, e.target.value)}
-                            placeholder="\\\\SERVIDOR\\Compartido\\Certificados"
-                            disabled={validando}
-                          />
-                          {touched && !(origenesLimpios[i] || "") ? (
-                            <div className="small text-danger mT-5">Requerido</div>
-                          ) : null}
+            {/* Wizard (Accordion) */}
+            <div className="accordion vi-wizard mT-15" id="log02Wizard">
+              {/* Paso 1: Rutas + Validación */}
+              <div className="accordion-item">
+                <h2 className="accordion-header" id="log02Step1Head">
+                  <button
+                    className={"accordion-button " + (wizardStep === 1 ? "" : "collapsed")}
+                    type="button"
+                    onClick={() => goStep(1)}
+                  >
+                    <span className="d-inline-flex align-items-center gap-10">
+                      <span className="vi-step-num">1</span>
+                      <span className="vi-step-title">Rutas UNC</span>
+                      {resultado?.ok ? (
+                        <span className="badge bg-success">OK</span>
+                      ) : resultado ? (
+                        <span className="badge bg-danger">Revisar</span>
+                      ) : (
+                        <span className="badge bg-secondary">Pendiente</span>
+                      )}
+                    </span>
+                  </button>
+                </h2>
+                <div
+                  id="log02Step1"
+                  className={"accordion-collapse collapse " + (wizardStep === 1 ? "show" : "")}
+                  aria-labelledby="log02Step1Head"
+                  data-bs-parent="#log02Wizard"
+                >
+                  <div className="accordion-body">
+                    <div className="row g-3">
+                      <div className="col-12">
+                        <div className="vi-card">
+                          <h6 className="c-grey-900 mB-10">Rutas UNC</h6>
+
+                          <div className="row g-2">
+                            <div className="col-12">
+                              <label className="form-label">Rutas origen (UNC) — lectura</label>
+                              {rutasOrigen.map((value, i) => (
+                                <div key={i} className="mB-10">
+                                  <div className="d-flex gap-10 align-items-center">
+                                    <div className="flex-grow-1">
+                                      <input
+                                        className={
+                                          "form-control form-control-sm" +
+                                          (touched && !(origenesLimpios[i] || "") ? " is-invalid" : "")
+                                        }
+                                        value={value}
+                                        onChange={(e) => setOrigenAt(i, e.target.value)}
+                                        placeholder="\\SERVIDOR\Compartido\Certificados"
+                                        disabled={validando}
+                                      />
+                                      {touched && !(origenesLimpios[i] || "") ? (
+                                        <div className="small text-danger mT-5">Requerido</div>
+                                      ) : null}
+                                    </div>
+
+                                    <div className="btn-group" role="group" aria-label="Acciones origen">
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline-secondary"
+                                        onClick={() => void copyTextSafe((value || "").trim())}
+                                        disabled={validando || !(value || "").trim()}
+                                        title="Copiar ruta"
+                                        style={{ minWidth: 84 }}
+                                      >
+                                        Copiar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline-primary"
+                                        onClick={() => abrirEditarOrigen(i)}
+                                        disabled={validando}
+                                        title="Elegir carpeta"
+                                        style={{ minWidth: 84 }}
+                                      >
+                                        {(value || "").trim() ? "Editar" : "Agregar"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline-danger"
+                                        onClick={() => removeOrigen(i)}
+                                        disabled={validando}
+                                        title="Quitar ruta"
+                                        style={{ minWidth: 52 }}
+                                      >
+                                        –
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+
+                              <div className="d-flex gap-10">
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-primary"
+                                  onClick={abrirAgregarOrigen}
+                                  disabled={validando}
+                                  title="Agregar origen"
+                                >
+                                  Agregar origen
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-secondary"
+                                  onClick={quitarDuplicadosUI}
+                                  disabled={validando}
+                                  title="Quitar duplicados (solo UI)"
+                                >
+                                  Quitar duplicados
+                                </button>
+                              </div>
+
+                              <div className="small text-muted">
+                                Nota: estas rutas deben ser accesibles <strong>desde el servidor</strong> donde corre el backend.
+                              </div>
+                            </div>
+
+                            <div className="col-12">
+                              <label className="form-label">Ruta destino (UNC) — lectura y escritura</label>
+                              <div className="d-flex gap-10 mB-10">
+                                <div className="flex-grow-1">
+                                  <input
+                                    className={
+                                      "form-control form-control-sm " +
+                                      (touched && !destinoLimpio ? "is-invalid" : "")
+                                    }
+                                    value={rutaDestino}
+                                    onChange={(e) => setRutaDestino(e.target.value)}
+                                    placeholder="\\SERVIDOR\Compartido\Salida_LOG02"
+                                    disabled={validando}
+                                  />
+                                  {touched && !destinoLimpio ? (
+                                    <div className="small text-danger mT-5">Destino requerido.</div>
+                                  ) : null}
+                                </div>
+
+                                <div className="btn-group" role="group" aria-label="Acciones destino">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-secondary"
+                                    onClick={() => void copyTextSafe(destinoLimpio)}
+                                    disabled={validando || !destinoLimpio}
+                                    title="Copiar ruta"
+                                    style={{ minWidth: 84 }}
+                                  >
+                                    Copiar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={abrirDestino}
+                                    disabled={validando}
+                                    title="Elegir carpeta"
+                                    style={{ minWidth: 84 }}
+                                  >
+                                    {destinoLimpio ? "Editar" : "Agregar"}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="mT-5">
+                                <div className="small text-muted mB-5">
+                                  {listoParaValidar ? "Listo para validar." : "Completa orígenes y destino."}
+                                </div>
+                                <div className="d-flex gap-10">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-primary"
+                                    onClick={() => void validar()}
+                                    disabled={validando || !listoParaValidar}
+                                  >
+                                    {validando ? "Validando..." : "Validar"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-danger"
+                                    onClick={limpiarConfiguracion}
+                                    disabled={validando}
+                                    title="Limpia orígenes y destino"
+                                  >
+                                    Limpiar rutas
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="col-12">
+                        {resultado ? (
+                          <div className="vi-card">
+                            <h6 className="c-grey-900 mB-10">Resultado de validación</h6>
+
+                            {resumenValidacion ? (
+                              <div className="d-flex flex-wrap gap-10 align-items-center mB-10">
+                                <span className="badge bg-light text-dark">
+                                  Orígenes OK: <strong>{resumenValidacion.okOrigenes}</strong> / {resumenValidacion.totalOrigenes}
+                                </span>
+                                <span className={resumenValidacion.okDestino ? "badge bg-success" : "badge bg-danger"}>
+                                  Destino: {resumenValidacion.okDestino ? "OK" : "No OK"}
+                                </span>
+                                {!resultado.ok ? (
+                                  <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => void copiarDetalle()}>
+                                    Copiar detalle
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
+
+                            <div className="table-responsive">
+                              <table className="table table-sm mB-0">
+                                <thead>
+                                  <tr className="small">
+                                    <th style={{ whiteSpace: "nowrap" }}>Tipo</th>
+                                    <th>Ruta</th>
+                                    <th style={{ whiteSpace: "nowrap" }}>Existe</th>
+                                    <th style={{ whiteSpace: "nowrap" }}>Lectura</th>
+                                    <th style={{ whiteSpace: "nowrap" }}>Escritura</th>
+                                    <th>Detalle</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {resultado.origenes.map((o, idx) => (
+                                    <tr key={`o-${idx}`} className="small">
+                                      <td style={{ whiteSpace: "nowrap" }}><strong>Origen</strong></td>
+                                      <td style={{ wordBreak: "break-all" }}>{o.ruta || "N/D"}</td>
+                                      <td><span className={badge(o.existe)}>{o.existe ? "Sí" : "No"}</span></td>
+                                      <td><span className={badge(o.lectura)}>{o.lectura ? "Sí" : "No"}</span></td>
+                                      <td><span className={badge(null)}>—</span></td>
+                                      <td>{o.detalle || ""}</td>
+                                    </tr>
+                                  ))}
+
+                                  <tr className="small">
+                                    <td style={{ whiteSpace: "nowrap" }}><strong>Destino</strong></td>
+                                    <td style={{ wordBreak: "break-all" }}>{resultado.destino.ruta || "N/D"}</td>
+                                    <td><span className={badge(resultado.destino.existe)}>{resultado.destino.existe ? "Sí" : "No"}</span></td>
+                                    <td><span className={badge(resultado.destino.lectura)}>{resultado.destino.lectura ? "Sí" : "No"}</span></td>
+                                    <td>
+                                      <span className={badge(!!resultado.destino.escritura)}>
+                                        {resultado.destino.escritura ? "Sí" : "No"}
+                                      </span>
+                                    </td>
+                                    <td>{resultado.destino.detalle || ""}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {resultado.ok ? (
+                              <div className="alert alert-success mT-15" role="alert">
+                                Rutas validadas correctamente. Puedes continuar con la siguiente fase.
+                              </div>
+                            ) : (
+                              <div className="alert alert-warning mT-15" role="alert">
+                                Hay rutas con problemas. Corrige existencia/permisos y vuelve a validar.
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="vi-callout small">
+                            Aún no has validado las rutas. Ejecuta “Validar” para continuar al paso 2.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Paso 2: Corrida LOG-01 */}
+              <div className="accordion-item">
+                <h2 className="accordion-header" id="log02Step2Head">
+                  <button
+                    className={"accordion-button " + (wizardStep === 2 ? "" : "collapsed")}
+                    type="button"
+                    onClick={() => goStep(2)}
+                    disabled={!canGoStep2}
+                  >
+                    <span className="d-inline-flex align-items-center gap-10">
+                      <span className="vi-step-num">2</span>
+                      <span className="vi-step-title">Corrida LOG-01</span>
+                      {runSelected?.id ? (
+                        <span className="badge bg-success">Seleccionada</span>
+                      ) : canGoStep2 ? (
+                        <span className="badge bg-warning text-dark">Pendiente</span>
+                      ) : (
+                        <span className="badge bg-secondary">Bloqueado</span>
+                      )}
+                    </span>
+                  </button>
+                </h2>
+                <div
+                  id="log02Step2"
+                  className={"accordion-collapse collapse " + (wizardStep === 2 ? "show" : "")}
+                  aria-labelledby="log02Step2Head"
+                  data-bs-parent="#log02Wizard"
+                >
+                  <div className="accordion-body">
+                    {!canGoStep2 ? (
+                      <div className="vi-callout small">Valida rutas para habilitar este paso.</div>
+                    ) : (
+                      <>
+                        <div className="d-flex flex-wrap align-items-center justify-content-between gap-10">
+                          <div className="vi-card flex-grow-1">
+                            <div className="small text-muted">Corrida seleccionada</div>
+                            {runSelected?.id ? (
+                              <div className="mT-5">
+                                <div className="d-flex flex-wrap gap-10 align-items-center">
+                                  <span className="badge bg-light text-dark">#{runSelected.id}</span>
+                                  {runSelected?.created_at ? (
+                                    <span className="small text-muted">{formatDateTime(runSelected.created_at)}</span>
+                                  ) : null}
+                                  {runSelected?.source ? <span className="small text-muted">{runSelected.source}</span> : null}
+                                  {runSelected?.status ? <span className="small text-muted">{runSelected.status}</span> : null}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-muted small mT-5">Aún no se ha elegido una corrida.</div>
+                            )}
+                          </div>
+
+                          <div className="d-flex gap-10">
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={abrirModalCorridas}
+                              disabled={copying}
+                            >
+                              {runSelected?.id ? "Cambiar corrida" : "Elegir corrida"}
+                            </button>
+                          </div>
                         </div>
 
-                        <div className="btn-group" role="group" aria-label="Acciones origen">
-                          <button
-                             type="button"
-                            className="btn btn-sm btn-outline-secondary"
-                            onClick={() => void copyTextSafe((value || "").trim())}
-                            disabled={validando || !(value || "").trim()}
-                            title="Copiar ruta"
-                            style={{ minWidth: 84 }}
-                          >
-                            Copiar
-                          </button>
+                        {!runSelected?.id ? (
+                          <div className="vi-callout mT-10 small">
+                            Debes seleccionar una corrida de LOG-01 (historial) para usar su manifiesto y NO CONFORME.
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Paso 3: Ejecución + Progreso + Live log */}
+              <div className="accordion-item">
+                <h2 className="accordion-header" id="log02Step3Head">
+                  <button
+                    className={"accordion-button " + (wizardStep === 3 ? "" : "collapsed")}
+                    type="button"
+                    onClick={() => goStep(3)}
+                    disabled={!canGoStep3}
+                  >
+                    <span className="d-inline-flex align-items-center gap-10">
+                      <span className="vi-step-num">3</span>
+                      <span className="vi-step-title">Ejecución</span>
+                      {copying ? (
+                        <span className="badge bg-primary">En progreso</span>
+                      ) : copyAudit ? (
+                        <span className="badge bg-success">Completado</span>
+                      ) : canGoStep3 ? (
+                        <span className="badge bg-secondary">Listo</span>
+                      ) : (
+                        <span className="badge bg-secondary">Bloqueado</span>
+                      )}
+                    </span>
+                  </button>
+                </h2>
+                <div
+                  id="log02Step3"
+                  className={"accordion-collapse collapse " + (wizardStep === 3 ? "show" : "")}
+                  aria-labelledby="log02Step3Head"
+                  data-bs-parent="#log02Wizard"
+                >
+                  <div className="accordion-body">
+                    {!canGoStep3 ? (
+                      <div className="vi-callout small">
+                        Valida rutas y selecciona una corrida para habilitar la ejecución.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="d-flex flex-wrap gap-10 mB-10">
                           <button
                             type="button"
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={() => abrirEditarOrigen(i)}
-                            disabled={validando}
-                            title="Elegir carpeta"
-                            style={{ minWidth: 84 }}
+                            className="btn btn-sm btn-primary"
+                            onClick={() => void iniciarCopiado()}
+                            disabled={!puedeIniciarCopiado}
+                            title={copyStartTitle}
                           >
-                            {(value || "").trim() ? "Editar" : "Agregar"}
+                            {copying ? "Copiando..." : "Iniciar copiado"}
                           </button>
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-danger"
-                            onClick={() => removeOrigen(i)}
-                            disabled={validando}
-                            title="Quitar ruta"
-                            style={{ minWidth: 52 }}
+                            onClick={() => void cancelarCopiado()}
+                            disabled={!copying || !copyOperationId}
                           >
-                            –
+                            Cancelar
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  ))}
 
-                  <div className="d-flex gap-10">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-primary"
-                      onClick={abrirAgregarOrigen}
-                      disabled={validando}
-                      title="Agregar origen"
-                    >
-                      Agregar origen
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      onClick={quitarDuplicadosUI}
-                      disabled={validando}
-                      title="Quitar duplicados (solo UI)"
-                    >
-                      Quitar duplicados
-                    </button>
-                  </div>
+                        <div className="mT-10">
+                          <h6 className="c-grey-900 mB-10 d-flex align-items-center gap-2">
+                            <span>Progreso</span>
+                            {copying ? (
+                              <img
+                                className="vi-progress-spinner"
+                                src="/medileser/Spinner-Logo-Medileser.gif"
+                                alt="Procesando"
+                              />
+                            ) : null}
+                            {copyOperationId ? (
+                              <span className="badge bg-light text-dark">
+                                op: <strong>{copyOperationId}</strong>
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary ms-auto"
+                              onClick={() => void copiarEstadoCopiado()}
+                              disabled={!copyStage && !copyMessage && !copyOperationId}
+                              title="Copiar estado del progreso"
+                            >
+                              Copiar estado
+                            </button>
+                          </h6>
 
-                  <div className="small text-muted">
-                    Nota: estas rutas deben ser accesibles <strong>desde el servidor</strong> donde corre el backend.
-                  </div>
-                </div>
+                          <div className="d-flex flex-wrap gap-10 mB-5">
+                            <span className="badge bg-light text-dark">
+                              PDFs: {copyKpis.pdfDone ?? "—"} / {copyKpis.pdfTotal ?? "—"}
+                            </span>
+                            <span className="badge bg-light text-dark">
+                              OIs: {copyKpis.oiDone ?? "—"} / {copyKpis.oiTotal ?? "—"}
+                            </span>
+                            {copyWarnings.length ? (
+                              <span className="badge bg-warning text-dark">Advertencias: {copyWarnings.length}</span>
+                            ) : null}
+                            {copyErrors.length ? (
+                              <span className="badge bg-danger">Errores: {copyErrors.length}</span>
+                            ) : null}
+                          </div>
 
-                <div className="col-12">
-                  <label className="form-label">Ruta destino (UNC) — lectura y escritura</label>
-                  <div className="d-flex gap-10 mB-10">
-                    <div className="flex-grow-1">
-                      <input
-                        className={
-                          "form-control form-control-sm " +
-                          (touched && !destinoLimpio ? "is-invalid" : "")
-                        }
-                        value={rutaDestino}
-                        onChange={(e) => setRutaDestino(e.target.value)}
-                        placeholder="\\\\SERVIDOR\\Compartido\\Salida_LOG02"
-                        disabled={validando}
-                      />
-                      {touched && !destinoLimpio ? (
-                        <div className="small text-danger mT-5">Destino requerido.</div>
-                      ) : null}
-                    </div>
+                          <div className="small text-muted">
+                            <strong>{copyStage ? stageLabel(copyStage) : copying ? "En progreso" : "—"}</strong>
+                            {copyMessage ? <span> · {copyMessage}</span> : null}
+                          </div>
+                          <div className="small text-muted">
+                            {copyOi ? `OI actual: ${copyOi}` : "OI actual: —"}
+                            {copyKpis.pdfDone != null && copyKpis.pdfTotal != null ? (
+                              <span> · {copyKpis.pdfDone}/{copyKpis.pdfTotal} PDFs</span>
+                            ) : null}
+                            {copyKpis.oiDone != null && copyKpis.oiTotal != null ? (
+                              <span> · {copyKpis.oiDone}/{copyKpis.oiTotal} OIs</span>
+                            ) : null}
+                          </div>
 
-                    <div className="btn-group" role="group" aria-label="Acciones destino">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => void copyTextSafe(destinoLimpio)}
-                        disabled={validando || !destinoLimpio}
-                        title="Copiar ruta"
-                        style={{ minWidth: 84 }}
-                      >
-                        Copiar
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-primary"
-                        onClick={abrirDestino}
-                        disabled={validando}
-                        title="Elegir carpeta"
-                        style={{ minWidth: 84 }}
-                      >
-                        {destinoLimpio ? "Editar" : "Agregar"}
-                      </button>
-                    </div>
-                  </div>
-                  
-                <div className="mT-5">
-                    <div className="small text-muted mB-5">
-                      {listoParaValidar ? "Listo para validar." : "Completa orígenes y destino."}
-                    </div>
-                    <div className="d-flex gap-10">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        onClick={() => void validar()}
-                        disabled={validando || !listoParaValidar}
-                      >
-                        {validando ? "Validando..." : "Validar"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={limpiarConfiguracion}
-                        disabled={validando}
-                        title="Limpia orígenes y destino"
-                      >
-                        Limpiar rutas
-                      </button>
-                    </div>
+                          <div className="progress" style={{ height: 10 }}>
+                            <div
+                              className="progress-bar"
+                              role="progressbar"
+                              style={{ width: `${Math.max(0, Math.min(100, copyProgress))}%` }}
+                              aria-valuenow={copyProgress}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                            />
+                          </div>
+                          <div className="small text-muted mT-5">{copyProgress.toFixed(0)}%</div>
+                        </div>
+
+                        {/* Detalle en vivo */}
+                        <div className="accordion mT-10" id="log02LiveLog">
+                          <div className="accordion-item">
+                            <h2 className="accordion-header" id="log02LiveLogHead">
+                              <button
+                                className={"accordion-button vi-acc-sm " + (liveOpen ? "" : "collapsed")}
+                                type="button"
+                                onClick={() => setLiveOpen((v) => !v)}
+                              >
+                                Detalle en vivo {liveEvents.length ? `(${liveEvents.length})` : ""}
+                              </button>
+                            </h2>
+                            <div
+                              id="log02LiveLogBody"
+                              className={"accordion-collapse collapse " + (liveOpen ? "show" : "")}
+                              aria-labelledby="log02LiveLogHead"
+                            >
+                              <div className="accordion-body p-0">
+                                <div className="d-flex flex-wrap align-items-center justify-content-between gap-10 p-10">
+                                  <div className="small text-muted">Últimos eventos (máx {MAX_LIVE_EVENTS})</div>
+                                  <div className="d-flex gap-10">
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-outline-secondary"
+                                      onClick={() => void copyLiveLogToClipboard()}
+                                      disabled={!liveEvents.length}
+                                    >
+                                      Copiar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-outline-danger"
+                                      onClick={() => setLiveEvents([])}
+                                      disabled={!liveEvents.length}
+                                    >
+                                      Limpiar
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="vi-logbox">
+                                  {liveEvents.length ? (
+                                    liveEvents.slice(-80).map((ev, idx) => {
+                                      const d = new Date(ev.ts);
+                                      const ts = d.toLocaleString("es-PE", { timeZone: PERU_TZ, hour12: false });
+                                      const line = `${ts} | ${ev.source} | ${ev.type}${
+                                        ev.stage ? ` | ${ev.stage}` : ""
+                                      }${ev.oi ? ` | oi=${ev.oi}` : ""}${
+                                        typeof ev.progress === "number" ? ` | ${Math.round(ev.progress)}%` : ""
+                                      }${ev.message ? ` | ${ev.message}` : ""}`;
+                                      return (
+                                        <div key={`le-${idx}`} className="vi-logline">
+                                          {line}
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="small text-muted">Sin eventos aún.</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {copyErrors.length ? (
+                          <div className="alert alert-danger mT-10" role="alert">
+                            <strong>Se detectaron errores:</strong>
+                            <ul className="mB-0 mT-5">
+                              {copyErrors.slice(-8).map((x, idx) => (
+                                <li key={`ce-${idx}`}>
+                                  {x.oi ? `[${x.oi}] ` : ""}
+                                  {x.file ? `${x.file}: ` : ""}
+                                  {x.message}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+
+                        {copyWarnings.length ? (
+                          <div className="alert alert-warning mT-10" role="alert">
+                            <strong>Advertencias:</strong>
+                            <ul className="mB-0 mT-5">
+                              {copyWarnings.slice(-8).map((x, idx) => (
+                                <li key={`cw-${idx}`}>
+                                  [{x.oi}] {x.code ? `${x.code}: ` : ""}
+                                  {x.message}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+
+                        {copyAudit ? (
+                          <div className="mT-15">
+                            <h6 className="c-grey-900 mB-10">Auditoría de copiado</h6>
+                            <div className="row g-2">
+                              <div className="col-12 col-md-4">
+                                <div className="alert alert-light mB-0">
+                                  <div>
+                                    <strong>Total OIs:</strong> {copyAudit?.total_ois ?? "N/D"}
+                                  </div>
+                                  <div>
+                                    <strong>OIs OK:</strong> {copyAudit?.ois_ok ?? "N/D"}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="col-12 col-md-8">
+                                <div className="alert alert-light mB-0">
+                                  <div className="d-flex flex-wrap gap-10">
+                                    <span>
+                                      <strong>PDF detectados:</strong> {copyAudit?.archivos?.pdf_detectados ?? "N/D"}
+                                    </span>
+                                    <span>
+                                      <strong>PDF copiados:</strong> {copyAudit?.archivos?.pdf_copiados ?? "N/D"}
+                                    </span>
+                                    <span>
+                                      <strong>Omitidos NO CONFORME:</strong> {copyAudit?.archivos?.pdf_omitidos_no_conforme ?? "N/D"}
+                                    </span>
+                                    <span>
+                                      <strong>No PDF omitidos:</strong> {copyAudit?.archivos?.archivos_no_pdf_omitidos ?? "N/D"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {(copyAudit?.ois_faltantes?.length ||
+                              copyAudit?.ois_duplicadas?.length ||
+                              copyAudit?.destinos_duplicados?.length) ? (
+                              <div className="mT-10">
+                                {copyAudit?.ois_faltantes?.length ? (
+                                  <div className="alert alert-warning" role="alert">
+                                    <strong>OIs sin carpeta:</strong>
+                                    <ul className="mB-0 mT-5">
+                                      {copyAudit.ois_faltantes.slice(0, 10).map((x: any, idx: number) => (
+                                        <li key={`of-${idx}`}>
+                                          {x?.oi} — {x?.detalle || ""}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+
+                                {copyAudit?.ois_duplicadas?.length ? (
+                                  <div className="alert alert-warning" role="alert">
+                                    <strong>OIs con múltiples carpetas (duplicadas):</strong>
+                                    <ul className="mB-0 mT-5">
+                                      {copyAudit.ois_duplicadas.slice(0, 10).map((x: any, idx: number) => (
+                                        <li key={`od-${idx}`}>
+                                          {x?.oi} — {Array.isArray(x?.carpetas) ? x.carpetas.join(" | ") : ""}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+
+                                {copyAudit?.destinos_duplicados?.length ? (
+                                  <div className="alert alert-warning" role="alert">
+                                    <strong>Destinos ya existentes:</strong>
+                                    <ul className="mB-0 mT-5">
+                                      {copyAudit.destinos_duplicados.slice(0, 10).map((x: any, idx: number) => (
+                                        <li key={`dd-${idx}`}>
+                                          {x?.oi} — {x?.destino || ""}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            {resultado ? (
-              <div className="mT-20">
-                <h6 className="c-grey-900 mB-10">Resultado de validación</h6>
-                
-                {resumenValidacion ? (
-                  <div className="d-flex flex-wrap gap-10 align-items-center mB-10">
-                    <span className="badge bg-light text-dark">
-                      Orígenes OK: <strong>{resumenValidacion.okOrigenes}</strong> / {resumenValidacion.totalOrigenes}
-                    </span>
-                    <span className={resumenValidacion.okDestino ? "badge bg-success" : "badge bg-danger"}>
-                      Destino: {resumenValidacion.okDestino ? "OK" : "No OK"}
-                    </span>
-                    {!resultado.ok ? (
-                      <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => void copiarDetalle()}>
-                        Copiar detalle
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {/* ========================= */}
-            {/* PB-LOG-015 - Copiado PDFs */}
-            {/* ========================= */}
-            <div className="mT-25">
-              <h6 className="c-grey-900 mB-10">Copiado de PDFs conformes por OI (PB-LOG-015)</h6>
-
+          {/* Sticky action bar (solo durante ejecución) */}
+          {copying ? (
+            <div className="vi-sticky-actions">
               <div className="d-flex flex-wrap align-items-center justify-content-between gap-10">
-                <div className="small text-muted">
-                  Corrida LOG-01 seleccionada:{" "}
-                  {runSelected?.id ? (
-                    <span className="badge bg-light text-dark">
-                      #{runSelected.id}
-                      {runSelected?.created_at ? ` · ${formatDateTime(runSelected.created_at)}` : ""}
-                      {runSelected?.source ? ` · ${runSelected.source}` : ""}
-                      {runSelected?.status ? ` · ${runSelected.status}` : ""}
-                    </span>
-                  ) : (
-                    <span className="badge bg-warning text-dark">No seleccionada</span>
-                  )}
+                <div className="small">
+                  <strong>{copyStage ? stageLabel(copyStage) : "En progreso"}</strong>
+                  {copyOi ? <span> · OI: {copyOi}</span> : null}
+                  <span className="text-muted"> · {copyProgress.toFixed(0)}%</span>
                 </div>
-
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={abrirModalCorridas}
-                  disabled={copying}
-                >
-                  {runSelected?.id ? "Cambiar corrida" : "Elegir corrida"}
-                </button>
-              </div>
-
-              {!runSelected?.id ? (
-                <div className="alert alert-warning mT-10" role="alert">
-                  Debes seleccionar una corrida de LOG-01 (historial) para usar su manifiesto y NO CONFORME.
-                </div>
-              ) : null}
-
-              <div className="d-flex flex-wrap gap-10 mT-10">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  onClick={() => void iniciarCopiado()}
-                  disabled={!puedeIniciarCopiado}
-                >
-                  {copying ? "Copiando..." : "Iniciar copiado"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-danger"
-                  onClick={() => void cancelarCopiado()}
-                  disabled={!copying || !copyOperationId}
-                >
-                  Cancelar
-                </button>
-              </div>
-
-              <div className="mT-10">
-                <h6 className="c-grey-900 mB-10 d-flex align-items-center gap-2">
-                  <span>Progreso</span>
-                  {copying ? (
-                    <img
-                      className="vi-progress-spinner"
-                      src="/medileser/Spinner-Logo-Medileser.gif"
-                      alt="Procesando"
-                    />
-                  ) : null}
-                  {copyOperationId ? (
-                    <span className="badge bg-light text-dark">
-                      op: <strong>{copyOperationId}</strong>
-                    </span>
-                  ) : null}
+                <div className="d-flex gap-10">
                   <button
                     type="button"
-                    className="btn btn-sm btn-outline-secondary ms-auto"
-                    onClick={() => void copiarEstadoCopiado()}
-                    disabled={!copyStage && !copyMessage && !copyOperationId}
-                    title="Copiar estado del progreso"
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => void cancelarCopiado()}
+                    disabled={!copyOperationId}
                   >
-                    Copiar estado
+                    Cancelar
                   </button>
-                </h6>
-                {copyStage || copyMessage ? (
-                  <div className="small text-muted">
-                    <strong>Estado:</strong> {copyStage || "—"}
-                    {copyOi ? (
-                      <span>
-                        {" "}
-                        · <strong>OI:</strong> {copyOi}
-                      </span>
-                    ) : null}
-                    {copyMessage ? <span> · {copyMessage}</span> : null}
-                  </div>
-                ) : null}
-                <div className="progress" style={{ height: 10 }}>
-                  <div
-                    className="progress-bar"
-                    role="progressbar"
-                    style={{ width: `${Math.max(0, Math.min(100, copyProgress))}%` }}
-                    aria-valuenow={copyProgress}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                  />
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => setLiveOpen(true)}
+                  >
+                    Ver detalle
+                  </button>
                 </div>
-                <div className="small text-muted mT-5">{copyProgress.toFixed(0)}%</div>
               </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
 
-              {copyErrors.length ? (
-                <div className="alert alert-danger mT-10" role="alert">
-                  <strong>Se detectaron errores:</strong>
-                  <ul className="mB-0 mT-5">
-                    {copyErrors.slice(-8).map((x, idx) => (
-                      <li key={`ce-${idx}`}>
-                        {x.oi ? `[${x.oi}] ` : ""}
-                        {x.file ? `${x.file}: ` : ""}
-                        {x.message}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {copyWarnings.length ? (
-                <div className="alert alert-warning mT-10" role="alert">
-                  <strong>Advertencias:</strong>
-                  <ul className="mB-0 mT-5">
-                    {copyWarnings.slice(-8).map((x, idx) => (
-                      <li key={`cw-${idx}`}>
-                        [{x.oi}] {x.code ? `${x.code}: ` : ""}
-                        {x.message}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {copyAudit ? (
-                <div className="mT-15">
-                  <h6 className="c-grey-900 mB-10">Auditoría de copiado</h6>
-                  <div className="row g-2">
-                    <div className="col-12 col-md-4">
-                      <div className="alert alert-light mB-0">
-                        <div>
-                          <strong>Total OIs:</strong> {copyAudit?.total_ois ?? "N/D"}
-                        </div>
-                        <div>
-                          <strong>OIs OK:</strong> {copyAudit?.ois_ok ?? "N/D"}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-12 col-md-8">
-                      <div className="alert alert-light mB-0">
-                        <div className="d-flex flex-wrap gap-10">
-                          <span>
-                            <strong>PDF detectados:</strong> {copyAudit?.archivos?.pdf_detectados ?? "N/D"}
-                          </span>
-                          <span>
-                            <strong>PDF copiados:</strong> {copyAudit?.archivos?.pdf_copiados ?? "N/D"}
-                          </span>
-                          <span>
-                            <strong>Omitidos NO CONFORME:</strong> {copyAudit?.archivos?.pdf_omitidos_no_conforme ?? "N/D"}
-                          </span>
-                          <span>
-                            <strong>No PDF omitidos:</strong> {copyAudit?.archivos?.archivos_no_pdf_omitidos ?? "N/D"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {(copyAudit?.ois_faltantes?.length ||
-                    copyAudit?.ois_duplicadas?.length ||
-                    copyAudit?.destinos_duplicados?.length) ? (
-                    <div className="mT-10">
-                      {copyAudit?.ois_faltantes?.length ? (
-                        <div className="alert alert-warning" role="alert">
-                          <strong>OIs sin carpeta:</strong>
-                          <ul className="mB-0 mT-5">
-                            {copyAudit.ois_faltantes.slice(0, 10).map((x: any, idx: number) => (
-                              <li key={`of-${idx}`}>
-                                {x?.oi} — {x?.detalle || ""}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-
-                      {copyAudit?.ois_duplicadas?.length ? (
-                        <div className="alert alert-warning" role="alert">
-                          <strong>OIs con múltiples carpetas (duplicadas):</strong>
-                          <ul className="mB-0 mT-5">
-                            {copyAudit.ois_duplicadas.slice(0, 10).map((x: any, idx: number) => (
-                              <li key={`od-${idx}`}>
-                                {x?.oi} — {Array.isArray(x?.carpetas) ? x.carpetas.join(" | ") : ""}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-
-                      {copyAudit?.destinos_duplicados?.length ? (
-                        <div className="alert alert-warning" role="alert">
-                          <strong>Destinos ya existentes:</strong>
-                          <ul className="mB-0 mT-5">
-                            {copyAudit.destinos_duplicados.slice(0, 10).map((x: any, idx: number) => (
-                              <li key={`dd-${idx}`}>
-                                {x?.oi} — {x?.destino || ""}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {/* Modal corridas LOG-01 (inline Bootstrap/Adminator) */}
+      {/* Modal corridas LOG-01 (inline Bootstrap/Adminator) */}
       {runModalOpen ? (
         <>
           <div className="modal fade show" style={{ display: "block" }} role="dialog" aria-modal="true">
@@ -1576,8 +2049,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                         placeholder="COMPLETADO"
                       />
                     </div>
-
-                    <div className="col-12 d-flex gap-10">
+                  <div className="col-12 d-flex gap-10">
                       <button type="submit" className="btn btn-sm btn-primary" disabled={runsLoading}>
                         {runsLoading ? "Buscando..." : "Aplicar filtros"}
                       </button>
@@ -1660,62 +2132,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
           <div className="modal-backdrop fade show"></div>
         </>
       ) : null}
-            </div>
 
-                <div className="table-responsive">
-                  <table className="table table-sm mB-0">
-                    <thead>
-                      <tr className="small">
-                        <th style={{ whiteSpace: "nowrap" }}>Tipo</th>
-                        <th>Ruta</th>
-                        <th style={{ whiteSpace: "nowrap" }}>Existe</th>
-                        <th style={{ whiteSpace: "nowrap" }}>Lectura</th>
-                        <th style={{ whiteSpace: "nowrap" }}>Escritura</th>
-                        <th>Detalle</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resultado.origenes.map((o, idx) => (
-                        <tr key={`o-${idx}`} className="small">
-                          <td style={{ whiteSpace: "nowrap" }}><strong>Origen</strong></td>
-                          <td style={{ wordBreak: "break-all" }}>{o.ruta || "N/D"}</td>
-                          <td><span className={badge(o.existe)}>{o.existe ? "Sí" : "No"}</span></td>
-                          <td><span className={badge(o.lectura)}>{o.lectura ? "Sí" : "No"}</span></td>
-                          <td><span className={badge(null)}>—</span></td>
-                          <td>{o.detalle || ""}</td>
-                        </tr>
-                      ))}
-
-                      <tr className="small">
-                        <td style={{ whiteSpace: "nowrap" }}><strong>Destino</strong></td>
-                        <td style={{ wordBreak: "break-all" }}>{resultado.destino.ruta || "N/D"}</td>
-                        <td><span className={badge(resultado.destino.existe)}>{resultado.destino.existe ? "Sí" : "No"}</span></td>
-                        <td><span className={badge(resultado.destino.lectura)}>{resultado.destino.lectura ? "Sí" : "No"}</span></td>
-                        <td>
-                          <span className={badge(!!resultado.destino.escritura)}>
-                            {resultado.destino.escritura ? "Sí" : "No"}
-                          </span>
-                        </td>
-                        <td>{resultado.destino.detalle || ""}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                {resultado.ok ? (
-                  <div className="alert alert-success mT-15" role="alert">
-                    Rutas validadas correctamente. Puedes continuar con la siguiente fase.
-                  </div>
-                ) : (
-                  <div className="alert alert-warning mT-15" role="alert">
-                    Hay rutas con problemas. Corrige existencia/permisos y vuelve a validar.
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
       {/* Modal explorador (inline Bootstrap/Adminator) */}
       {explorerOpen ? (
         <>

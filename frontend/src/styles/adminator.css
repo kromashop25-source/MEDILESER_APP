@@ -444,3 +444,87 @@
     min-width: 0;
   }
 }
+
+/* ===== LOG-02 Wizard (Opción 3) ===== */
+.vi-wizard-header .vi-stepper{
+  gap: 8px;
+}
+.vi-stepper .nav-link{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+.vi-step-num{
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.08);
+  font-weight: 600;
+}
+.nav-pills .nav-link.active .vi-step-num{
+  background: rgba(255,255,255,0.25);
+}
+
+.vi-wizard .accordion-button{
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.vi-wizard .vi-step-title{
+  font-size: 0.95rem;
+}
+
+.vi-card{
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+.vi-callout{
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.vi-progress-spinner{
+  width: 18px;
+  height: 18px;
+}
+
+.vi-acc-sm{
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  font-size: 0.875rem;
+}
+
+.vi-logbox{
+  max-height: 240px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  border-bottom: 1px solid #e9ecef;
+  padding: 10px;
+}
+.vi-logline{
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 2px;
+}
+
+.vi-sticky-actions{
+  position: sticky;
+  bottom: 0;
+  z-index: 1020;
+  margin-top: 12px;
+  background: rgba(255,255,255,0.97);
+  border-top: 1px solid #e9ecef;
+  padding: 10px 12px;
+  border-radius: 10px;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.04);
+}
