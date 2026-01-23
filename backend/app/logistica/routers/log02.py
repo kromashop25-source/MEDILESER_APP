@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import os
 import json
+import re
+import unicodedata
 import tempfile
 import queue
 import threading
@@ -409,6 +411,86 @@ def _series_from_filename(name:str) -> str:
     p = Path(name)
     return p.stem.strip()
 
+def _gaselag_key_from_name(name: str) -> str:
+    """
+    Normaliza nombre BD_/CD_ para match Gaselag:
+    - quita prefijo BD_/CD_
+    quita extensión
+    elimina diacrítios
+    elimina separadores (espacios, guines, puntos, etc.)
+    """
+    s = Path(name).stem
+    s = s.strip()
+    if not s:
+        return ""
+    s = re.sub(r"^(BD|CD)[-_\\s]+", "", s, flags=re.IGNORECASE)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    s = s.upper()
+    s = re.sub(r"[^A-Z0-9]+", "", s)
+    return s
+
+def _gaselag_display_name(name: str) -> str:
+    # Para mensajes legibles: quita BD_/CD_ y extensión, conserva separadores
+    s = Path(name).stem
+    s = re.sub(r"^(BD|CD)[-_\\s]+", "", s, flags=re.IGNORECASE)
+    return s.strip()
+
+def _build_gaselag_serie_map(manifest_payload: Dict[str, Any]) -> Dict[str, List[str]]:
+    """
+    Retorna: serie_key_normalizada -> [source_files BD_*]
+    Basado en MANIFIESTO.by_oi_origen donde oi == GASELAG
+    """
+    out: Dict[str, List[str]] = {}
+    items = manifest_payload.get("by_oi_origen")
+    if not isinstance(items, list):
+        return out
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        oi = _norm_str(it.get("oi")).upper()
+        if oi != "GASELAG":
+            continue
+        files = it.get("source_files")
+        if not isinstance(files, list):
+            continue
+        for fname in files:
+            if not isinstance(fname, str):
+                continue
+            key = _gaselag_key_from_name(fname)
+            if not key:
+                continue
+            out.setdefault(key, []).append(fname)
+    return out
+
+def _find_gaselag_folders_in_origins(series_keys: set[str], rutas_origen: List[str]) -> Dict[str, List[Path]]:
+    """
+    Busca carpetas Gaselag a 1 nivel dentro de cada origen,
+    y las agrupa por clave normalizada.
+    """
+    found: Dict[str, List[Path]] = {k: [] for k in series_keys}
+    if not series_keys:
+        return found
+    for root in rutas_origen:
+        try:
+            base = Path(root)
+            if not base.exists() or not base.is_dir():
+                continue
+            for entry in base.iterdir():
+                try:
+                    if not entry.is_dir():
+                        continue
+                    key = _gaselag_key_from_name(entry.name)
+                    if key in found:
+                        found[key].append(entry)
+                except Exception:
+                    continue
+        except Exception:
+            continue
+    for k in found:
+        found[k].sort(key=lambda p: str(p).lower())
+    return found
+
 
 def _build_no_conforme_map(no_conforme_payload: Dict[str, Any]) -> Dict[str, set[str]]:
     """
@@ -541,9 +623,11 @@ def _copy_conformes_worker(
         no_conf_map = _build_no_conforme_map(no_conf)
         conformes_map = _build_conforme_map(manifest)
         use_conforme_allowlist = bool(conformes_map)
-        verbose_events = _is_log02_verbose()
+        
+        gaselag_series_map = _build_gaselag_serie_map(manifest)
+        gaselag_keys = sorted(gaselag_series_map.keys())
 
-        # 2) Preparar lista de OIs a procesar (excluye GASELAG)
+        # 2) Preparar lista de OIs BASES a procesar (excluye GASELAG)
         oi_tags: List[str] = []
         for b in by_oi:
             if not isinstance(b, dict):
@@ -564,9 +648,9 @@ def _copy_conformes_worker(
             oi_tags_u.append(oi)
         oi_tags = oi_tags_u
 
-        total_ois = len(oi_tags)
+        total_ois = len(oi_tags) + len(gaselag_keys)
         if total_ois == 0:
-            raise RuntimeError("No hay OIs BASES en el manifiesto (by_oi)")
+            raise RuntimeError("No hay OIs BASES ni GASELAG en el manifiesto (by_oi)")
         
         audit: Dict[str, Any] = {
             "run_id": run_id,
@@ -585,7 +669,7 @@ def _copy_conformes_worker(
             },
         }
 
-        # 3) Procesar por OI
+        # 3) Procesar por OI (BASES)
         for i, oi_tag in enumerate(oi_tags, start=1):
             if cancel_token.is_cancelled():
                 _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
@@ -769,6 +853,40 @@ def _copy_conformes_worker(
             finally:
                 if dest_created and not oi_ok:
                     _cleanup_dest_folder(dest_folder)
+            
+        # 4) Procesar lotes GASELAG (match por serie BD_/CD_)
+        if gaselag_keys:
+            gaselag_folders = _find_gaselag_folders_in_origins(set(gaselag_keys), rutas_origen)
+            base_count = len(oi_tags)
+            for gi, serie_key in enumerate(gaselag_keys, start=1):
+                if cancel_token.is_cancelled():
+                    _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                    return
+                
+                i = base_count + gi
+                serie_sources = gaselag_series_map.get(serie_key, [])
+                serie_label = _gaselag_display_name(serie_sources[0]) if serie_sources else serie_key
+                oi_label = f"GASELAG:{serie_label}"
+                oi_key = "GASELAG"
+
+                _emit(operation_id, {"type": "status", "stage": "oi", "oi": oi_label, "message": f"Buscando carpeta Gaselag para {serie_label} ({i}/{total_ois})"})
+
+                folders = gaselag_folders.get(serie_key, [])
+                if len(folders) == 0:
+                    audit["ois_faltantes"].append({"oi": oi_label, "detalle": "No se encontró carpeta de lote Gaselag en rutas origen."})
+                    _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "GASELAG_SIN_CARPETA", "message": "No se encontró carpeta Gaselag para la serie en los orígenes."})
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                    continue
+                if len(folders) > 1:
+                    audit["ois_duplicadas"].append({"oi": oi_label, "carpetas": [str(p) for p in folders]})
+                    _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "GASELAG_CARPETA_DUPLICADA", "message": "Se encontraron múltiples carpetas Gaselag para la misma serie. No se copiará hasta corregir."})
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                    continue
+
+                src_folder = folders[0]
+                dest_folder = Path(ruta_destino) / src_folder.name
+                if dest_folder.exists():
+                    audit["destinos_duplicados"].append
 
         _emit(operation_id, {"type": "complete", "message": "Copiado finalizado.", "audit": audit, "percent": 100.0})
     except Exception as e:

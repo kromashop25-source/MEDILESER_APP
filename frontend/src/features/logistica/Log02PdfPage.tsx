@@ -651,13 +651,14 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     setExplorerOpen(false);
   }
 
-  function selectSelectedOrCurrentFolder() {
-    // Si hay una subcarpeta seleccionada (resaltada), se elige esa.
-    // Caso contrario, se elige la carpeta actual (currentPath).
-    const candidate = (selectedFolderPath || currentPath || "").trim();
-    if (!candidate) return;
-    selectCurrentFolder(candidate);
-  }
+  function selectExplorerCurrentFolder() {
+  // Regla nueva: el botón "Seleccionar carpeta" SIEMPRE elige la carpeta actual (currentPath).
+  // Ignora la subcarpeta resaltada en la tabla para evitar el bug reportado.
+  const candidate = (currentPath || "").trim();
+  if (!candidate) return;
+  selectCurrentFolder(candidate);
+}
+
 
   async function validar() {
     setError("");
@@ -2269,10 +2270,10 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                     <button
                       type="button"
                       className="btn btn-sm btn-primary"
-                      onClick={selectSelectedOrCurrentFolder}
-                      disabled={(!currentPath && !selectedFolderPath) || loadingFolders}
+                      onClick={selectExplorerCurrentFolder}
+                      disabled={!currentPath || loadingFolders}
                     >
-                      {selectedFolderPath ? "Seleccionar carpeta seleccionada" : "Seleccionar esta carpeta"}
+                      Seleccionar carpeta
                     </button>
                   </div>
 
