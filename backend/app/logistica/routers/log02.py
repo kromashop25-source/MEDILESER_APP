@@ -623,6 +623,7 @@ def _copy_conformes_worker(
         no_conf_map = _build_no_conforme_map(no_conf)
         conformes_map = _build_conforme_map(manifest)
         use_conforme_allowlist = bool(conformes_map)
+        verbose_events = _is_log02_verbose()
         
         gaselag_series_map = _build_gaselag_serie_map(manifest)
         gaselag_keys = sorted(gaselag_series_map.keys())
@@ -886,7 +887,163 @@ def _copy_conformes_worker(
                 src_folder = folders[0]
                 dest_folder = Path(ruta_destino) / src_folder.name
                 if dest_folder.exists():
-                    audit["destinos_duplicados"].append
+                    audit["destinos_duplicados"].append({"oi": oi_label, "destino": str(dest_folder)})
+                    _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "DESTINO_DUPLICADO", "message": "La carpeta destino ya existe. No se copiará hasta corregir."})
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                    continue
+
+                dest_created = False
+                oi_ok = False
+                file_error_count = 0
+                copied = 0
+                omitted_nc = 0
+                detected_pdf = 0
+                omitted_nonpdf = 0
+                total_pdfs_in_oi = 0
+
+                try:
+                    try:
+                        dest_folder.mkdir(parents=True, exist_ok=False)
+                        dest_created = True
+                    except FileExistsError:
+                        audit["destinos_duplicados"].append({"oi": oi_label, "destino": str(dest_folder)})
+                        _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "DESTINO_DUPLICADO", "message": "La carpeta destino ya existe. No se copiará hasta corregir."})
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+                    except PermissionError as e:
+                        detail = f"Sin permisos para crear la carpeta destino. {type(e).__name__}: {e}"
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="DESTINO_PERMISOS", detail=detail)
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+                    except Exception as e:
+                        detail = f"No se pudo crear la carpeta destino. {type(e).__name__}: {e}"
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="DESTINO_ERROR", detail=detail)
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+
+                    no_conf_set = no_conf_map.get(oi_key, set())
+                    conforme_set = conformes_map.get(oi_key) if use_conforme_allowlist else None
+
+                    # 1) Primera pasada: contar PDFs
+                    try:
+                        with os.scandir(src_folder) as it:
+                            for entry in it:
+                                if cancel_token.is_cancelled():
+                                    _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                                    return
+                                try:
+                                    if not entry.is_file(follow_symlinks=False):
+                                        continue
+                                    if entry.name.lower().endswith(".pdf"):
+                                        total_pdfs_in_oi += 1
+                                except Exception:
+                                    continue
+                    except PermissionError as e:
+                        detail = f"Sin permisos para listar la carpeta origen. {type(e).__name__}: {e}"
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="LISTADO_PERMISOS", detail=detail)
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+                    except Exception as e:
+                        detail = f"No se pudo listar la carpeta origen. {type(e).__name__}: {e}"
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="LISTADO_ERROR", detail=detail)
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+
+                    if total_pdfs_in_oi > 0:
+                        _emit_progress(
+                            operation_id,
+                            i=i,
+                            total_ois=total_ois,
+                            oi_tag=oi_label,
+                            processed_in_oi=0,
+                            total_in_oi=total_pdfs_in_oi,
+                            message=f"{oi_label}: iniciando copiado 0/{total_pdfs_in_oi} PDFs • OI {i}/{total_ois}",
+                        )
+                    try:
+                        processed_in_oi = 0
+                        EMIT_EVERY = 25
+                        with os.scandir(src_folder) as it:
+                            for entry in it:
+                                if cancel_token.is_cancelled():
+                                    _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                                    return
+                                try:
+                                    if not entry.is_file(follow_symlinks=False):
+                                        continue
+                                    if not entry.name.lower().endswith(".pdf"):
+                                        omitted_nonpdf += 1
+                                        continue
+                                except Exception:
+                                    continue
+
+                                detected_pdf += 1
+                                processed_in_oi += 1
+                                serie = _series_from_filename(entry.name)
+                                if not serie:
+                                    omitted_nonpdf += 1
+                                    if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
+                                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
+                                        continue
+
+                                if conforme_set is not None:
+                                    if serie not in conforme_set:
+                                        omitted_nc += 1
+                                        if verbose_events:
+                                            _emit(operation_id, {"type": "file_skip", "oi": oi_label, "serie": serie, "reason": "NO_EN_MANIFIESTO"})
+                                        if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
+                                            _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
+                                        continue
+                                elif serie in no_conf_set:
+                                    omitted_nc += 1
+                                    if verbose_events:
+                                        _emit(operation_id, {"type": "file_skip", "oi": oi_label, "serie": serie, "reason": "NO_CONFORME"})
+                                    if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
+                                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
+                                    continue
+
+                                try:
+                                    shutil.copy2(str(entry.path), str(dest_folder / entry.name))
+                                    copied += 1
+                                    if verbose_events:
+                                        _emit(operation_id, {"type": "file_ok", "oi": oi_label, "serie": serie, "file": entry.name})
+                                except Exception as e:
+                                    file_error_count += 1
+                                    _emit(operation_id, {"type": "file_error", "oi": oi_label, "serie": serie, "file": entry.name, "message": f"Error copiando PDF. {type(e).__name__}: {e}"})
+                                    if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
+                                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
+                                    continue
+
+                                if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
+                                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
+                    except PermissionError as e:
+                        detail = f"Sin permisos para leer la carpeta origen. {type(e).__name__}: {e}"
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="LECTURA_PERMISOS", detail=detail)
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+                    except Exception as e:
+                        detail = f"Error leyendo la carpeta origen. {type(e).__name__}: {e}"
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="LECTURA_ERROR", detail=detail)
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+
+                    if file_error_count > 0:
+                        detail = f"{file_error_count} archivo(s) con error de copia."
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="FILE_ERROR", detail=detail)
+                    else:
+                        oi_ok = True
+
+                    audit["archivos"]["pdf_detectados"] += detected_pdf
+                    audit["archivos"]["pdf_copiados"] += copied
+                    audit["archivos"]["pdf_omitidos_no_conforme"] += omitted_nc
+                    audit["archivos"]["archivos_no_pdf_omitidos"] += omitted_nonpdf
+                    if oi_ok:
+                        audit["ois_ok"] += 1
+
+                    _emit(operation_id, {"type": "oi_done", "oi": oi_label, "copiados": copied, "omitidos_no_conforme": omitted_nc, "pdf_detectados": detected_pdf})
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, message=f"Carpetas procesadas {i}/{total_ois}")
+                finally:
+                    if dest_created and not oi_ok:
+                        _cleanup_dest_folder(dest_folder)
 
         _emit(operation_id, {"type": "complete", "message": "Copiado finalizado.", "audit": audit, "percent": 100.0})
     except Exception as e:

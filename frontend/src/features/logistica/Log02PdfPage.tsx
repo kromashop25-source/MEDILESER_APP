@@ -1747,7 +1747,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                             ) : null}
                           </div>
 
-                          <div className="progress" style={{ height: 10 }}>
+                          <div className="progress vi-progress">
                             <div
                               className="progress-bar"
                               role="progressbar"
@@ -1755,9 +1755,11 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                               aria-valuenow={copyProgress}
                               aria-valuemin={0}
                               aria-valuemax={100}
-                            />
+                            >
+                              <span className="vi-progress-label">{copyProgress.toFixed(0)}%</span>
+                            </div>
                           </div>
-                          <div className="small text-muted mT-5">{copyProgress.toFixed(0)}%</div>
+                          
                         </div>
 
                         {/* Detalle en vivo */}
@@ -1944,13 +1946,13 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
           {/* Sticky action bar (solo durante ejecución) */}
           {copying ? (
             <div className="vi-sticky-actions">
-              <div className="d-flex flex-wrap align-items-center justify-content-between gap-10">
-                <div className="small">
+              <div className="d-flex flex-wrap align-items-center gap-10 vi-sticky-actions-row">
+                <div className="small vi-sticky-progress">
                   <strong>{copyStage ? stageLabel(copyStage) : "En progreso"}</strong>
                   {copyOi ? <span> · OI: {copyOi}</span> : null}
                   <span className="text-muted"> · {copyProgress.toFixed(0)}%</span>
                 </div>
-                <div className="d-flex gap-10">
+                <div className="d-flex gap-10 vi-sticky-buttons">
                   <button
                     type="button"
                     className="btn btn-sm btn-outline-danger"

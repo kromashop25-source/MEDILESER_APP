@@ -274,6 +274,57 @@
   object-fit: contain;
 }
 
+.vi-progress{
+  height: 1rem;
+}
+.vi-progress-bar{
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+}
+.vi-progress-label{
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.vi-sticky-actions-row{
+  position: relative;
+  width: 100%;
+}
+.vi-sticky-progress{
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+.vi-sticky-buttons{
+  margin-left: auto;
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 576px){
+  .vi-sticky-actions-row{
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .vi-sticky-progress{
+    position: static;
+    text-align: center;
+  }
+  .vi-sticky-buttons{
+    margin-left: 0;
+  }
+}
+
+
 /* === Login split layout (sin estilos inline) ========================= */
 .vi-login {
   min-height: 100vh;
