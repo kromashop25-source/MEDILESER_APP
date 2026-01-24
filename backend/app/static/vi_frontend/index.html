@@ -5,6 +5,19 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MEDILESER APP</title>
+    <script>
+      (function () {
+        try {
+          var key = "medileser.theme";
+          var theme = localStorage.getItem(key);
+          if (theme !== "dark" && theme !== "light") theme = "light";
+          var root = document.documentElement;
+          root.setAttribute("data-theme", theme);
+          root.setAttribute("data-bs-theme", theme);
+          root.style.colorScheme = theme;
+        } catch (_e) {}
+      })();
+    </script>
     <!-- Adminator CSS real (dist/style.css) -->
   <link rel="stylesheet" href="/adminator/style.css" />
     <script>
@@ -26,9 +39,9 @@
           }
         } catch (_e) {}
       })();
-    </script>
-    <script type="module" crossorigin src="/assets/index-ecogpA1_.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-B17F7sw6.css">
+    </script>
+    <script type="module" crossorigin src="/assets/index-1Ypqhaf_.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-5wp0Y-U3.css">
   </head>
   <body>
     <div id="root"></div>

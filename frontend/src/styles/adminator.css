@@ -3,7 +3,7 @@
   --vi-sidebar-width-collapsed: 64px;
   --vi-topbar-height: 56px;
   --vi-content-max: 1440px; /* pensado para laptop 16" */
-  --vi-shell-bg: #f4f6f9;
+  --vi-shell-bg: var(--c-bkg-page);
 }
 
 /* Layout general tipo ChatGPT/Gemini */
@@ -39,8 +39,8 @@
   flex-shrink: 0;
   width: var(--vi-sidebar-width);
   transition: width 200ms ease;
-  border-right: 1px solid #e5e7eb;
-  background: #fff;
+  border-right: 1px solid var(--c-border);
+  background: var(--c-bkg-card);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -76,7 +76,7 @@
   padding: 4px 8px;
   border: none;
   background: transparent;
-  color: #6c757d;
+  color: var(--c-text-muted);
   line-height: 1;
 }
 .vi-sidebar-toggle:focus { outline: none; }
@@ -94,18 +94,18 @@
   gap: 0.75rem;
   padding: 0.6rem 0.75rem;
   border-radius: 10px;
-  color: #334155;
+  color: var(--vi-sidebar-text, var(--c-text-base));
   text-decoration: none;
   transition: background-color 120ms ease, color 120ms ease;
   min-width: 0; /* needed for truncation/wrap in flex */
 }
 .vi-sidebar-link:hover {
-  background-color: #f1f5f9;
-  color: #0d6efd;
+  background-color: var(--vi-sidebar-hover, var(--c-bkg-card-2));
+  color: var(--c-primary);
 }
 .vi-sidebar-link.active {
-  background-color: #e7f1ff;
-  color: #0d6efd;
+  background-color: var(--vi-sidebar-active, var(--c-bkg-card-2));
+  color: var(--c-primary);
   font-weight: 600;
 }
 .vi-sidebar-icon {
@@ -141,7 +141,7 @@
 
 .vi-sidebar-link--disabled:hover {
   background-color: transparent;
-  color: #334155;
+  color: var(--vi-sidebar-text, var(--c-text-base));
 }
 .vi-sidebar--collapsed .vi-sidebar-text {
   display: none;
@@ -181,49 +181,49 @@
 }
 
 .vi-oi-light {
-  background-color: #f8f9fa;
-  color: #212529;
+  background-color: var(--c-bkg-page);
+  color: var(--c-text-base);
 }
 .vi-oi-light .card,
 .vi-oi-light .modal-content,
 .vi-oi-light form {
-  background-color: #ffffff;
-  color: #212529;
-  border-color: #e5e7eb;
+  background-color: var(--c-bkg-card);
+  color: var(--c-text-base);
+  border-color: var(--c-border);
 }
 .vi-oi-light .form-control,
 .vi-oi-light .form-select {
-  background-color: #ffffff;
-  color: #212529;
-  border-color: #ced4da;
+  background-color: var(--c-input-bkg);
+  color: var(--c-text-base);
+  border-color: var(--c-border);
 }
 .vi-oi-light hr {
-  border-color: #dee2e6;
+  border-color: var(--c-border);
 }
 
 .vi-form-readonly .form-control:disabled,
 .vi-form-readonly .form-select:disabled {
-  background-color: #f1f3f5;
-  border-color: #d0d5dd;
-  color: #6c757d;
-  box-shadow: inset 0 0 0 1px #e2e6ea;
+  background-color: var(--vi-disabled-bg, color-mix(in srgb, var(--c-bkg-card) 90%, var(--c-border)));
+  border-color: var(--c-border);
+  color: var(--c-text-muted);
+  box-shadow: inset 0 0 0 1px var(--c-border);
   cursor: not-allowed;
 }
 
 .vi-form-editing .form-control:not(:disabled),
 .vi-form-editing .form-select:not(:disabled) {
-  border-color: #4dabf7;
+  border-color: var(--c-primary);
   box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.08);
   transition: box-shadow 120ms ease, border-color 120ms ease;
 }
 
 .vi-locked,
 .vi-locked:disabled {
-  background-color: #f1f3f5 !important;
-  border-color: #d0d5dd !important;
-  color: #6c757d !important;
+  background-color: var(--vi-disabled-bg, color-mix(in srgb, var(--c-bkg-card) 90%, var(--c-border))) !important;
+  border-color: var(--c-border) !important;
+  color: var(--c-text-muted) !important;
   cursor: not-allowed;
-  box-shadow: inset 0 0 0 1px #e2e6ea;
+  box-shadow: inset 0 0 0 1px var(--c-border);
 }
 
 /* ---- Bancadas / Adminator table vibes ---- */
@@ -234,9 +234,9 @@
   text-transform: uppercase;
   font-size: .75rem;
   letter-spacing: .02em;
-  color: #6c757d;
-  background: #f8f9fa;
-  border-bottom-color: #e9ecef;
+  color: var(--c-text-muted);
+  background: var(--c-bkg-card-2);
+  border-bottom-color: var(--c-border);
 }
 .vi-badge-estado {
   font-weight: 600;
@@ -260,7 +260,7 @@
   inset:0;
   display:grid;
   place-items:center;
-  background:rgba(255,255,255,.6);
+  background: var(--vi-overlay-bg, rgba(255,255,255,.6));
   z-index:1075;
 }
 .vi-spinner-logo{
@@ -328,6 +328,7 @@
 /* === Login split layout (sin estilos inline) ========================= */
 .vi-login {
   min-height: 100vh;
+  position: relative;
 }
 .vi-login__split {
   display: flex;
@@ -399,6 +400,12 @@
   max-width: 560px;
   border-radius: 1rem;
 }
+.vi-login__theme {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  z-index: 5;
+}
 @media (max-width: 992px) {
   .vi-login__split { flex-direction: column; min-height: 100vh; }
   .vi-login__left { min-height: 220px; }
@@ -412,10 +419,10 @@
 }
 
 .vi-dropzone {
-  border: 2px dashed rgba(0, 0, 0, 0.15);
+  border: 2px dashed color-mix(in srgb, var(--c-border) 85%, transparent);
   border-radius: 0.5rem;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.02);
+  background: color-mix(in srgb, var(--c-bkg-card) 95%, transparent);
 }
 
 .vi-dropzone.is-dragover {
@@ -438,7 +445,7 @@
   max-width: none;
   margin: 0;
   padding: 0;
-  background: #fff;
+  background: var(--c-bkg-card);
   overflow: hidden;
 }
 
@@ -454,8 +461,8 @@
   display: flex;
   align-items: center;
   padding: 0.75rem 1.25rem;
-  background: #fff;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--c-bkg-card);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-border) 80%, transparent);
 }
 
 .vi-home__brandlogo {
@@ -514,7 +521,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(0,0,0,0.08);
+  background: var(--vi-step-bg, rgba(0,0,0,0.08));
   font-weight: 600;
 }
 .nav-pills .nav-link.active .vi-step-num{
@@ -530,14 +537,14 @@
 }
 
 .vi-card{
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--c-border);
   border-radius: 10px;
   padding: 12px;
-  background: #fff;
+  background: var(--c-bkg-card);
 }
 .vi-callout{
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
+  background: var(--c-bkg-card-2);
+  border: 1px solid var(--c-border);
   border-radius: 8px;
   padding: 10px 12px;
 }
@@ -557,9 +564,9 @@
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 12px;
-  background: #f8f9fa;
-  border-top: 1px solid #e9ecef;
-  border-bottom: 1px solid #e9ecef;
+  background: var(--c-bkg-card-2);
+  border-top: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
   padding: 10px;
 }
 .vi-logline{
@@ -573,8 +580,8 @@
   bottom: 0;
   z-index: 1020;
   margin-top: 12px;
-  background: rgba(255,255,255,0.97);
-  border-top: 1px solid #e9ecef;
+  background: var(--vi-sticky-bg, rgba(255,255,255,0.97));
+  border-top: 1px solid var(--c-border);
   padding: 10px 12px;
   border-radius: 10px;
   box-shadow: 0 -2px 10px rgba(0,0,0,0.04);

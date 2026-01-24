@@ -79,7 +79,7 @@ function statusBadgeClass(status?: string | null) {
   const s = (status || "").toUpperCase();
   if (s === "COMPLETADO") return "badge bg-success";
   if (s === "ERROR") return "badge bg-danger";
-  if (s === "CANCELADO") return "badge bg-warning text-dark";
+  if (s === "CANCELADO") return "badge bg-warning vi-text-contrast";
   return "badge bg-secondary";
 }
 

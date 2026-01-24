@@ -321,7 +321,7 @@ export default function UsersPage() {
       <div className="card shadow-sm">
         <div className="table-responsive">
           <table className="table table-hover align-middle mb-0">
-            <thead className="table-light">
+            <thead className="vi-surface-2">
               <tr>
                 <th>Usuario</th>
                 <th>Nombre</th>
@@ -345,8 +345,8 @@ export default function UsersPage() {
                         "Estándar";
                       const badgeCls =
                         u.username.toLowerCase() === "admin" ? "bg-danger" :
-                        uRole === "administrator" ? "bg-warning text-dark" :
-                        uRole === "technician" ? "bg-info text-dark" :
+                        uRole === "administrator" ? "bg-warning vi-text-contrast" :
+                        uRole === "technician" ? "bg-info vi-text-contrast" :
                         "bg-secondary";
                       return <span className={`badge ${badgeCls}`}>{label}</span>;
                     })()}

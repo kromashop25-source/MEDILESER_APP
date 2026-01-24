@@ -9,6 +9,7 @@ import { maybeRestoreRecovery } from "../../utils/recoveryDraft";
 import PasswordInput from "../../components/PasswordInput";
 import Spinner from "../../components/Spinner";
 import { useToast } from "../../components/Toast";
+import ThemeToggle from "../../components/ThemeToggle";
 
 type Form = { username: string; password: string };
 
@@ -111,6 +112,9 @@ export default function LoginPage() {
   return (
     <div className="vi-login">
       <Spinner show={loading || savingBank} label={savingBank ? "Guardando banco..." : "Validando credenciales..."} />
+      <div className="vi-login__theme">
+        <ThemeToggle />
+      </div>
       <div className="vi-login__split">
         <section className="vi-login__left">
           <div className="text-center text-md-start">

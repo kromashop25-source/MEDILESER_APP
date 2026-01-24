@@ -261,7 +261,7 @@ const RenderResult = ({
   // Q (caudal)
   if (!isErr) {
     return (
-      <td className="bg-light">
+      <td className="vi-surface-2">
         {val == null || isNaN(val) ? (
           <span className="text-muted">-</span>
         ) : (
@@ -287,7 +287,7 @@ const RenderResult = ({
   }
 
   return (
-    <td className="bg-light">
+    <td className="vi-surface-2">
       {val == null || isNaN(val) ? (
         <span className="text-muted">-</span>
       ) : (
@@ -1388,10 +1388,10 @@ useEffect(() => {
           min-width: 70px;
         }
 
-        /* Estilo spreadsheet tipo Excel (modo claro) */
+        /* Estilo spreadsheet tipo Excel (theme-aware) */
         .vi-spreadsheet {
-          background-color: #ffffff;
-          color: #212529;
+          background-color: var(--vi-grid-bg);
+          color: var(--vi-grid-text);
           font-size: 0.75rem;
           table-layout: auto;
           width: max-content;
@@ -1403,21 +1403,19 @@ useEffect(() => {
         }
 
         .vi-spreadsheet thead th {
-          background-color: #e6f3ff;
-          color: #0c2b4d;
+          background-color: var(--vi-grid-head-bg);
+          color: var(--vi-grid-head-text);
           vertical-align: middle;
           padding: 0.25rem 0.35rem;
         }
 
-        .vi-spreadsheet thead th.vi-header-at,
-        .vi-spreadsheet thead th.vi-header-quitar,
         .vi-spreadsheet td.vi-at-valor {
-          color: #212529 !important;
+          color: var(--vi-grid-text) !important;
         }
 
                 .vi-spreadsheet td.vi-row-index,
         .vi-spreadsheet th.vi-row-index {
-          color: #0c2b4d;
+          color: var(--vi-grid-row-index-text);
         }
 
         /* Columna índice (#) fija al hacer scroll horizontal */
@@ -1425,7 +1423,7 @@ useEffect(() => {
           position: sticky;
           left: 0;
           z-index: 3;
-          background-color: #e6f3ff; /* mismo fondo que otros headers */
+          background-color: var(--vi-grid-row-index-bg); /* mismo fondo que otros headers */
         }
 
         .vi-spreadsheet td.vi-row-index {
@@ -1444,7 +1442,7 @@ useEffect(() => {
 
         .vi-spreadsheet thead th.vi-sticky-medidor {
           z-index: 3;
-          background-color: #e6f3ff;
+          background-color: var(--vi-grid-head-bg);
         }
 
         .vi-spreadsheet tbody td.vi-sticky-medidor {
@@ -1454,8 +1452,8 @@ useEffect(() => {
 
 
         .vi-spreadsheet tr.vi-base-row td.vi-row-index {
-          background-color: #d6e9ff !important;
-          color: #0c2b4d !important;
+          background-color: var(--vi-grid-base-row-bg) !important;
+          color: var(--vi-grid-row-index-text) !important;
           font-weight: 600;
         }
 
@@ -1464,11 +1462,11 @@ useEffect(() => {
         }
 
         .vi-spreadsheet td.vi-at-valor:hover {
-          color: #0a58ca !important;
+          color: var(--c-primary) !important;
         }
 
         .vi-spreadsheet tr.table-active td.vi-at-valor {
-          color: #0c2b4d !important;
+          color: var(--vi-grid-active-text) !important;
         }
 
         .vi-spreadsheet tbody td {
@@ -1476,19 +1474,19 @@ useEffect(() => {
         }
 
         .vi-spreadsheet tr.table-active > td {
-          background-color: #d9ecff !important;
-          color: #0c2b4d !important;
+          background-color: var(--vi-grid-active-bg) !important;
+          color: var(--vi-grid-active-text) !important;
         }
 
         .vi-spreadsheet tr.table-active input.form-control {
-          background-color: #ffffff;
-          color: #0c2b4d;
-          border-color: #b6d4fe;
+          background-color: var(--vi-grid-input-bg);
+          color: var(--vi-grid-active-text);
+          border-color: var(--vi-grid-input-active-border);
         }
 
         .vi-spreadsheet tr.vi-base-row.table-active > td {
-          background-color: #d9ecff !important;
-          color: #0c2b4d !important;
+          background-color: var(--vi-grid-active-bg) !important;
+          color: var(--vi-grid-active-text) !important;
         }
 
         .vi-spreadsheet.table-hover tbody tr:not(.table-active):hover > td {
@@ -1497,9 +1495,9 @@ useEffect(() => {
         }
 
         .vi-spreadsheet input.form-control {
-          background-color: #ffffff;
-          border-color: #ced4da;
-          color: #212529;
+          background-color: var(--vi-grid-input-bg);
+          border-color: var(--vi-grid-input-border);
+          color: var(--vi-grid-input-text);
           font-size: 0.75rem;
           padding: 0.05rem 0.25rem;
           height: 1.7rem;
@@ -1507,8 +1505,8 @@ useEffect(() => {
 
         .vi-spreadsheet input.form-control:disabled,
         .vi-spreadsheet input.form-control[readonly] {
-          background-color: #e9ecef;
-          color: #6c757d;
+          background-color: var(--vi-grid-disabled-bg);
+          color: var(--vi-grid-disabled-text);
           opacity: 1;
         }
 
@@ -1519,22 +1517,22 @@ useEffect(() => {
 
         /* PUNTO E - colores de la columna de conformidad */
         .vi-spreadsheet td.vi-at-valor.vi-at-valor--fail {
-          color: #b02a37 !important;
-          background-color: #f8d7da;
+          color: var(--vi-grid-at-fail-text) !important;
+          background-color: var(--vi-grid-at-fail-bg);
         }
         .vi-spreadsheet td.vi-at-valor.vi-at-valor--ok {
-          color: #0f9d58 !important;
+          color: var(--vi-grid-at-ok-text) !important;
         }
 
         /* Colores para celdas de Error % (E%) según rangos */
         .vi-spreadsheet .vi-e-ok {
-          color: #198754; /* verde: dentro de tolerancia */
+          color: var(--vi-grid-e-ok); /* verde: dentro de tolerancia */
         }
         .vi-spreadsheet .vi-e-warn {
-          color: #fd7e14; /* naranja intenso: advertencia */
+          color: var(--vi-grid-e-warn); /* naranja intenso: advertencia */
         }
         .vi-spreadsheet .vi-e-error {
-          color: #b02a37; /* rojo oscuro: error fuerte */
+          color: var(--vi-grid-e-error); /* rojo oscuro: error fuerte */
         }
 
         /* Resaltado suave de la celda enfocada (no agresivo) */
@@ -1542,14 +1540,14 @@ useEffect(() => {
         .vi-spreadsheet select.form-select:focus,
         .vi-spreadsheet .table-active input.form-control:focus,
         .vi-spreadsheet .table-active select.form-select:focus {
-          background-color: #d6e7ff !important; /* azul más visible al enfocar */
+          background-color: var(--vi-grid-input-active-bg) !important; /* azul más visible al enfocar */
           box-shadow: 0 0 0 0.18rem rgba(13, 110, 253, 0.3) !important;
         }
 
         /* FIX: mantener visible el resaltado rojo de celdas con error */
         .vi-spreadsheet input.vi-error-cell {
-          border-color: #dc3545 !important;
-          background-color: #f8d7da !important;
+          border-color: var(--vi-grid-error-border) !important;
+          background-color: var(--vi-grid-error-bg) !important;
           box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.25) !important;
         }
 
@@ -1697,21 +1695,21 @@ useEffect(() => {
                 className={`table table-bordered table-sm mb-0 align-middle text-center vi-spreadsheet vi-grid-font-${fontStep}`}
               >
 
-                  <thead className="table-light sticky-top z-1">
+                  <thead className="vi-surface-2 sticky-top z-1">
                     <tr>
                       <th className="vi-row-index" style={{width:"30px"}}>#</th>
                       <th className="vi-sticky-medidor" style={{width:"120px"}}># Medidor</th>
                       {/* NUEVO: Cabecera Estado por Fila */}
                       <th style={{width:"90px"}}>Estado</th>
                       {/* Q3 Expanded: J..P + T, U */}
-                      <th className="table-primary border-start border-dark" colSpan={9}>Q3</th>
+                      <th className="table-primary border-start vi-border" colSpan={9}>Q3</th>
                       {/* Q2 Expanded: V..AB + AF, AG */}
-                      <th className="table-primary border-start border-dark" colSpan={9}>Q2</th>
+                      <th className="table-primary border-start vi-border" colSpan={9}>Q2</th>
                       {/* Q1 Expanded: AH..AN + AR, AS */}
-                      <th className="table-primary border-start border-dark" colSpan={9}>Q1</th>
-                      <th className="bg-warning text-dark border-start border-dark vi-header-at" style={{width:"100px"}}>Conformidad</th>
+                      <th className="table-primary border-start vi-border" colSpan={9}>Q1</th>
+                      <th className="bg-warning vi-text-contrast border-start vi-border vi-header-at" style={{width:"100px"}}>Conformidad</th>
                       {/* CAMBIO: Nueva columna para botón de eliminar */}
-                      <th className="bg-light text-dark vi-header-quitar" style={{width:"40px"}}>Quitar</th>
+                      <th className="vi-surface-2 vi-text vi-header-quitar" style={{width:"40px"}}>Quitar</th>
                     </tr>
                     <tr style={{fontSize:"0.75rem"}}>
                       <th className="vi-row-index"></th>
@@ -1723,25 +1721,25 @@ useEffect(() => {
                       <th className="vi-min-width text-primary fw-bold" title="M">L.I.</th>
                       <th className="vi-min-width text-primary fw-bold" title="N">L.F.</th>
                       <th className="vi-min-width" title="O">Vol</th><th className="vi-min-width" title="P">Tpo</th>
-                      <th title="T (Caudal)"  className="bg-light border-start text-primary fw-bold vi-min-width">Q3</th>
-                      <th title="U (Error %)" className="bg-light text-danger  fw-bold vi-min-width">E%</th>
+                      <th title="T (Caudal)"  className="vi-surface-2 border-start text-primary fw-bold vi-min-width">Q3</th>
+                      <th title="U (Error %)" className="vi-surface-2 text-danger  fw-bold vi-min-width">E%</th>
                       {/* Q2 - Ajuste visual de ancho */}
-                      <th className="vi-min-width border-start border-dark" title="V">Temp</th><th className="vi-min-width" title="W">P.Ent</th><th className="vi-min-width" title="X">P.Sal</th>
+                      <th className="vi-min-width border-start vi-border" title="V">Temp</th><th className="vi-min-width" title="W">P.Ent</th><th className="vi-min-width" title="X">P.Sal</th>
                       <th className="vi-min-width text-primary fw-bold" title="Y">L.I.</th>
                       <th className="vi-min-width text-primary fw-bold" title="Z">L.F.</th>
                       <th className="vi-min-width" title="AA">Vol</th><th className="vi-min-width" title="AB">Tpo</th>
-                      <th title="AF (Caudal)" className="bg-light border-start text-primary fw-bold vi-min-width">Q2</th>
-                      <th title="AG (Error %)" className="bg-light text-danger  fw-bold vi-min-width">E%</th>
+                      <th title="AF (Caudal)" className="vi-surface-2 border-start text-primary fw-bold vi-min-width">Q2</th>
+                      <th title="AG (Error %)" className="vi-surface-2 text-danger  fw-bold vi-min-width">E%</th>
                       {/* Q1 - Ajuste visual de ancho */}
-                      <th className="vi-min-width border-start border-dark" title="AH">Temp</th><th className="vi-min-width" title="AI">P.Ent</th><th className="vi-min-width" title="AJ">P.Sal</th>
+                      <th className="vi-min-width border-start vi-border" title="AH">Temp</th><th className="vi-min-width" title="AI">P.Ent</th><th className="vi-min-width" title="AJ">P.Sal</th>
                       {/* L.I. mismo color que L.F. en Q1 */}
                       <th className="vi-min-width text-primary fw-bold" title="AK">L.I.</th>
                       <th className="vi-min-width text-primary fw-bold" title="AL">L.F.</th>
                       <th className="vi-min-width" title="AM">Vol</th><th className="vi-min-width" title="AN">Tpo</th>
-                      <th title="AR (Caudal)" className="bg-light border-start text-primary fw-bold vi-min-width">Q1</th>
-                      <th title="AS (Error %)" className="bg-light text-danger  fw-bold vi-min-width">E%</th>
+                      <th title="AR (Caudal)" className="vi-surface-2 border-start text-primary fw-bold vi-min-width">Q1</th>
+                      <th title="AS (Error %)" className="vi-surface-2 text-danger  fw-bold vi-min-width">E%</th>
                       {/* AT con texto negro y Quitar en negro */}
-                      <th title="AT (Conformidad)" className="bg-warning text-dark vi-header-at">Estado</th>
+                      <th title="AT (Conformidad)" className="bg-warning vi-text-contrast vi-header-at">Estado</th>
                       <th className="vi-header-quitar"></th>{/* Celda vacía para columna "Quitar" */}
                     </tr>
                   </thead>
@@ -1871,10 +1869,10 @@ useEffect(() => {
                           </td>
 
                          {/* Q3 */}
-                        <td className="border-start border-dark"><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q3.c1`, { setValueAs: parseDecimalInput })} /></td>
+                        <td className="border-start vi-border"><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q3.c1`, { setValueAs: parseDecimalInput })} /></td>
                         <td><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q3.c2`, { setValueAs: parseDecimalInput })} /></td>
                         <td><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q3.c3`, { setValueAs: parseDecimalInput })} /></td>
-                        <td className="bg-white">
+                        <td className="vi-surface">
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1891,7 +1889,7 @@ useEffect(() => {
                             {...register(`rowsData.${index}.q3.c4`, { setValueAs: parseDecimalInput })}
                           />
                         </td>
-                        <td className="bg-white">
+                        <td className="vi-surface">
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1914,10 +1912,10 @@ useEffect(() => {
                         <RenderResult val={q3_err} isErr warnThreshold={2} failThreshold={5} />
 
                           {/* Q2 */}
-                          <td className="border-start border-dark"><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q2.c1`, { setValueAs: parseDecimalInput })} /></td>
+                          <td className="border-start vi-border"><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q2.c1`, { setValueAs: parseDecimalInput })} /></td>
                           <td><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q2.c2`, { setValueAs: parseDecimalInput })} /></td>
                           <td><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q2.c3`, { setValueAs: parseDecimalInput })} /></td>
-                          <td className="bg-white">
+                          <td className="vi-surface">
                             <input
                               type="text"
                               inputMode="decimal"
@@ -1934,7 +1932,7 @@ useEffect(() => {
                               {...register(`rowsData.${index}.q2.c4`, { setValueAs: parseDecimalInput })}
                             />
                           </td>
-                          <td className="bg-white">
+                          <td className="vi-surface">
                             <input
                               type="text"
                               inputMode="decimal"
@@ -1957,10 +1955,10 @@ useEffect(() => {
                           <RenderResult val={q2_err} isErr warnThreshold={2} failThreshold={5} />
 
                           {/* Q1 */}
-                          <td className="border-start border-dark"><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q1.c1`, { setValueAs: parseDecimalInput })} /></td>
+                          <td className="border-start vi-border"><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q1.c1`, { setValueAs: parseDecimalInput })} /></td>
                           <td><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q1.c2`, { setValueAs: parseDecimalInput })} /></td>
                           <td><input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" className="form-control form-control-sm px-1 text-center" size={1} style={{ minWidth: "100%" }} onInput={handleAutoResize} disabled={!isBase || isRowLocked} {...register(`rowsData.${index}.q1.c3`, { setValueAs: parseDecimalInput })} /></td>
-                          <td className="bg-white">
+                          <td className="vi-surface">
                             <input
                               type="text"
                               inputMode="decimal"
@@ -1976,7 +1974,7 @@ useEffect(() => {
                               {...register(`rowsData.${index}.q1.c4`, { setValueAs: parseDecimalInput })}
                             />
                           </td>
-                          <td className="bg-white">
+                          <td className="vi-surface">
                             <input
                               type="text"
                               inputMode="decimal"
@@ -1998,11 +1996,11 @@ useEffect(() => {
                           <RenderResult val={q1_flow} />
                           <RenderResult val={q1_err} isErr warnThreshold={5} failThreshold={5} />
                           
-                          <td className={`bg-light border-start fw-bold small text-center vi-at-valor ${verdictClass}`}>
+                          <td className={`vi-surface-2 border-start fw-bold small text-center vi-at-valor ${verdictClass}`}>
                             {conformidad}
                           </td>
                           {/* CAMBIO: Botón de eliminar específico para esta fila */}
-                          <td className="text-center align-middle bg-light">
+                          <td className="text-center align-middle vi-surface-2">
                             <button
                               type="button"
                               className="btn btn-danger btn-sm p-0"

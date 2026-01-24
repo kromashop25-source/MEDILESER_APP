@@ -1,0 +1,184 @@
+/* Theme bridge and utilities (keep layout intact, only colors) */
+:root:not([data-theme]),
+:root[data-theme="light"] {
+  --c-bkg-page: #f4f6f9;
+  --c-bkg-card: #ffffff;
+  --c-bkg-card-2: #f8f9fa;
+  --c-text-base: #212529;
+  --c-text-muted: #6c757d;
+  --c-border: #e2e5e8;
+  --c-input-bkg: #ffffff;
+
+  --vi-sidebar-text: #334155;
+  --vi-sidebar-hover: #f1f5f9;
+  --vi-sidebar-active: #e7f1ff;
+  --vi-disabled-bg: #f1f3f5;
+  --vi-overlay-bg: rgba(255, 255, 255, 0.6);
+  --vi-sticky-bg: rgba(255, 255, 255, 0.97);
+  --vi-step-bg: rgba(0, 0, 0, 0.08);
+
+  --vi-grid-bg: #ffffff;
+  --vi-grid-text: #212529;
+  --vi-grid-head-bg: #e6f3ff;
+  --vi-grid-head-text: #0c2b4d;
+  --vi-grid-row-index-bg: #e6f3ff;
+  --vi-grid-row-index-text: #0c2b4d;
+  --vi-grid-base-row-bg: #d6e9ff;
+  --vi-grid-active-bg: #d9ecff;
+  --vi-grid-active-text: #0c2b4d;
+  --vi-grid-input-bg: #ffffff;
+  --vi-grid-input-text: #212529;
+  --vi-grid-input-border: #ced4da;
+  --vi-grid-input-active-bg: #d6e7ff;
+  --vi-grid-input-active-border: #b6d4fe;
+  --vi-grid-disabled-bg: #e9ecef;
+  --vi-grid-disabled-text: #6c757d;
+  --vi-grid-at-fail-text: #b02a37;
+  --vi-grid-at-fail-bg: #f8d7da;
+  --vi-grid-at-ok-text: #0f9d58;
+  --vi-grid-e-ok: #198754;
+  --vi-grid-e-warn: #fd7e14;
+  --vi-grid-e-error: #b02a37;
+  --vi-grid-error-border: #dc3545;
+  --vi-grid-error-bg: #f8d7da;
+}
+
+:root[data-theme="dark"] {
+  --c-bkg-page: #181a1f;
+  --c-bkg-card: #20232a;
+  --c-bkg-card-2: #1b1e24;
+  --c-text-base: #e8eaed;
+  --c-text-muted: #9ca3af;
+  --c-border: #2b2f36;
+  --c-input-bkg: #20232a;
+
+  --vi-sidebar-text: #e5e7eb;
+  --vi-sidebar-hover: color-mix(in srgb, var(--c-bkg-card) 85%, var(--c-border));
+  --vi-sidebar-active: color-mix(in srgb, var(--c-primary) 18%, var(--c-bkg-card));
+  --vi-disabled-bg: color-mix(in srgb, var(--c-bkg-card) 90%, var(--c-border));
+  --vi-overlay-bg: rgba(0, 0, 0, 0.35);
+  --vi-sticky-bg: rgba(32, 35, 42, 0.97);
+  --vi-step-bg: color-mix(in srgb, var(--c-bkg-card) 70%, var(--c-border));
+
+  --vi-grid-bg: #20232a;
+  --vi-grid-text: #e8eaed;
+  --vi-grid-head-bg: #1f2a3a;
+  --vi-grid-head-text: #e6f1ff;
+  --vi-grid-row-index-bg: #1f2a3a;
+  --vi-grid-row-index-text: #e6f1ff;
+  --vi-grid-base-row-bg: #243447;
+  --vi-grid-active-bg: #2a3a4f;
+  --vi-grid-active-text: #e6f1ff;
+  --vi-grid-input-bg: #1b1e24;
+  --vi-grid-input-text: #e8eaed;
+  --vi-grid-input-border: #334155;
+  --vi-grid-input-active-bg: #263445;
+  --vi-grid-input-active-border: #3b82f6;
+  --vi-grid-disabled-bg: #2a2f37;
+  --vi-grid-disabled-text: #9ca3af;
+  --vi-grid-at-fail-text: #f87171;
+  --vi-grid-at-fail-bg: #3a1f24;
+  --vi-grid-at-ok-text: #34d399;
+  --vi-grid-e-ok: #34d399;
+  --vi-grid-e-warn: #f59e0b;
+  --vi-grid-e-error: #f87171;
+  --vi-grid-error-border: #f87171;
+  --vi-grid-error-bg: #3a1f24;
+}
+
+.vi-surface {
+  background-color: var(--c-bkg-card) !important;
+  color: var(--c-text-base) !important;
+}
+
+.vi-surface-2 {
+  background-color: var(--c-bkg-card-2) !important;
+  color: var(--c-text-base) !important;
+}
+
+.vi-text {
+  color: var(--c-text-base) !important;
+}
+
+.vi-text-muted {
+  color: var(--c-text-muted) !important;
+}
+
+.vi-text-contrast {
+  color: #212529 !important;
+}
+
+.vi-border {
+  border-color: var(--c-border) !important;
+}
+
+.vi-input,
+.vi-input.form-control,
+.vi-input.form-select {
+  background-color: var(--c-input-bkg) !important;
+  color: var(--c-text-base) !important;
+  border-color: var(--c-border) !important;
+}
+
+.card,
+.card-header,
+.card-footer,
+.modal-content {
+  background-color: var(--c-bkg-card);
+  color: var(--c-text-base);
+  border-color: var(--c-border);
+}
+
+.table {
+  color: var(--c-text-base);
+}
+
+.table thead th {
+  color: var(--c-text-muted);
+}
+
+.table th,
+.table td {
+  border-color: var(--c-border);
+}
+
+.form-control,
+.form-select,
+.input-group-text {
+  background-color: var(--c-input-bkg);
+  color: var(--c-text-base);
+  border-color: var(--c-border);
+}
+
+.form-control::placeholder,
+.form-select::placeholder {
+  color: var(--c-text-muted);
+}
+
+/* Adminator utility overrides used in pages */
+.bgc-white {
+  background-color: var(--c-bkg-card) !important;
+}
+
+.bgc-grey-100 {
+  background-color: var(--c-bkg-card-2) !important;
+}
+
+.c-grey-900,
+.c-grey-800 {
+  color: var(--c-text-base) !important;
+}
+
+.c-grey-700,
+.c-grey-600,
+.c-grey-500 {
+  color: var(--c-text-muted) !important;
+}
+
+.bd,
+.bdT,
+.bdB,
+.bdL,
+.bdR {
+  border-color: var(--c-border) !important;
+}

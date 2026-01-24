@@ -263,7 +263,7 @@ export default function Sidebar({ collapsed, onToggleSidebar }: Props) {
         <div className="vi-sidebar__brand">
           <img
             className="vi-brand-logo"
-            src="/medileser/logo-vertical.jpg"
+            src="/medileser/loading.png"
             alt="Medileser"
             draggable={false}
           />

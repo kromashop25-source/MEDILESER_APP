@@ -598,7 +598,7 @@ export default function ExcelToolsPage() {
             {!result ? (
               <div className="text-muted">Sin resultado aún.</div>
             ) : (
-              <pre className="bg-light p-10" style={{ maxHeight: 360, overflow: "auto" }}>
+              <pre className="vi-surface-2 p-10" style={{ maxHeight: 360, overflow: "auto" }}>
                 {JSON.stringify(result, null, 2)}
               </pre>
             )}

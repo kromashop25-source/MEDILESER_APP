@@ -1485,7 +1485,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
                             {resumenValidacion ? (
                               <div className="d-flex flex-wrap gap-10 align-items-center mB-10">
-                                <span className="badge bg-light text-dark">
+                                <span className="badge vi-surface-2 vi-text">
                                   Orígenes OK: <strong>{resumenValidacion.okOrigenes}</strong> / {resumenValidacion.totalOrigenes}
                                 </span>
                                 <span className={resumenValidacion.okDestino ? "badge bg-success" : "badge bg-danger"}>
@@ -1575,7 +1575,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                       {runSelected?.id ? (
                         <span className="badge bg-success">Seleccionada</span>
                       ) : canGoStep2 ? (
-                        <span className="badge bg-warning text-dark">Pendiente</span>
+                        <span className="badge bg-warning vi-text-contrast">Pendiente</span>
                       ) : (
                         <span className="badge bg-secondary">Bloqueado</span>
                       )}
@@ -1599,7 +1599,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                             {runSelected?.id ? (
                               <div className="mT-5">
                                 <div className="d-flex flex-wrap gap-10 align-items-center">
-                                  <span className="badge bg-light text-dark">#{runSelected.id}</span>
+                                  <span className="badge vi-surface-2 vi-text">#{runSelected.id}</span>
                                   {runSelected?.created_at ? (
                                     <span className="small text-muted">{formatDateTime(runSelected.created_at)}</span>
                                   ) : null}
@@ -1703,7 +1703,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                               />
                             ) : null}
                             {copyOperationId ? (
-                              <span className="badge bg-light text-dark">
+                              <span className="badge vi-surface-2 vi-text">
                                 op: <strong>{copyOperationId}</strong>
                               </span>
                             ) : null}
@@ -1719,14 +1719,14 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                           </h6>
 
                           <div className="d-flex flex-wrap gap-10 mB-5">
-                            <span className="badge bg-light text-dark">
+                            <span className="badge vi-surface-2 vi-text">
                               PDFs: {copyKpis.pdfDone ?? "—"} / {copyKpis.pdfTotal ?? "—"}
                             </span>
-                            <span className="badge bg-light text-dark">
+                            <span className="badge vi-surface-2 vi-text">
                               OIs: {copyKpis.oiDone ?? "—"} / {copyKpis.oiTotal ?? "—"}
                             </span>
                             {copyWarnings.length ? (
-                              <span className="badge bg-warning text-dark">Advertencias: {copyWarnings.length}</span>
+                              <span className="badge bg-warning vi-text-contrast">Advertencias: {copyWarnings.length}</span>
                             ) : null}
                             {copyErrors.length ? (
                               <span className="badge bg-danger">Errores: {copyErrors.length}</span>
@@ -2190,14 +2190,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                   {/* Breadcrumbs */}
                     <div className="mT-10">
                       <label className="form-label mB-5">Navegación</label>
-                      <div
-                        className="p-10"
-                        style={{
-                        background: "#f8f9fa",
-                        border: "1px solid #e9ecef",
-                        borderRadius: 6,
-                      }}
-                    >
+                      <div className="p-10 vi-surface-2 border vi-border rounded">
                       <div className="d-flex flex-wrap align-items-center gap-10">
                         {buildBreadcrumbs(currentPath).map((c, idx, arr) => (
                           <span key={`${c.path}-${idx}`} className="small d-inline-flex align-items-center">
@@ -2216,7 +2209,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                           </span>
                         ))}
                       </div>
-                      <div className="small text-muted mT-5">
+                      <div className="small vi-text-muted mT-5">
                         Tip: Click en una sección para saltar a esa carpeta.
                       </div>
                     </div>

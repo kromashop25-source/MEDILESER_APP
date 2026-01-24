@@ -6,6 +6,7 @@ import {
   logoutWithCleanup,
   subscribeSelectedBank,
 } from "../api/auth";
+import ThemeToggle from "./ThemeToggle";
 
 type Props = {
   sidebarCollapsed?: boolean;
@@ -20,6 +21,7 @@ export default function Topbar({ sidebarCollapsed, onToggleSidebar }: Props) {
   const [selectedBank, setSelectedBank] = useState<number | null>(() => getSelectedBank());
   useEffect(() => subscribeSelectedBank(() => setSelectedBank(getSelectedBank())), []);
 
+
   const bankLabel = selectedBank && selectedBank > 0 ? `Banco ${selectedBank}` : "Banco sin seleccionar";
 
   const handleLogout = async () => {
@@ -31,7 +33,7 @@ export default function Topbar({ sidebarCollapsed, onToggleSidebar }: Props) {
   };
 
   return (
-    <header className="navbar navbar-expand bg-white border-bottom sticky-top vi-topbar px-3">
+    <header className="navbar navbar-expand vi-surface border-bottom vi-border sticky-top vi-topbar px-3">
       {onToggleSidebar && (
         <button
           type="button"
@@ -46,6 +48,7 @@ export default function Topbar({ sidebarCollapsed, onToggleSidebar }: Props) {
       <div className="me-auto" />
 
       <div className="d-flex align-items-center gap-3">
+        <ThemeToggle />
         {auth && (
           <span className="text-muted small text-truncate" style={{ maxWidth: "360px" }}>
             Usuario: <strong>{username || "?"}</strong>
