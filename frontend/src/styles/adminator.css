@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --vi-sidebar-width: 240px;
   --vi-sidebar-width-collapsed: 64px;
   --vi-topbar-height: 56px;
@@ -493,6 +493,35 @@
   min-width: 180px;
 }
 
+/* Theme-aware outline auto buttons (maps to outline-dark/light) */
+[data-bs-theme="light"] .btn-outline-auto {
+  --bs-btn-color: var(--bs-dark);
+  --bs-btn-border-color: var(--bs-dark);
+  --bs-btn-hover-color: var(--bs-light);
+  --bs-btn-hover-bg: var(--bs-dark);
+  --bs-btn-hover-border-color: var(--bs-dark);
+  --bs-btn-active-color: var(--bs-light);
+  --bs-btn-active-bg: var(--bs-dark);
+  --bs-btn-active-border-color: var(--bs-dark);
+  --bs-btn-disabled-color: var(--bs-dark);
+  --bs-btn-disabled-border-color: var(--bs-dark);
+  --bs-btn-focus-shadow-rgb: var(--bs-dark-rgb);
+}
+
+[data-bs-theme="dark"] .btn-outline-auto {
+  --bs-btn-color: var(--bs-light);
+  --bs-btn-border-color: var(--bs-light);
+  --bs-btn-hover-color: var(--bs-dark);
+  --bs-btn-hover-bg: var(--bs-light);
+  --bs-btn-hover-border-color: var(--bs-light);
+  --bs-btn-active-color: var(--bs-dark);
+  --bs-btn-active-bg: var(--bs-light);
+  --bs-btn-active-border-color: var(--bs-light);
+  --bs-btn-disabled-color: var(--bs-light);
+  --bs-btn-disabled-border-color: var(--bs-light);
+  --bs-btn-focus-shadow-rgb: var(--bs-light-rgb);
+}
+
 @media (max-width: 767.98px){
   .vi-log01-actions{
     justify-content: stretch;
@@ -586,3 +615,4 @@
   border-radius: 10px;
   box-shadow: 0 -2px 10px rgba(0,0,0,0.04);
 }
+

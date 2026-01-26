@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   getAuth,
   getSelectedBank,
@@ -67,7 +67,7 @@ export default function Topbar({ sidebarCollapsed, onToggleSidebar }: Props) {
         )}
 
         {auth && (
-          <button className="btn btn-sm btn-outline-secondary" onClick={handleLogout}>
+          <button className="btn btn-sm btn-outline-auto" onClick={handleLogout}>
             Cerrar sesión
           </button>
         )}
@@ -75,3 +75,4 @@ export default function Topbar({ sidebarCollapsed, onToggleSidebar }: Props) {
     </header>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+﻿import { useEffect, useRef } from "react";
 import type { ChangeEvent } from "react";
 
 type FileItem = {
@@ -99,7 +99,7 @@ export default function OiFilesModal({
               <div className="d-flex gap-10">
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline-secondary"
+                  className="btn btn-sm btn-outline-auto"
                   onClick={handleAddMore}
                   disabled={disabled}
                 >
@@ -147,7 +147,7 @@ export default function OiFilesModal({
           <div className="modal-footer">
             <button
               type="button"
-              className="btn btn-outline-secondary"
+              className="btn btn-outline-auto"
               onClick={onClose}
             >
               Cerrar
@@ -158,4 +158,5 @@ export default function OiFilesModal({
     </div>
   );
 }
+
 

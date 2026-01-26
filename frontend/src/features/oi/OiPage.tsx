@@ -1767,7 +1767,7 @@ export default function OiPage() {
           {oiId && isAdmin && (
             <button
               type="button"
-              className="btn btn-outline-secondary btn-sm"
+              className="btn btn-outline-auto btn-sm"
               onClick={handleOpenOiSavedAt}
               disabled={busy}
             >
@@ -1889,7 +1889,7 @@ export default function OiPage() {
           )}
 
           {isViewMode && (
-            <button type="button" className="btn btn-outline-secondary" onClick={handleBackToList} disabled={busy}>
+            <button type="button" className="btn btn-outline-auto" onClick={handleBackToList} disabled={busy}>
               Volver al listado
             </button>
           )}
@@ -1903,7 +1903,7 @@ export default function OiPage() {
             </button>
           )}
           {isEditMode && (
-            <button type="button" className="btn btn-outline-secondary" onClick={handleCancelClick} disabled={busy}>
+            <button type="button" className="btn btn-outline-auto" onClick={handleCancelClick} disabled={busy}>
               Cancelar
             </button>
           )}
@@ -1965,7 +1965,7 @@ export default function OiPage() {
                       {/* botones Editar / Eliminar */}
                         {isAdmin ? (
                           <button
-                            className="btn btn-sm btn-outline-secondary me-2"
+                            className="btn btn-sm btn-outline-auto me-2"
                             onClick={() => handleOpenBancadaSavedAt(b)}
                             disabled={busy || isEditingOI || readOnly}
                             aria-label={`Editar fecha guardado bancada #${b.item}`}
@@ -2054,7 +2054,7 @@ export default function OiPage() {
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-outline-secondary"
+                  className="btn btn-outline-auto"
                   onClick={handleCancelOI}
                   disabled={busy}
                 >
@@ -2134,7 +2134,7 @@ export default function OiPage() {
               <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-outline-secondary"
+                  className="btn btn-outline-auto"
                   onClick={() => {
                     setShowSavedAtModal(false);
                     setSavedAtTarget(null);

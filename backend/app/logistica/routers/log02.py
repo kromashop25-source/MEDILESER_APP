@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 import os
 import json
 import re
@@ -278,6 +278,12 @@ class Log02CopyConformesStartRequest(BaseModel):
 class Log02CopyConformesStartResponse(BaseModel):
     operation_id: str
 
+class Log02CopyConformesPollResponse(BaseModel):
+    cursor_next: int = -1
+    events: List[dict] = []
+    done: bool = False
+    summary: Optional[Any] = None
+
 def _norm_str(v: Any) -> str:
     return ("" if v is None else str(v)).strip()
 
@@ -354,6 +360,16 @@ def _record_oi_error(
     audit["ois_error"].append({"oi": oi_tag, "code": code, "detail": detail})
     _emit(operation_id, {"type": "oi_error", "oi": oi_tag, "code": code, "message": detail})
 
+def _record_oi_warn(
+        operation_id: str,
+        *,
+        oi_tag: str,
+        code: str,
+        detail: str,
+) -> None:
+    _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": code, "message": detail})
+
+
 def _cleanup_dest_folder(dest_folder: Path) -> None:
     try:
         if dest_folder.exists():
@@ -410,6 +426,55 @@ def _series_from_filename(name:str) -> str:
     # Serie = nombre del PDF sin extensión
     p = Path(name)
     return p.stem.strip()
+
+_SERIE_RANGE_RE = re.compile(r"([A-Z]+)\s*(\d{2,})\s*(?:AL|-|A)\s*([A-Z]+)?\s*(\d{2,})", re.IGNORECASE)
+_SERIE_RANGE_MAX = 200000
+
+def _expand_series_from_text(value: str) -> List[str]:
+    """
+    Intenta extraer y expandir un rango de series dentro de un texto (p.ej. "PA0001 AL PA0100").
+    Si no hay rango válido, devuelve [].
+    """
+    raw = _norm_str(value)
+    if not raw:
+        return []
+    s = raw.replace("–", "-").replace("—", "-").upper()
+    for m in _SERIE_RANGE_RE.finditer(s):
+        prefix1 = (m.group(1) or "").upper()
+        start_s = m.group(2) or ""
+        prefix2 = (m.group(3) or prefix1).upper()
+        end_s = m.group(4) or ""
+        if not prefix1 or not start_s or not end_s:
+            continue
+        if prefix2 and prefix2 != prefix1:
+            continue
+        try:
+            start_n = int(start_s)
+            end_n = int(end_s)
+        except ValueError:
+            continue
+        if end_n < start_n:
+            start_n, end_n = end_n, start_n
+        total = end_n - start_n + 1
+        if total <= 0 or total > _SERIE_RANGE_MAX:
+            continue
+        width = max(len(start_s), len(end_s))
+        return [f"{prefix1}{str(n).zfill(width)}" for n in range(start_n, end_n + 1)]
+    return []
+
+def _expand_conforme_set(conforme_set: Set[str]) -> Set[str]:
+    """
+    Expande entradas tipo rango (p.ej. "PA0001 AL PA0100") a series individuales.
+    Si no se puede expandir, mantiene la serie original.
+    """
+    expanded: Set[str] = set()
+    for serie in conforme_set:
+        series_from_range = _expand_series_from_text(serie)
+        if series_from_range:
+            expanded.update(series_from_range)
+        else:
+            expanded.add(serie)
+    return expanded
 
 def _gaselag_key_from_name(name: str) -> str:
     """
@@ -657,6 +722,8 @@ def _copy_conformes_worker(
             "run_id": run_id,
             "total_ois": total_ois,
             "ois_ok": 0,
+            "series_duplicadas": [],
+            "series_faltantes": [],
             "ois_faltantes": [],
             "ois_duplicadas": [],
             "destinos_duplicados": [],
@@ -665,7 +732,8 @@ def _copy_conformes_worker(
                 "pdf_detectados": 0,
                 "pdf_copiados": 0,
                 "pdf_omitidos_no_conforme": 0,
-                "pdf_omitidos_no_encontrado": 0,  # reservado (si luego manejamos lista esperada)
+                "pdf_omitidos_duplicados": 0,
+                "pdf_omitidos_no_encontrado": 0,  # series esperadas sin PDF
                 "archivos_no_pdf_omitidos": 0,
             },
         }
@@ -728,7 +796,14 @@ def _copy_conformes_worker(
                     continue
 
                 no_conf_set = no_conf_map.get(oi_tag, set())
-                conforme_set = conformes_map.get(oi_tag) if use_conforme_allowlist else None
+                raw_conforme_set = conformes_map.get(oi_tag) if use_conforme_allowlist else None
+                conforme_set = _expand_conforme_set(raw_conforme_set) if raw_conforme_set is not None else None
+
+                # tracking por OI (duplicados/faltantes)
+                serie_files: dict[str, list[str]] = {}
+                series_present: set[str] = set()
+                dup_primary: dict[str, str] = {}
+
 
                 # 1) Primera pasada: contar PDFs (para poder emitir progreso fino)
                 try:
@@ -742,6 +817,11 @@ def _copy_conformes_worker(
                                     continue
                                 if entry.name.lower().endswith(".pdf"):
                                     total_pdfs_in_oi += 1
+                                    # contruir mapa serie -> archivos y set de series presentes
+                                    serie0 = _series_from_filename(entry.name)
+                                    if serie0:
+                                        series_present.add(serie0)
+                                        serie_files.setdefault(serie0, []).append(entry.name)
                             except Exception:
                                 continue
                 except PermissionError as e:
@@ -754,6 +834,37 @@ def _copy_conformes_worker(
                     _record_oi_error(audit, operation_id, oi_tag=oi_tag, code="LISTADO_ERROR", detail=detail)
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
                     continue
+
+                # Detectar duplicados (misma serie repetida en la carpeta)
+                dup_series = {s: names for s, names in serie_files.items() if len(names) > 1}
+                if dup_series:
+                    for s, names in dup_series.items():
+                        chosen = sorted(names, key=lambda x: x.lower())[0] # determinístico
+                        dup_primary[s] = chosen
+                        audit["series_duplicadas"].append({"oi": oi_tag, "serie": s, "files": names})
+                    _record_oi_warn(
+                        operation_id,
+                        oi_tag=oi_tag,
+                        code="SERIE_DUPLICADA",
+                        detail=f"Se detectaron {len(dup_series)} serie(s) duplicada(s) en la carpeta. Se copiará solo 1 PDF por serie.",
+                    )
+
+                # Detectar faltantes SOLO si hay allowlist (MANIFIESTO -> series_conforme)
+                # Nota: si no hay allowlist, no hay "lista esperada" confiable para marcar faltantes.
+                if conforme_set is not None and conforme_set:
+                    missing = sorted([s for s in conforme_set if s not in series_present], key=lambda x: x)
+                    if missing:
+                        audit["series_faltantes"].append({"oi": oi_tag, "count": len(missing), "series": missing[:50]})
+                        audit["archivos"]["pdf_omitidos_no_encontrado"] += len(missing)
+                        sample = ", ".join(missing[:6])
+                        more = "" if len(missing) <= 6 else f" (+{len(missing) - 6} más)"
+                        _record_oi_warn(
+                            operation_id,
+                            oi_tag=oi_tag,
+                            code="SERIE_SIN_PDF",
+                            detail=f"Faltan {len(missing)} serie(s) conforme(s) sin PDF en carpeta. Ej: {sample}{more}",
+                        )
+                        
 
                 # Emite primer tick dentro de la OI (si hay PDFs)
                 if total_pdfs_in_oi > 0:
@@ -793,6 +904,15 @@ def _copy_conformes_worker(
                                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
                                 continue
 
+                            # Omitir copias extra si la serie está duplicada (se copia solo el “primary”)
+                            if serie in dup_primary and entry.name != dup_primary[serie]:
+                                audit["archivos"]["pdf_omitidos_duplicados"] += 1
+                                if verbose_events:
+                                    _emit(operation_id, {"type": "file_skip", "oi": oi_tag, "serie": serie, "file": entry.name, "reason": "DUPLICADO"})
+                                if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
+                                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
+                                continue
+                            
                             if conforme_set is not None:
                                 if serie not in conforme_set:
                                     omitted_nc += 1
@@ -922,7 +1042,13 @@ def _copy_conformes_worker(
                         continue
 
                     no_conf_set = no_conf_map.get(oi_key, set())
-                    conforme_set = conformes_map.get(oi_key) if use_conforme_allowlist else None
+                    raw_conforme_set = conformes_map.get(oi_key) if use_conforme_allowlist else None
+                    conforme_set = _expand_conforme_set(raw_conforme_set) if raw_conforme_set is not None else None
+
+                    # Gaselag: duplicados y faltantes por serie (PDF individual)
+                    serie_files: dict[str, list[str]] = {}
+                    series_present: set[str] = set()
+                    dup_primary: dict[str, str] = {}
 
                     # 1) Primera pasada: contar PDFs
                     try:
@@ -936,6 +1062,10 @@ def _copy_conformes_worker(
                                         continue
                                     if entry.name.lower().endswith(".pdf"):
                                         total_pdfs_in_oi += 1
+                                        serie0 = _series_from_filename(entry.name)
+                                        if serie0:
+                                            series_present.add(serie0)
+                                            serie_files.setdefault(serie0, []).append(entry.name)
                                 except Exception:
                                     continue
                     except PermissionError as e:
@@ -948,6 +1078,34 @@ def _copy_conformes_worker(
                         _record_oi_error(audit, operation_id, oi_tag=oi_label, code="LISTADO_ERROR", detail=detail)
                         _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
                         continue
+
+                    dup_series = {s: names for s, names in serie_files.items() if len(names) > 1}
+                    if dup_series:
+                        for s, names in dup_series.items():
+                            chosen = sorted(names, key=lambda x: x.lower())[0]
+                            dup_primary[s] = chosen
+                            audit["series_duplicadas"].append({"oi": oi_label, "serie": s, "files": names})
+                        _record_oi_warn(
+                            operation_id,
+                            oi_tag=oi_label,
+                            code="SERIE_DUPLICADA",
+                            detail=f"Se detectaron {len(dup_series)} serie(s) duplicada(s) en la carpeta. Se copiará solo 1 PDF por serie.",
+                        )
+
+                    # Faltantes: series esperadas (conformes) sin PDF presente en carpeta OI
+                    if conforme_set is not None and conforme_set:
+                        missing = sorted([s for s in conforme_set if s not in series_present], key=lambda x: x)
+                        if missing:
+                            audit["series_faltantes"].append({"oi": oi_label, "count": len(missing), "series": missing[:50]})
+                            audit["archivos"]["pdf_omitidos_no_encontrado"] += len(missing)
+                            sample = ", ".join(missing[:6])
+                            more = "" if len(missing) <= 6 else f" (+{len(missing) - 6} m?s)"
+                            _record_oi_warn(
+                                operation_id,
+                                oi_tag=oi_label,
+                                code="SERIE_SIN_PDF",
+                                detail=f"Faltan {len(missing)} serie(s) conforme(s) sin PDF en carpeta. Ej: {sample}{more}",
+                            )
 
                     if total_pdfs_in_oi > 0:
                         _emit_progress(
@@ -984,6 +1142,16 @@ def _copy_conformes_worker(
                                     if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
                                         _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
                                         continue
+
+                                # Omitir copiar extra por duplicado
+                                if serie in dup_primary and entry.name != dup_primary[serie]:
+                                    audit["archivos"]["pdf_omitidos_duplicados"] += 1
+                                    if verbose_events:
+                                        _emit(operation_id, {"type": "file_skip", "oi": oi_label, "serie": serie, "file": entry.name, "reason": "DUPLICADO"})
+                                    if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
+                                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, processed_in_oi=processed_in_oi, total_in_oi=total_pdfs_in_oi)
+                                    continue
+                                    
 
                                 if conforme_set is not None:
                                     if serie not in conforme_set:
@@ -1181,8 +1349,8 @@ def log02_copiar_conformes_progress(operation_id: str):
     )
 
 
-@router.get("/copiar-conformes/poll/{operation_id}")
-def log02_copiar_conformes_poll(operation_id: str, cursor: int = -1):
+@router.get("/copiar-conformes/poll/{operation_id}", response_model=Log02CopyConformesPollResponse)
+def log02_copiar_conformes_poll(operation_id: str, cursor: int = -1) -> Log02CopyConformesPollResponse:
     channel, events, cursor_next = progress_manager.get_events_since(operation_id, cursor)
     done = channel.closed
     summary = None
@@ -1196,12 +1364,7 @@ def log02_copiar_conformes_poll(operation_id: str, cursor: int = -1):
             if ev.get("type") == "complete":
                 summary = ev.get("audit")
                 break
-    return {
-        "cursor_next": cursor_next,
-        "events": events,
-        "done": done,
-        "summary": summary,
-    }
+    return Log02CopyConformesPollResponse(cursor_next=cursor_next, events=events, done=done, summary=summary)
 
 
 @router.post("/copiar-conformes/cancel/{operation_id}")

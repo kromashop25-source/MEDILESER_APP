@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import {
   listOI,
   listResponsables,
@@ -311,7 +311,7 @@ export default function OiListPage() {
         <div className="d-flex gap-2">
           {isAdmin && (
             <button
-              className="btn btn-outline-secondary"
+              className="btn btn-outline-auto"
               onClick={handleExportCsv}
               disabled={busy}
             >
@@ -319,14 +319,14 @@ export default function OiListPage() {
             </button>
           )}
           <button
-            className="btn btn-outline-secondary"
+            className="btn btn-outline-auto"
             onClick={handleClearFilters}
             disabled={busy}
           >
             Limpiar filtros
           </button>
           <button
-            className="btn btn-outline-secondary"
+            className="btn btn-outline-auto"
             onClick={() => refetch()}
             disabled={busy}
           >
@@ -588,3 +588,4 @@ export default function OiListPage() {
     </div>
   );
 }
+

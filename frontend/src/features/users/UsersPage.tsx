@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { api } from "../../api/client";
@@ -295,7 +295,7 @@ export default function UsersPage() {
         <div className="d-flex gap-2">
           <button
             type="button"
-            className="btn btn-sm btn-outline-secondary"
+            className="btn btn-sm btn-outline-auto"
             onClick={clearFilters}
             disabled={busyAll}
           >
@@ -303,7 +303,7 @@ export default function UsersPage() {
           </button>
           <button
             type="button"
-            className="btn btn-sm btn-outline-secondary"
+            className="btn btn-sm btn-outline-auto"
             onClick={() => refetch()}
             disabled={busyAll}
           >
@@ -500,3 +500,4 @@ export default function UsersPage() {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useToast } from "../../components/Toast";
 import { changeOwnPassword } from "../../api/auth";
 import PasswordInput from "../../components/PasswordInput";
@@ -66,7 +66,7 @@ export default function ChangePasswordPage() {
               <div className="card-footer d-flex justify-content-end gap-2">
                 <button
                   type="button"
-                  className="btn btn-outline-secondary"
+                  className="btn btn-outline-auto"
                   onClick={() => {
                     setOldPwd("");
                     setNewPwd("");
@@ -90,3 +90,4 @@ export default function ChangePasswordPage() {
     </div>
   );
 }
+

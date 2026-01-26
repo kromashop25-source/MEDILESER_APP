@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import {
@@ -1179,7 +1179,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
   function stageLabel(stageRaw: string) {
     const s = (stageRaw || "").trim();
-    if (!s) return "—";
+    if (!s) return "—"; 
     return translateProgressStage ? translateProgressStage(s) : s;
   }
 
@@ -1347,7 +1347,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                     <div className="btn-group" role="group" aria-label="Acciones origen">
                                       <button
                                         type="button"
-                                        className="btn btn-sm btn-outline-secondary"
+                                        className="btn btn-sm btn-outline-auto"
                                         onClick={() => void copyTextSafe((value || "").trim())}
                                         disabled={validando || !(value || "").trim()}
                                         title="Copiar ruta"
@@ -1373,7 +1373,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                         title="Quitar ruta"
                                         style={{ minWidth: 52 }}
                                       >
-                                        –
+                                        −
                                       </button>
                                     </div>
                                   </div>
@@ -1392,7 +1392,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                 </button>
                                 <button
                                   type="button"
-                                  className="btn btn-sm btn-outline-secondary"
+                                  className="btn btn-sm btn-outline-auto"
                                   onClick={quitarDuplicadosUI}
                                   disabled={validando}
                                   title="Quitar duplicados (solo UI)"
@@ -1428,7 +1428,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                 <div className="btn-group" role="group" aria-label="Acciones destino">
                                   <button
                                     type="button"
-                                    className="btn btn-sm btn-outline-secondary"
+                                    className="btn btn-sm btn-outline-auto"
                                     onClick={() => void copyTextSafe(destinoLimpio)}
                                     disabled={validando || !destinoLimpio}
                                     title="Copiar ruta"
@@ -1492,7 +1492,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                   Destino: {resumenValidacion.okDestino ? "OK" : "No OK"}
                                 </span>
                                 {!resultado.ok ? (
-                                  <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => void copiarDetalle()}>
+                                  <button type="button" className="btn btn-sm btn-outline-auto" onClick={() => void copiarDetalle()}>
                                     Copiar detalle
                                   </button>
                                 ) : null}
@@ -1709,7 +1709,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                             ) : null}
                             <button
                               type="button"
-                              className="btn btn-sm btn-outline-secondary ms-auto"
+                              className="btn btn-sm btn-outline-auto ms-auto"
                               onClick={() => void copiarEstadoCopiado()}
                               disabled={!copyStage && !copyMessage && !copyOperationId}
                               title="Copiar estado del progreso"
@@ -1785,7 +1785,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                   <div className="d-flex gap-10">
                                     <button
                                       type="button"
-                                      className="btn btn-sm btn-outline-secondary"
+                                      className="btn btn-sm btn-outline-auto"
                                       onClick={() => void copyLiveLogToClipboard()}
                                       disabled={!liveEvents.length}
                                     >
@@ -1891,7 +1891,9 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
                             {(copyAudit?.ois_faltantes?.length ||
                               copyAudit?.ois_duplicadas?.length ||
-                              copyAudit?.destinos_duplicados?.length) ? (
+                              copyAudit?.destinos_duplicados?.length ||
+                              copyAudit?.series_duplicadas?.length ||
+                              copyAudit?.series_faltantes?.length) ? (
                               <div className="mT-10">
                                 {copyAudit?.ois_faltantes?.length ? (
                                   <div className="alert alert-warning" role="alert">
@@ -1931,6 +1933,41 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                     </ul>
                                   </div>
                                 ) : null}
+                                {copyAudit?.series_duplicadas?.length ? (
+                                  <div className="alert alert-warning" role="alert">
+                                    <strong>Series duplicadas (mismo nombre de PDF):</strong>
+                                    <ul className="mB-0 mT-5">
+                                      {copyAudit.series_duplicadas.slice(0, 12).map((it: any, idx: number) => (
+                                        <li key={`sd-${idx}`}>
+                                          <strong>{it?.oi}</strong> — {it?.serie} ({Array.isArray(it?.files) ? it.files.length : 0} archivo(s))
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    {copyAudit.series_duplicadas.length > 12 ? (
+                                      <div className="small text-muted mT-5">
+                                        Mostrando 12 de {copyAudit.series_duplicadas.length}. Revisa el audit JSON para el detalle completo.
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+
+                                {copyAudit?.series_faltantes?.length ? (
+                                  <div className="alert alert-warning" role="alert">
+                                    <strong>Series faltantes (conforme en manifiesto, sin PDF):</strong>
+                                    <ul className="mB-0 mT-5">
+                                      {copyAudit.series_faltantes.slice(0, 12).map((it: any, idx: number) => (
+                                        <li key={`sf-${idx}`}>
+                                          <strong>{it?.oi}</strong> — {it?.count} faltante(s)
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    {copyAudit.series_faltantes.length > 12 ? (
+                                      <div className="small text-muted mT-5">
+                                        Mostrando 12 de {copyAudit.series_faltantes.length}. Revisa el audit JSON para el detalle completo.
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                               </div>
                             ) : null}
                           </div>
@@ -1963,7 +2000,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                   </button>
                   <button
                     type="button"
-                    className="btn btn-sm btn-outline-secondary"
+                    className="btn btn-sm btn-outline-auto"
                     onClick={() => setLiveOpen(true)}
                   >
                     Ver detalle
@@ -2058,7 +2095,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                       </button>
                       <button
                         type="button"
-                        className="btn btn-sm btn-outline-secondary"
+                        className="btn btn-sm btn-outline-auto"
                         onClick={() => {
                           setRunQ("");
                           setRunDateFrom("");
@@ -2247,7 +2284,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                       >
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline-secondary"
+                          className="btn btn-sm btn-outline-auto"
                           onClick={() => void copyCurrentPath()}
                           disabled={!currentPath || loadingFolders}
                           title="Copiar la ruta actual al portapapeles"
@@ -2259,7 +2296,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                   </div>
 
                   <div className="d-flex gap-10 mT-10">
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={upOneLevel} disabled={!currentPath || loadingFolders}>
+                    <button type="button" className="btn btn-sm btn-outline-auto" onClick={upOneLevel} disabled={!currentPath || loadingFolders}>
                       Subir nivel
                     </button>
                     <button
@@ -2380,3 +2417,4 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listUserPermissionsPaged, updateUserPermissions } from "../../api/admin";
 import type { UserPermissions } from "../../api/admin";
@@ -264,7 +264,7 @@ export default function AdminPermisosPage() {
               <div className="d-flex gap-2">
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline-secondary"
+                  className="btn btn-sm btn-outline-auto"
                   onClick={clearFilters}
                   disabled={isLoading || mutation.isPending}
                 >
@@ -272,7 +272,7 @@ export default function AdminPermisosPage() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline-secondary"
+                  className="btn btn-sm btn-outline-auto"
                   onClick={() => refetch()}
                   disabled={isLoading || mutation.isPending}
                 >
@@ -421,7 +421,7 @@ export default function AdminPermisosPage() {
                         <div className="btn-group btn-group-sm" role="group" aria-label={`Acciones ${g.label}`}>
                           <button
                             type="button"
-                            className="btn btn-outline-secondary"
+                            className="btn btn-outline-auto"
                             onClick={() => setGroupCollapsed(g.id, !isCollapsed)}
                             disabled={mutation.isPending}
                           >
@@ -463,7 +463,7 @@ export default function AdminPermisosPage() {
               </div>
 
               <div className="modal-footer">
-                <button type="button" className="btn btn-outline-secondary" onClick={closeEdit} disabled={mutation.isPending}>
+                <button type="button" className="btn btn-outline-auto" onClick={closeEdit} disabled={mutation.isPending}>
                   Cancelar
                 </button>
                 <button
@@ -482,3 +482,4 @@ export default function AdminPermisosPage() {
     </div>
   );
 }
+

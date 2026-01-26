@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { InputHTMLAttributes, Ref } from "react";
 
 type Props = {
@@ -42,7 +42,7 @@ export default function PasswordInput({
         />
         <button
           type="button"
-          className="btn btn-outline-secondary"
+          className="btn btn-outline-auto"
           onClick={() => setVisible((v) => !v)}
           tabIndex={-1}
           aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
@@ -54,3 +54,4 @@ export default function PasswordInput({
     </div>
   );
 }
+

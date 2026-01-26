@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import PasswordInput from "../../components/PasswordInput";
 
 type Props = {
@@ -87,7 +87,7 @@ export default function PasswordModal({
           <div className="modal-footer">
             <button
               type="button"
-              className="btn btn-outline-secondary"
+              className="btn btn-outline-auto"
               onClick={onClose}
             >
               Cancelar
@@ -105,3 +105,4 @@ export default function PasswordModal({
     </div>
   );
 }
+

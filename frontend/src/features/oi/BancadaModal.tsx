@@ -1656,7 +1656,7 @@ useEffect(() => {
                   </button>
                   <button
                     type="button"
-                    className="btn btn-outline-secondary btn-sm"
+                    className="btn btn-outline-auto btn-sm"
                     onClick={handleClearAll}
                   >
                     Limpiar Todo
@@ -1667,14 +1667,14 @@ useEffect(() => {
                 <div className="col-md-4 d-flex justify-content-end gap-2">
                   <button
                     type="button"
-                    className="btn btn-outline-secondary btn-sm"
+                    className="btn btn-outline-auto btn-sm"
                     onClick={handleIncreaseFont}
                   >
                     Aumentar tamaño
                   </button>
                   <button
                     type="button"
-                    className="btn btn-outline-secondary btn-sm"
+                    className="btn btn-outline-auto btn-sm"
                     onClick={handleDecreaseFont}
                   >
                     Reducir tamaño

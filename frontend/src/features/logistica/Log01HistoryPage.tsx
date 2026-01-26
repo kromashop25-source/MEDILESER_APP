@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import type { AxiosError } from "axios";
@@ -316,10 +316,10 @@ export default function Log01HistoryPage() {
                 <button type="submit" className="btn btn-sm btn-primary" disabled={loading}>
                   Buscar
                 </button>
-                <button type="button" className="btn btn-sm btn-outline-secondary" onClick={clearFilters}>
+                <button type="button" className="btn btn-sm btn-outline-auto" onClick={clearFilters}>
                   Limpiar filtros
                 </button>
-                <button type="button" className="btn btn-sm btn-outline-secondary" onClick={refresh}>
+                <button type="button" className="btn btn-sm btn-outline-auto" onClick={refresh}>
                   Recargar
                 </button>
               </div>
@@ -390,14 +390,14 @@ export default function Log01HistoryPage() {
                                   </button>
                                   <button
                                     type="button"
-                                    className="btn btn-sm btn-outline-secondary"
+                                    className="btn btn-sm btn-outline-auto"
                                     onClick={() => void downloadArtifact(item.id, "no-conforme")}
                                   >
                                     No conforme
                                   </button>
                                   <button
                                     type="button"
-                                    className="btn btn-sm btn-outline-secondary"
+                                    className="btn btn-sm btn-outline-auto"
                                     onClick={() => void downloadArtifact(item.id, "manifiesto")}
                                   >
                                     Manifiesto
@@ -429,7 +429,7 @@ export default function Log01HistoryPage() {
                 <div className="d-flex gap-10">
                   <button
                     type="button"
-                    className="btn btn-sm btn-outline-secondary"
+                    className="btn btn-sm btn-outline-auto"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={!canPrev || loading}
                   >
@@ -437,7 +437,7 @@ export default function Log01HistoryPage() {
                   </button>
                   <button
                     type="button"
-                    className="btn btn-sm btn-outline-secondary"
+                    className="btn btn-sm btn-outline-auto"
                     onClick={() => setPage((p) => p + 1)}
                     disabled={!canNext || loading}
                   >
@@ -452,3 +452,4 @@ export default function Log01HistoryPage() {
     </div>
   );
 }
+

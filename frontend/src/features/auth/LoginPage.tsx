@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { getCatalogs } from "../../api/catalogs";
@@ -216,7 +216,7 @@ export default function LoginPage() {
               </div>
 
               <div className="modal-footer">
-                <button type="button" className="btn btn-outline-secondary" onClick={cancelBank} disabled={savingBank}>
+                <button type="button" className="btn btn-outline-auto" onClick={cancelBank} disabled={savingBank}>
                   Cancelar
                 </button>
                 <button type="button" className="btn btn-primary" disabled={!canConfirmBank} onClick={confirmBank}>
@@ -230,3 +230,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

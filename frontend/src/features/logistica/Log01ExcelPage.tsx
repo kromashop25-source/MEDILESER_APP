@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+﻿import { useMemo, useRef, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
@@ -781,7 +781,7 @@ export default function Log01ExcelPage() {
                       <div className="mT-10">
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline-secondary"
+                          className="btn btn-sm btn-outline-auto"
                           onClick={() => setShowTechAudit((v) => !v)}
                         >
                           {showTechAudit ? "Ocultar detalle técnico" : "Ver detalle técnico"}
@@ -856,3 +856,4 @@ export default function Log01ExcelPage() {
     </div>
   );
 }
+

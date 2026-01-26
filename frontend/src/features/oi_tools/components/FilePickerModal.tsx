@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState } from "react";
+﻿import {useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent as ReactDragEvent} from "react";
 import { filterFilesByAccept, getFileKey, getFileNameKey } from "./filePickerUtils";
 
@@ -286,7 +286,7 @@ export default function FilePickerModal({
           <div className="modal-footer">
             <button
               type="button"
-              className="btn btn-outline-secondary"
+              className="btn btn-outline-auto"
               onClick={onClose}
             >
               Cerrar
@@ -297,3 +297,4 @@ export default function FilePickerModal({
     </div>
   );
 }
+

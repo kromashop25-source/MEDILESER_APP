@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import type { ProgressEvent } from "../../api/integrations";
@@ -408,7 +408,7 @@ export default function ExcelToolsPage() {
                       <div className="col-md-2 d-flex gap-10">
                         <button
                           type="button"
-                          className="btn btn-outline-secondary w-100"
+                          className="btn btn-outline-auto w-100"
                           disabled={!!running}
                           onClick={() => setEdits((prev) => [...prev, { cell: "A1", value: "" }])}
                         >
@@ -420,7 +420,7 @@ export default function ExcelToolsPage() {
                           disabled={!!running || edits.length === 1}
                           onClick={() => setEdits((prev) => prev.filter((_, i) => i !== idx))}
                         >
-                          —
+                          −
                         </button>
                       </div>
                     </div>
@@ -608,3 +608,4 @@ export default function ExcelToolsPage() {
     </div>
   );
 }
+
