@@ -8,13 +8,21 @@
     <script>
       (function () {
         try {
-          var key = "medileser.theme";
-          var theme = localStorage.getItem(key);
+          var primaryKey = "medileser.theme";
+          var fallbackKey = "adminator-theme";
+          var theme = localStorage.getItem(primaryKey);
+          if (theme !== "dark" && theme !== "light") {
+            theme = localStorage.getItem(fallbackKey);
+          }
           if (theme !== "dark" && theme !== "light") theme = "light";
           var root = document.documentElement;
           root.setAttribute("data-theme", theme);
           root.setAttribute("data-bs-theme", theme);
           root.style.colorScheme = theme;
+          try {
+            localStorage.setItem(primaryKey, theme);
+            localStorage.setItem(fallbackKey, theme);
+          } catch (_e2) {}
         } catch (_e) {}
       })();
     </script>
@@ -40,7 +48,7 @@
         } catch (_e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-1Ypqhaf_.js"></script>
+    <script type="module" crossorigin src="/assets/index-UuS36hK2.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-5wp0Y-U3.css">
   </head>
   <body>

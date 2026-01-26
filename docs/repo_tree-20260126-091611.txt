@@ -289,10 +289,11 @@ MEDILESER_APP
 │   │   │       │   ├── ui.html
 │   │   │       │   └── vector-maps.html
 │   │   │       ├── assets
-│   │   │       │   ├── index-1DGdt3TH.js
-│   │   │       │   └── index-BxqLcx0v.css
+│   │   │       │   ├── index-5wp0Y-U3.css
+│   │   │       │   └── index-UuS36hK2.js
 │   │   │       ├── medileser
 │   │   │       │   ├── banner.jpg
+│   │   │       │   ├── loading.png
 │   │   │       │   ├── logo-vertical.jpg
 │   │   │       │   ├── Spinner-Logo-Medileser.gif
 │   │   │       │   └── Thumbs.db
@@ -372,6 +373,22 @@ MEDILESER_APP
 │   │   │       │   ├── BD_AA25128701_AL_AA25130500.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25130500__MANIFIESTO.json
 │   │   │       │   └── BD_AA25128701_AL_AA25130500__NO_CONFORME_FINAL.json
+│   │   │       ├── 20
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 21
+│   │   │       │   ├── BD_AA25128701_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 22
+│   │   │       │   ├── BD_AA25128701_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 23
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
 │   │   │       ├── 3
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
@@ -448,8 +465,7 @@ MEDILESER_APP
 │   ├── medileser_app_2026-01-13_220004.sql
 │   ├── MEDILESER_APP_BITACORA _SCRUM.xlsx
 │   ├── Pruebas_Desempeño_Excel.md
-│   ├── Pruebas_E2E_Excel.md
-│   └── repo_tree-20260120-151732.txt
+│   └── Pruebas_E2E_Excel.md
 ├── frontend
 │   ├── public
 │   │   ├── adminator
@@ -516,6 +532,7 @@ MEDILESER_APP
 │   │   │   └── vector-maps.html
 │   │   ├── medileser
 │   │   │   ├── banner.jpg
+│   │   │   ├── loading.png
 │   │   │   ├── logo-vertical.jpg
 │   │   │   ├── Spinner-Logo-Medileser.gif
 │   │   │   └── Thumbs.db
@@ -538,6 +555,7 @@ MEDILESER_APP
 │   │   │   ├── PasswordInput.tsx
 │   │   │   ├── Sidebar.tsx
 │   │   │   ├── Spinner.tsx
+│   │   │   ├── ThemeToggle.tsx
 │   │   │   ├── Toast.tsx
 │   │   │   └── Topbar.tsx
 │   │   ├── features
@@ -579,9 +597,11 @@ MEDILESER_APP
 │   │   ├── layouts
 │   │   │   └── AdminatorLayout.tsx
 │   │   ├── styles
-│   │   │   └── adminator.css
+│   │   │   ├── adminator.css
+│   │   │   └── theme.css
 │   │   ├── utils
-│   │   │   └── recoveryDraft.ts
+│   │   │   ├── recoveryDraft.ts
+│   │   │   └── theme.ts
 │   │   ├── App.css
 │   │   ├── App.tsx
 │   │   ├── index.css

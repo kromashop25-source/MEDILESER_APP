@@ -1,6 +1,7 @@
 export type Theme = "light" | "dark";
 
 export const THEME_STORAGE_KEY = "medileser.theme";
+const ADMINATOR_THEME_KEY = "adminator-theme";
 
 type Listener = (theme: Theme) => void;
 
@@ -13,7 +14,9 @@ function isTheme(value: string | null): value is Theme {
 export function getStoredTheme(): Theme | null {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    return isTheme(stored) ? stored : null;
+    if (isTheme(stored)) return stored;
+    const fallback = localStorage.getItem(ADMINATOR_THEME_KEY);
+    return isTheme(fallback) ? fallback : null;
   } catch {
     return null;
   }
@@ -33,6 +36,16 @@ export function applyTheme(theme: Theme): void {
 
 export function initTheme(): Theme {
   const theme = getEffectiveTheme();
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // ignore storage failures
+  }
+  try {
+    localStorage.setItem(ADMINATOR_THEME_KEY, theme);
+  } catch {
+    // ignore storage failures
+  }
   applyTheme(theme);
   return theme;
 }
@@ -40,6 +53,11 @@ export function initTheme(): Theme {
 export function setTheme(theme: Theme): void {
   try {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // ignore storage failures
+  }
+  try {
+    localStorage.setItem(ADMINATOR_THEME_KEY, theme);
   } catch {
     // ignore storage failures
   }
