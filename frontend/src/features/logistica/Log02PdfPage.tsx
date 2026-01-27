@@ -29,6 +29,9 @@ type WizardStep = 1 | 2 | 3;
 const MAX_LIVE_EVENTS = 250;
 
 const LS_KEY = "medileser_log02_rutas_v1";
+
+type OutputMode = "keep_structure" | "consolidate";
+
 const PERU_TZ = "America/Lima";
 const DEBUG_PROGRESS =
   typeof window !== "undefined" &&
@@ -103,6 +106,16 @@ export default function Log02PdfPage() {
 
   const [rutasOrigen, setRutasOrigen] = useState<string[]>([""]);
   const [rutaDestino, setRutaDestino] = useState<string>("");
+
+  // ============================
+  // Salida (nueva funcionalidad)
+  // ============================
+  const [outputMode, setOutputMode] = useState<OutputMode>("consolidate");
+  const [groupSize, setGroupSize] = useState<number>(0);
+  const [groupSizeInput, setGroupSizeInput] = useState<string>("0");
+  const [editingGroupSize, setEditingGroupSize] = useState<boolean>(false);
+  
+
   const [validando, setValidando] = useState<boolean>(false);
   const [error, setError ] = useState<string>("");
   const [resultado, setResultado] = useState<Log02ValidarRutasUncResponse | null>(null);
@@ -209,16 +222,20 @@ export default function Log02PdfPage() {
     try {
       const raw = localStorage.getItem(LS_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as { origenes?: string[]; destino?: string; run_id?: number };
+      const parsed = JSON.parse(raw) as {
+        origenes?: string[];
+        destino?: string;
+        output_mode?: OutputMode;
+        group_size?: number;
+      }
       const origenes = Array.isArray(parsed.origenes) ? parsed.origenes : [];
       const destino = typeof parsed?.destino === "string" ? parsed.destino : "";
-      const runId = typeof parsed?.run_id === "number" ? parsed.run_id : null;
+      const om = parsed?.output_mode === "keep_structure" ? "keep_structure" : "consolidate";
+      const gs = typeof parsed?.group_size === "number" && Number.isFinite(parsed.group_size) ? parsed.group_size : 0;
       if (origenes.length) setRutasOrigen(origenes);
       if (destino) setRutaDestino(destino);
-      if (runId !== null) {
-        // placeholder mínimo; se reemplaza cuando carguemos lista
-        setRunSelected({ id: runId} as any)
-      }
+      setOutputMode(om);
+      setGroupSize(Math.max(0, Math.trunc(gs)));
     } catch {
       // ignorar
     }
@@ -231,13 +248,14 @@ export default function Log02PdfPage() {
       const payload = {
         origenes: rutasOrigen,
         destino: rutaDestino,
-        run_id: runSelected?.id ?? null,
+        output_mode: outputMode,
+        group_size: Math.max(0, Math.trunc(groupSize || 0)),
       };
       localStorage.setItem(LS_KEY, JSON.stringify(payload));
     } catch {
       // ignorar
   }
-}, [rutasOrigen, rutaDestino, runSelected?.id]);
+}, [rutasOrigen, rutaDestino, outputMode, groupSize]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -256,6 +274,8 @@ function limpiarConfiguracion() {
   setError("");
   setTouched(false);
   setRunSelected(null);
+  setOutputMode("consolidate");
+  setGroupSize(0);
   setCopyAudit(null);
   setCopyWarnings([]);
   setCopyErrors([]);
@@ -325,9 +345,7 @@ async function cargarUltimasCorridasExitosas(limit = 5) {
     });
     const items = Array.isArray(data?.items) ? data.items : [];
     setRuns(items);
-    if (!runSelected?.id && items.length) {
-      setRunSelected(items[0]);
-    } else if (runSelected?.id && items.length) {
+    if (runSelected?.id && items.length) {
       const match = items.find((x) => x.id === runSelected.id);
       if (match) setRunSelected(match);
     }
@@ -1043,6 +1061,8 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         run_id: runSelected.id,
         rutas_origen: origenes,
         ruta_destino: destino,
+        output_mode: outputMode,
+        group_size: Math.max(0, Math.trunc(groupSize || 0)),
       });
 
       const opId = start.operation_id;
@@ -1217,6 +1237,23 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
   const canGoStep2 = !!resultado?.ok;
   const canGoStep3 = !!resultado?.ok && !!runSelected?.id;
+
+  const groupSizeDisabled = outputMode !== "consolidate";
+  const groupSizeSafe = Math.max(0, Math.trunc(groupSize || 0));
+
+  // Mantener el string del input sincronizado cuando No se está editando
+  useEffect(() => {
+    if (editingGroupSize) return;
+    setGroupSizeInput(String(groupSizeSafe));
+  }, [groupSizeSafe, editingGroupSize]);
+
+  // Si se deshabilita el input (cambia de modo), salir del modo edición
+  useEffect(() => {
+    if (groupSizeDisabled && editingGroupSize) {
+      setEditingGroupSize(false);
+      setGroupSizeInput(String(groupSizeSafe));
+    }
+  }, [groupSizeDisabled, editingGroupSize, groupSizeSafe]);
 
   function goStep(step: WizardStep) {
     if (step === 2 && !canGoStep2) return;
@@ -1672,6 +1709,97 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                       </div>
                     ) : (
                       <>
+                        <div className="vi-card mB-10">
+                          <h6 className="c-grey-900 mB-10">Salida de copiado</h6>
+
+                          <div className="row g-2">
+                            <div className="col-12">
+                              <div className="form-check">
+                                <input
+                                  className="form-check-input"
+                                  type="radio"
+                                  id="log02-out-consolidate"
+                                  name="log02-output-mode"
+                                  checked={outputMode === "consolidate"}
+                                  disabled={copying}
+                                  onChange={() => setOutputMode("consolidate")}
+                                />
+                                <label className="form-check-label" htmlFor="log02-out-consolidate">
+                                 <strong>Consolidar en una sola carpeta</strong>
+                                  <span className="text-muted small">
+                                    {" "}
+                                    (se crea &lt;SERIE_INICIAL&gt;_AL_&lt;SERIE_FINAL&gt;)
+                                  </span>
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="col-12">
+                              <div className="form-check">
+                                <input
+                                  className="form-check-input"
+                                  type="radio"
+                                  id="log02-out-keep"
+                                  name="log02-output-mode"
+                                  checked={outputMode === "keep_structure"}
+                                  disabled={copying}
+                                  onChange={() => setOutputMode("keep_structure")}
+                                />
+                                <label className="form-check-label" htmlFor="log02-out-keep">
+                                  <strong>Mantener estructura de carpetas</strong>
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="col-12 col-md-6">
+                              <label className="form-label mT-10">Agrupar en subcarpetas por N</label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                className="form-control form-control-sm"
+                                value={editingGroupSize ? groupSizeInput : groupSizeSafe}
+                                disabled={copying || groupSizeDisabled}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setGroupSizeInput(v);
+                                  // Permitir vacío mientras el usuario escribe
+                                  if (v === "") return;
+                                  const raw = Number(v);
+                                  const next = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 0;
+                                  setGroupSize(next);
+                                }}
+                                onFocus={() => {
+                                  setEditingGroupSize(true);
+                                  // Si está en 0, mostrar vacío para evitar "0500"
+                                  if (groupSizeSafe === 0) setGroupSizeInput("");
+                                  else setGroupSizeInput(String(groupSizeSafe));
+                                }}
+                                onBlur={ () => {
+                                  setEditingGroupSize(false);
+                                  const v = (groupSizeInput || "").trim();
+                                  if (!v) {
+                                    setGroupSize(0);
+                                    setGroupSizeInput("0");
+                                    return;
+                                  }
+                                  const raw = Number(v);
+                                  const next = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 0;
+                                  setGroupSize(next);
+                                  setGroupSizeInput(String(next));
+                                }}
+                                placeholder="0"
+                              />
+                              <div className="small text-muted">
+                                {groupSizeDisabled
+                                  ? "Disponible solo en modo “Consolidar”."
+                                  : groupSizeSafe === 0
+                                  ? "N=0: no se crean subcarpetas."
+                                  : `Se crean subcarpetas de ${groupSizeSafe} PDFs (último grupo puede ser menor).`}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                         <div className="d-flex flex-wrap gap-10 mB-10">
                           <button
                             type="button"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 import os
 import json
 import re
@@ -274,6 +274,8 @@ class Log02CopyConformesStartRequest(BaseModel):
     run_id: int = Field(..., description="ID de corrida de LOG-01 (historial) para usar sus artefactos (MANIFIESTO/NO_CONFORME_FINAL).")
     rutas_origen: List[str] = Field(default_factory=list, description="Rutas origen (lectura). Se buscarán carpetas OI-####-YYYY-LOTE-#### dentro de estas rutas.")
     ruta_destino: str = Field(..., description="Ruta destino (lectura/escritura). Se crearán carpetas por OI (mismo nombre exacto del lote).")
+    output_mode: str = Field("keep_structure", description="Modo de salida: keep_structure (actual) o consolidate (carpeta consolidada).")
+    group_size: int = Field(0, description="Tamaño N de grupo para subcarpetas en modo consolidate (0 => sin subcarpetas).")
 
 class Log02CopyConformesStartResponse(BaseModel):
     operation_id: str
@@ -426,6 +428,30 @@ def _series_from_filename(name:str) -> str:
     # Serie = nombre del PDF sin extensión
     p = Path(name)
     return p.stem.strip()
+
+_SERIE_SORT_RE = re.compile(r"^([A-Z]+)(\d+)$", re.IGNORECASE)
+
+def _serie_sort_key(serie: str) -> Tuple[str, int, int, str]:
+    """
+    Orden determinista por "serie" (según nombre sin extensión).
+    - Si coincide PREFIX+NUM: ordena por (PREFIX, NUM, width, raw)
+    - Si no coincide: ordena por (RAW_UPPER, inf, 0, raw)
+    """
+    s = (serie or "").strip()
+    if not s:
+        return ("", 10**18, 0, "")
+    m = _SERIE_SORT_RE.match(s.upper())
+    if not m:
+        up = s.upper()
+        return (up, 10**18, 0, s)
+    pref = (m.group(1) or "").upper()
+    num_s = m.group(2) or "0"
+    try:
+        num = int(num_s)
+    except Exception:
+        num = 10**18
+    return (pref, num, len(num_s), s)
+
 
 _SERIE_RANGE_RE = re.compile(r"([A-Z]+)\s*(\d{2,})\s*(?:AL|-|A)\s*([A-Z]+)?\s*(\d{2,})", re.IGNORECASE)
 _SERIE_RANGE_MAX = 200000
@@ -644,6 +670,8 @@ def _copy_conformes_worker(
         run_id: int,
         rutas_origen: List[str],
         ruta_destino: str,
+        output_mode: str = "keep_structure",
+        group_size: int = 0,
 ) -> None:
     """
     Worker en hilo: copia PDFs conformes por OI, emitiendo progreso NDJSON.
@@ -723,6 +751,7 @@ def _copy_conformes_worker(
             "total_ois": total_ois,
             "ois_ok": 0,
             "series_duplicadas": [],
+            "series_duplicadas_globales": [],
             "series_faltantes": [],
             "ois_faltantes": [],
             "ois_duplicadas": [],
@@ -737,6 +766,381 @@ def _copy_conformes_worker(
                 "archivos_no_pdf_omitidos": 0,
             },
         }
+
+        output_mode_norm = (output_mode or "keep_structure").strip().lower()
+        if output_mode_norm not in ("keep_structure", "consolidate"):
+            raise RuntimeError("output_mode inválido. Use keep_structure o consolidate.")
+        if group_size is None:
+            group_size = 0
+        try:
+            group_size_i = int(group_size)
+        except Exception:
+            group_size_i = 0
+        if group_size_i < 0:
+            group_size_i = 0
+        group_size = group_size_i
+
+        # ====================================
+        # Modo consolidate: una sola carpeta
+        # ====================================
+        if output_mode_norm == "consolidate":
+            tasks: List[Dict[str, Any]] = []
+            seen_global: Dict[str, Dict[str, Any]] = {}
+            dup_global: Dict[str, Set[str]] = {}
+
+            def _mark_global_duplicate(serie: str, oi_label: str) -> None:
+                prev = seen_global.get(serie)
+                if prev:
+                    dup_global.setdefault(serie, set()).add(str(prev.get("oi") or ""))
+                dup_global.setdefault(serie, set()).add(oi_label)
+
+            # ---- BASES ----
+            for i, oi_tag in enumerate(oi_tags, start=1):
+                if cancel_token.is_cancelled():
+                    _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                    return
+                
+                _emit(operation_id, {"type": "status", "stage": "oi", "oi": oi_tag, "message": f"Escaneando {oi_tag} ({i}/{total_ois})"})
+
+                folders = _find_oi_folders_in_origins(oi_tag, rutas_origen)
+                if len(folders) == 0:
+                    audit["ois_faltantes"].append({"oi": oi_tag, "detalle": "No se encontró carpeta de lote en rutas origen."})
+                    _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "OI_SIN_CARPETA", "message": "No se encontró carpeta para la OI en los orígenes."})
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
+                    continue
+                if len(folders) > 1:
+                    audit["ois_duplicadas"].append({"oi": oi_tag, "carpetas": [str(p) for p in folders]})
+                    _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "OI_CARPETA_DUPLICADA", "message": "Se encontraron múltiples carpetas para la misma OI. No se copiará hasta corregir."})
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
+                    continue
+
+                src_folder = folders[0]
+                no_conf_set = no_conf_map.get(oi_tag, set())
+                raw_conforme_set = conformes_map.get(oi_tag) if use_conforme_allowlist else None
+                conforme_set = _expand_conforme_set(raw_conforme_set) if raw_conforme_set is not None else None
+
+                serie_files: Dict[str, List[str]] = {}
+                series_present: Set[str] = set()
+                dup_primary: Dict[str, str] = {}
+
+                total_pdfs_in_oi = 0
+                omitted_nonpdf = 0
+
+                try:
+                    with os.scandir(src_folder) as it:
+                        for entry in it:
+                            if cancel_token.is_cancelled():
+                                _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                                return
+                            try:
+                                if not entry.is_file(follow_symlinks=False):
+                                    continue
+                                if entry.name.lower().endswith(".pdf"):
+                                    total_pdfs_in_oi += 1
+                                    serie0 = _series_from_filename(entry.name)
+                                    if serie0:
+                                        series_present.add(serie0)
+                                        serie_files.setdefault(serie0, []).append(entry.name)
+                                else:
+                                    omitted_nonpdf += 1
+                            except Exception:
+                                continue
+                except PermissionError as e:
+                    detail = f"Sin permisos para listar la carpeta origen. {type(e).__name__}: {e}"
+                    _record_oi_error(audit, operation_id, oi_tag=oi_tag, code="LISTADO_PERMISOS", detail=detail)
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
+                    continue
+                except Exception as e:
+                    detail = f"No se pudo listar la carpeta origen. {type(e).__name__}: {e}"
+                    _record_oi_error(audit, operation_id, oi_tag=oi_tag, code="LISTADO_ERROR", detail=detail)
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
+                    continue
+
+                dup_series = {s: names for s, names in serie_files.items() if len(names) > 1}
+                if dup_series:
+                    for s, names in dup_series.items():
+                        chosen = sorted(names, key=lambda x: x.lower())[0]
+                        dup_primary[s] = chosen
+                        audit["series_duplicadas"].append({"oi": oi_tag, "serie": s, "files": names})
+                    _record_oi_warn(
+                        operation_id,
+                        oi_tag=oi_tag,
+                        code="SERIE_DUPLICADA",
+                        detail=f"Se detectaron {len(dup_series)} serie(s) duplicada(s) en la carpeta. Se copiará solo 1 PDF por serie.",
+
+                    )
+                
+                if conforme_set is not None and conforme_set:
+                    missing = sorted([s for s in conforme_set if s not in series_present], key=lambda x: x)
+                    if missing:
+                        audit["series_faltantes"].append({"oi": oi_tag, "count": len(missing), "series": missing[:50]})
+                        audit["archivos"]["pdf_omitidos_no_encontrado"] += len(missing)
+                        sample = ", ".join(missing[:6])
+                        more = "" if len(missing) <= 6 else f" (+{len(missing) - 6} más)"
+                        _record_oi_warn(
+                            operation_id,
+                            oi_tag=oi_tag,
+                            code="SERIE_SIN_PDF",
+                            detail=f"Faltan {len(missing)} serie(s) conforme(s) sin PDF en carpeta. Ej: {sample}{more}",
+                        )
+
+                # contabilidad (similar a modo actual)
+                audit["archivos"]["pdf_detectados"] += total_pdfs_in_oi
+                audit["archivos"]["archivos_no_pdf_omitidos"] += omitted_nonpdf
+
+                copied_candidates = 0
+                omitted_nc = 0
+
+                for serie, names in serie_files.items():
+                    # elegir primary determinístico
+                    chosen_name = dup_primary.get(serie) or sorted(names, key=lambda x: x.lower())[0]
+
+                    # filtros conforme/no_conforme
+                    if conforme_set is not None:
+                        if serie not in conforme_set:
+                            omitted_nc += 1
+                            continue
+                    elif serie in no_conf_set:
+                        omitted_nc += 1
+                        continue
+                    
+
+                    # dedupe global
+                    if serie in seen_global:
+                        audit["archivos"]["pdf_omitidos_duplicados"] += 1
+                        _mark_global_duplicate(serie, oi_tag)
+                        continue
+
+                    task = {
+                        "serie": serie,
+                        "oi": oi_tag,
+                        "src": str(Path(src_folder) / chosen_name),
+                        "file": chosen_name,
+                    }
+                    seen_global[serie] = task
+                    tasks.append(task)
+                    copied_candidates += 1
+
+                audit["archivos"]["pdf_omitidos_no_conforme"] += omitted_nc
+                audit["ois_ok"] += 1
+                _emit(operation_id, {"type": "oi_done", "oi": oi_tag, "copiados": copied_candidates, "omitidos_no_conforme": omitted_nc, "pdf_detectados": total_pdfs_in_oi})
+                _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag, message=f"Escaneo {i}/{total_ois}")
+
+            # ---- GASELAG ----
+            if gaselag_keys:
+                gaselag_folders = _find_gaselag_folders_in_origins(set(gaselag_keys), rutas_origen)
+                base_count = len(oi_tags)
+                for gi, serie_key in enumerate(gaselag_keys, start=1):
+                    if cancel_token.is_cancelled():
+                        _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                        return
+                    
+                    i = base_count + gi
+                    serie_sources = gaselag_series_map.get(serie_key, [])
+                    serie_label = _gaselag_display_name(serie_sources[0]) if serie_sources else serie_key
+                    oi_label = f"GASELAG-{serie_label}"
+                    oi_key = "GASELAG"
+                    
+                    _emit(operation_id, {"type": "status", "stage": "oi", "oi": oi_label, "message": f"Escaneando {oi_label} ({i}/{total_ois})"})
+
+                    folders = gaselag_folders.get(serie_key, [])
+                    if len(folders) == 0:
+                        audit["ois_faltantes"].append({"oi": oi_label, "detalle": "No se encontró carpeta de lote Gaselag en rutas origen."})
+                        _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "GASELAG_SIN_CARPETA", "message": "No se encontró carpeta Gaselag para la serie en los orígenes."})
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+                    if len(folders) > 1:
+                        audit["ois_duplicadas"].append({"oi": oi_label, "carpetas": [str(p) for p in folders]})
+                        _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "GASELAG_CARPETA_DUPLICADA", "message": "Se encontraron múltiples carpetas Gaselag para la misma serie. No se copiará hasta corregir."})
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+
+                    src_folder = folders[0]
+                    no_conf_set = no_conf_map.get(oi_key, set())
+                    raw_conforme_set = conformes_map.get(oi_key) if use_conforme_allowlist else None
+                    conforme_set = _expand_conforme_set(raw_conforme_set) if raw_conforme_set is not None else None
+
+                    serie_files: Dict[str, List[str]] = {}
+                    series_present: Set[str] = set()
+                    dup_primary: Dict[str, str] = {}
+                    total_pdfs_in_oi = 0
+                    omitted_nonpdf = 0
+
+                    try:
+                        with os.scandir(src_folder) as it:
+                            for entry in it:
+                                if cancel_token.is_cancelled():
+                                    _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                                    return
+                                try:
+                                    if not entry.is_file(follow_symlinks=False):
+                                        continue
+                                    if entry.name.lower().endswith(".pdf"):
+                                        total_pdfs_in_oi += 1
+                                        serie0 = _series_from_filename(entry.name)
+                                        if serie0:
+                                            series_present.add(serie0)
+                                            serie_files.setdefault(serie0, []).append(entry.name)
+                                    else:
+                                        omitted_nonpdf += 1
+                                except Exception:
+                                    continue
+                    except PermissionError as e:
+                        detail = f"Sin permisos para listar la carpeta origen. {type(e).__name__}: {e}"
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="LISTADO_PERMISOS", detail=detail)
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+                    except Exception as e:
+                        detail = f"No se pudo listar la carpeta origen. {type(e).__name__}: {e}"
+                        _record_oi_error(audit, operation_id, oi_tag=oi_label, code="LISTADO_ERROR", detail=detail)
+                        _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
+                        continue
+
+                    dup_series = {s: names for s, names in serie_files.items() if len(names) > 1}
+                    if dup_series:
+                        for s, names in dup_series.items():
+                            chosen = sorted(names, key=lambda x: x.lower())[0]
+                            dup_primary[s] = chosen
+                            audit["series_duplicadas"].append({"oi": oi_label, "serie": s, "files": names})
+                        _record_oi_warn(
+                            operation_id,
+                            oi_tag=oi_label,
+                            code="SERIE_DUPLICADA",
+                            detail=f"Se detectaron {len(dup_series)} serie(s) duplicada(s) en la carpeta. Se copiará solo 1 PDF por serie.",
+                        )
+
+                    if conforme_set is not None and conforme_set:
+                        missing = sorted([s for s in conforme_set if s not in series_present], key=lambda x: x)
+                        if missing:
+                            audit["series_faltantes"].append({"oi": oi_label, "count": len(missing), "series": missing[:50]})
+                            audit["archivos"]["pdf_omitidos_no_encontrado"] += len(missing)
+
+                    audit["archivos"]["pdf_detectados"] += total_pdfs_in_oi
+                    audit["archivos"]["archivos_no_pdf_omitidos"] += omitted_nonpdf
+
+                    copied_candidates = 0
+                    omitted_nc = 0
+
+                    for serie, names in serie_files.items():
+                        chosen_name = dup_primary.get(serie) or sorted(names, key=lambda x: x.lower())[0]
+
+                        if conforme_set is not None:
+                            if serie not in conforme_set:
+                                omitted_nc += 1
+                                continue
+                        elif serie in no_conf_set:
+                            omitted_nc += 1
+                            continue
+
+                        if serie in seen_global:
+                            audit["archivos"]["pdf_omitidos_duplicados"] += 1
+                            _mark_global_duplicate(serie, oi_label)
+                            continue
+
+                        task = {
+                            "serie": serie,
+                            "oi": oi_label,
+                            "src": str(Path(src_folder) / chosen_name),
+                            "file": chosen_name,
+                        }
+                        seen_global[serie] = task
+                        tasks.append(task)
+                        copied_candidates += 1
+
+                    audit["archivos"]["pdf_omitidos_no_conforme"] += omitted_nc
+                    audit["ois_ok"] += 1
+                    _emit(operation_id, {"type": "oi_done", "oi": oi_label, "copiados": copied_candidates, "omitidos_no_conforme": omitted_nc, "pdf_detectados": total_pdfs_in_oi})
+                    _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, message=f"Escaneo {i}/{total_ois}")
+
+            if dup_global:
+                out = []
+                for serie, ois in dup_global.items():
+                    clean = sorted([x for x in ois if x])
+                    out.append({"serie": serie, "ois": clean})
+                out.sort(key=lambda x: _serie_sort_key(x["serie"]))
+                audit["series_duplicadas_globales"] = out
+
+            if cancel_token.is_cancelled():
+                _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                return
+
+            # Orden determinista por serie
+            tasks.sort(key=lambda t: _serie_sort_key(str(t.get("serie") or "")))
+            if not tasks:
+                _emit(operation_id, {"type": "complete", "message": "No hay PDFs conformes para copiar.", "audit": audit, "percent": 100.0})
+                return
+
+            first_serie = str(tasks[0]["serie"])
+            last_serie = str(tasks[-1]["serie"])
+            consolidated_name = f"{first_serie}_AL_{last_serie}"
+            dest_root = Path(ruta_destino) / consolidated_name
+
+            if dest_root.exists():
+                audit["destinos_duplicados"].append({"oi": "CONSOLIDADO", "destino": str(dest_root)})
+                _emit(operation_id, {"type": "error", "message": f"La carpeta consolidada ya existe: {dest_root}"})
+                return
+
+            try:
+                dest_root.mkdir(parents=True, exist_ok=False)
+            except Exception as e:
+                _emit(operation_id, {"type": "error", "message": f"No se pudo crear carpeta consolidada. {type(e).__name__}: {e}"})
+                return
+
+            copied = 0
+            file_error_count = 0
+            total = len(tasks)
+            EMIT_EVERY = 25
+
+            def _dest_for_index(idx: int) -> Path:
+                if group_size <= 0:
+                    return dest_root
+                g = idx // group_size
+                start = g * group_size
+                end = min(total - 1, (g + 1) * group_size - 1)
+                s_ini = str(tasks[start]["serie"])
+                s_fin = str(tasks[end]["serie"])
+                sub = dest_root / f"{s_ini}_AL_{s_fin}"
+                if not sub.exists():
+                    try:
+                        sub.mkdir(parents=True, exist_ok=True)
+                    except Exception:
+                        pass
+                return sub
+
+            for idx, t in enumerate(tasks):
+                if cancel_token.is_cancelled():
+                    _emit(operation_id, {"type": "status", "stage": "cancelado", "message": "Cancelado por el usuario"})
+                    return
+
+                src = str(t["src"])
+                fname = str(t["file"])
+                serie = str(t["serie"])
+                oi_label = str(t["oi"])
+                dest_folder = _dest_for_index(idx)
+                dest_path = dest_folder / fname
+
+                try:
+                    shutil.copy2(src, str(dest_path))
+                    copied += 1
+                    if verbose_events:
+                        _emit(operation_id, {"type": "file_ok", "oi": oi_label, "serie": serie, "file": fname})
+                except Exception as e:
+                    file_error_count += 1
+                    _emit(operation_id, {"type": "file_error", "oi": oi_label, "serie": serie, "file": fname, "message": f"Error copiando PDF. {type(e).__name__}: {e}"})
+
+                if (idx + 1) % EMIT_EVERY == 0 or (idx + 1) == total:
+                    pct = round(((idx + 1) / max(total, 1)) * 100.0, 2)
+                    _emit(operation_id, {"type": "status", "stage": "copiando", "progress": pct, "percent": pct, "message": f"Copiados {idx + 1}/{total} PDFs"})
+
+            audit["archivos"]["pdf_copiados"] += copied
+            if file_error_count > 0:
+                audit["ois_error"].append({"oi": "CONSOLIDADO", "code": "FILE_ERROR", "detail": f"{file_error_count} archivo(s) con error de copia."})
+
+            _emit(operation_id, {"type": "complete", "message": "Copiado finalizado.", "audit": audit, "percent": 100.0})
+            return                        
+
+
+
 
         # 3) Procesar por OI (BASES)
         for i, oi_tag in enumerate(oi_tags, start=1):
@@ -1253,6 +1657,18 @@ def log02_copiar_conformes_start(payload: Log02CopyConformesStartRequest) -> Log
         _ensure_within_allowed_or_400(r, roots_abs, "Origen")
     _ensure_within_allowed_or_400(ruta_destino, roots_abs, "Destino")
 
+    # Validación de modo salida
+    output_mode = (payload.output_mode or "keep_structure").strip().lower()
+    if output_mode not in ("keep_structure", "consolidate"):
+        raise HTTPException(status_code=400, detail="output_mode inválido. Use keep_structure o consolidate.")
+    try:
+        group_size = int(payload.group_size or 0)
+    except Exception:
+        group_size = 0
+    if group_size < 0:
+        group_size = 0
+
+
     operation_id = str(uuid.uuid4())
     cancel_token = cancel_manager.create(operation_id)
 
@@ -1266,6 +1682,8 @@ def log02_copiar_conformes_start(payload: Log02CopyConformesStartRequest) -> Log
             "run_id": int(payload.run_id),
             "rutas_origen": rutas_origen,
             "ruta_destino": ruta_destino,
+            "output_mode": output_mode,
+            "group_size": group_size,
         },
         daemon=True,
     )

@@ -584,6 +584,8 @@ export type Log02CopyConformesStartRequest = {
   run_id: number;
   rutas_origen: string[];
   ruta_destino: string;
+  output_mode: "keep_structure" | "consolidate";
+  group_size: number; // N (0 => sin subcarpetas)
 };
 
 export type Log02CopyConformesStartResponse = {
