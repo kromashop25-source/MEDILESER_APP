@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set, Tuple
 import os
 import json
+import csv
+import io
 import re
 import unicodedata
 import tempfile
@@ -12,6 +14,8 @@ import uuid
 import time
 import shutil
 from pathlib import Path
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -378,6 +382,16 @@ def _cleanup_dest_folder(dest_folder: Path) -> None:
             shutil.rmtree(dest_folder)
     except Exception:
         pass
+
+def _get_complete_audit(operation_id: str) -> Optional[Dict[str, Any]]:
+    ch = progress_manager.get_channel(operation_id )
+    if ch is None:
+        return None
+    for ev in reversed(ch.history):
+        if ev.get("type") == "complete" and isinstance(ev.get("audit"), dict):
+            return ev["audit"]
+    return None
+# continuar aqui
 
 def _emit_progress(
         operation_id: str,
