@@ -14,7 +14,7 @@ import uuid
 import time
 import shutil
 from pathlib import Path
-from openpyxl import load_workbook
+from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -391,7 +391,164 @@ def _get_complete_audit(operation_id: str) -> Optional[Dict[str, Any]]:
         if ev.get("type") == "complete" and isinstance(ev.get("audit"), dict):
             return ev["audit"]
     return None
-# continuar aqui
+
+def _autosize_ws(ws) -> None:
+    try:
+        widths: Dict[int, int] = {}
+        for row in ws.iter_rows(values_only=True):
+            for i, v in enumerate(row, start=1):
+                s = "" if v is None else str(v)
+                widths[i] = min(70, max(widths.get(i, 0), len(s)))
+        for i, w in widths.items():
+            ws.column_dimensions[get_column_letter(i)].width = max(10, w + 2)
+    except Exception:
+        return
+    
+def _build_report_csv(audit: Dict[str, Any]) -> bytes:
+    """
+    CSV unificado con columna 'sección' para: resumen/por_oi/duplicados/faltantes/errores_oi
+    """
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["seccion", "oi", "serie", "campo", "valor"])
+
+    # resumen
+    w.writerow(["resumen", "", "", "run_id", audit.get("run_id", "")])
+    w.writerow(["resumen", "", "", "total_ois", audit.get("total_ois", "")])
+    w.writerow(["resumen", "", "", "ois_ok", audit.get("ois_ok", "")])
+    arch_raw = audit.get("archivos")
+    arch: Dict[str, Any] = arch_raw if isinstance(arch_raw, dict) else {}
+    for k in [
+        "pdf_detectados",
+        "pdf_copiados",
+        "pdf_omitidos_no_conforme",
+        "pdf_omitidos_duplicados",
+        "pdf_omitidos_no_encontrado",
+        "archivos_no_pdf_omitidos",
+    ]:
+        w.writerow(["resumen", "", "", k, arch.get(k, "")])
+
+    # por OI
+    det = audit.get("detalle_por_oi")
+    if isinstance(det, list):
+        for r in det:
+            if not isinstance(r, dict):
+                continue
+            oi = r.get("oi", "")
+            for k, v in r.items():
+                if k == "oi":
+                    continue
+                w.writerow(["por_oi", oi, "", k, v])
+
+    # duplicados
+    dups = audit.get("series_duplicadas")
+    if isinstance(dups, list):
+        for d in dups:
+            if not isinstance(d, dict):
+                continue
+            w.writerow(["duplicados", d.get("oi", ""), d.get("serie", ""), "files", "|".join(d.get("files", []) if isinstance(d.get("files"), list) else [])])
+
+    # faltantes (detalle completo)
+    falt = audit.get("faltantes_detalle")
+    if isinstance(falt, list):
+        for f in falt:
+            if not isinstance(f, dict):
+                continue
+            w.writerow(["faltantes", f.get("oi", ""), f.get("serie", ""), "missing", 1])
+
+    # errores OI
+    errs = audit.get("ois_error")
+    if isinstance(errs, list):
+        for e in errs:
+            if not isinstance(e, dict):
+                continue
+            w.writerow(["errores_oi", e.get("oi",""), "", e.get("code",""), e.get("detail","")])
+            
+    return ("\ufeff" + buf.getvalue()).encode("utf-8")
+
+def _build_report_xlsx(audit: Dict[str, Any]) -> bytes:
+    wb = Workbook()
+    ws0 = wb.active
+    if ws0 is None:
+        ws0 = wb.create_sheet()
+    ws0.title = "Resumen"
+
+    ws0.append(["campo", "valor"])
+    ws0.append(["run_id", audit.get("run_id", "")])
+    ws0.append(["total_ois", audit.get("total_ois", "")])
+    ws0.append(["ois_ok", audit.get("ois_ok", "")])
+    arch_raw = audit.get("archivos")
+    arch: Dict[str, Any] = arch_raw if isinstance(arch_raw, dict) else {}
+    for k in [
+        "pdf_detectados",
+        "pdf_copiados",
+        "pdf_omitidos_no_conforme",
+        "pdf_omitidos_duplicados",
+        "pdf_omitidos_no_encontrado",
+        "archivos_no_pdf_omitidos",
+    ]:
+        ws0.append([k, arch.get(k, "")])
+    _autosize_ws(ws0)
+
+    ws1 = wb.create_sheet("Por OI")
+    cols_oi = [
+        "oi",
+        "origen_folder",
+        "dest_folder",
+        "pdf_detectados",
+        "pdf_copiados",
+        "omitidos_no_conforme",
+        "omitidos_duplicados",
+        "no_pdf_omitidos",
+        "faltantes_pdf",
+        "file_errors",
+        "status",
+        "detail",
+    ]
+    ws1.append(cols_oi)
+    det = audit.get("detalle_por_oi")
+    if isinstance(det, list):
+        for r in det:
+            if not isinstance(r, dict):
+                continue
+            ws1.append([r.get(c, "") for c in cols_oi])
+    _autosize_ws(ws1)
+
+    ws2 = wb.create_sheet("Duplicados")
+    ws2.append(["oi", "serie", "files"])
+    dups = audit.get("series_duplicadas")
+    if isinstance(dups, list):
+        for d in dups:
+            if not isinstance(d, dict):
+                continue
+            files = d.get("files", [])
+            ws2.append([d.get("oi", ""), d.get("serie", ""), "|".join(files) if isinstance(files, list) else ""]) 
+    _autosize_ws(ws2)
+
+    ws3 = wb.create_sheet("Faltantes")
+    ws3.append(["oi", "serie"])
+    falt = audit.get("faltantes_detalle")
+    if isinstance(falt, list):
+        for f in falt:
+            if not isinstance(f, dict):
+                continue
+            ws3.append([f.get("oi", ""), f.get("serie", "")])
+    _autosize_ws(ws3)
+
+    ws4 = wb.create_sheet("Errores OI")
+    ws4.append(["oi", "code", "detail"])
+    errs = audit.get("ois_error")
+    if isinstance(errs, list):
+        for e in errs:
+            if not isinstance(e, dict):
+                continue
+            ws4.append([e.get("oi",""), e.get("code",""), e.get("detail","")])
+    _autosize_ws(ws4)
+
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
 
 def _emit_progress(
         operation_id: str,
@@ -764,6 +921,8 @@ def _copy_conformes_worker(
             "run_id": run_id,
             "total_ois": total_ois,
             "ois_ok": 0,
+            "detalle_por_oi": [],
+            "faltantes_detalle": [],
             "series_duplicadas": [],
             "series_duplicadas_globales": [],
             "series_faltantes": [],
@@ -819,11 +978,39 @@ def _copy_conformes_worker(
                 folders = _find_oi_folders_in_origins(oi_tag, rutas_origen)
                 if len(folders) == 0:
                     audit["ois_faltantes"].append({"oi": oi_tag, "detalle": "No se encontró carpeta de lote en rutas origen."})
+                    audit["detalle_por_oi"].append({
+                        "oi": oi_tag,
+                        "origen_folder": "",
+                        "dest_folder": "",
+                        "pdf_detectados": 0,
+                        "pdf_copiados": 0,
+                        "omitidos_no_conforme": 0,
+                        "omitidos_duplicados": 0,
+                        "no_pdf_omitidos": 0,
+                        "faltantes_pdf": 0,
+                        "file_errors": 0,
+                        "status": "FALTANTE",
+                        "detail": "No se encontró carpeta en orígenes",
+                    })
                     _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "OI_SIN_CARPETA", "message": "No se encontró carpeta para la OI en los orígenes."})
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
                     continue
                 if len(folders) > 1:
                     audit["ois_duplicadas"].append({"oi": oi_tag, "carpetas": [str(p) for p in folders]})
+                    audit["detalle_por_oi"].append({
+                        "oi": oi_tag,
+                        "origen_folder": " | ".join(str(p) for p in folders),
+                        "dest_folder": "",
+                        "pdf_detectados": 0,
+                        "pdf_copiados": 0,
+                        "omitidos_no_conforme": 0,
+                        "omitidos_duplicados": 0,
+                        "no_pdf_omitidos": 0,
+                        "faltantes_pdf": 0,
+                        "file_errors": 0,
+                        "status": "DUPLICADA",
+                        "detail": "Múltiples carpetas en orígenes",
+                    })
                     _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "OI_CARPETA_DUPLICADA", "message": "Se encontraron múltiples carpetas para la misma OI. No se copiará hasta corregir."})
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
                     continue
@@ -839,6 +1026,8 @@ def _copy_conformes_worker(
 
                 total_pdfs_in_oi = 0
                 omitted_nonpdf = 0
+                omitted_dup = 0
+                faltantes_pdf = 0
 
                 try:
                     with os.scandir(src_folder) as it:
@@ -888,7 +1077,10 @@ def _copy_conformes_worker(
                     missing = sorted([s for s in conforme_set if s not in series_present], key=lambda x: x)
                     if missing:
                         audit["series_faltantes"].append({"oi": oi_tag, "count": len(missing), "series": missing[:50]})
+                        faltantes_pdf = len(missing)
                         audit["archivos"]["pdf_omitidos_no_encontrado"] += len(missing)
+                        for s in missing:
+                            audit["faltantes_detalle"].append({"oi": oi_tag, "serie": s})
                         sample = ", ".join(missing[:6])
                         more = "" if len(missing) <= 6 else f" (+{len(missing) - 6} más)"
                         _record_oi_warn(
@@ -922,6 +1114,7 @@ def _copy_conformes_worker(
                     # dedupe global
                     if serie in seen_global:
                         audit["archivos"]["pdf_omitidos_duplicados"] += 1
+                        omitted_dup += 1
                         _mark_global_duplicate(serie, oi_tag)
                         continue
 
@@ -936,6 +1129,20 @@ def _copy_conformes_worker(
                     copied_candidates += 1
 
                 audit["archivos"]["pdf_omitidos_no_conforme"] += omitted_nc
+                audit["detalle_por_oi"].append({
+                    "oi": oi_tag,
+                    "origen_folder": str(src_folder),
+                    "dest_folder": str(Path(ruta_destino)),
+                    "pdf_detectados": total_pdfs_in_oi,
+                    "pdf_copiados": copied_candidates,
+                    "omitidos_no_conforme": omitted_nc,
+                    "omitidos_duplicados": omitted_dup,
+                    "no_pdf_omitidos": omitted_nonpdf,
+                    "faltantes_pdf": faltantes_pdf,
+                    "file_errors": 0,
+                    "status": "OK",
+                    "detail": "",
+                })
                 audit["ois_ok"] += 1
                 _emit(operation_id, {"type": "oi_done", "oi": oi_tag, "copiados": copied_candidates, "omitidos_no_conforme": omitted_nc, "pdf_detectados": total_pdfs_in_oi})
                 _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag, message=f"Escaneo {i}/{total_ois}")
@@ -960,11 +1167,39 @@ def _copy_conformes_worker(
                     folders = gaselag_folders.get(serie_key, [])
                     if len(folders) == 0:
                         audit["ois_faltantes"].append({"oi": oi_label, "detalle": "No se encontró carpeta de lote Gaselag en rutas origen."})
+                        audit["detalle_por_oi"].append({
+                            "oi": oi_label,
+                            "origen_folder": "",
+                            "dest_folder": "",
+                            "pdf_detectados": 0,
+                            "pdf_copiados": 0,
+                            "omitidos_no_conforme": 0,
+                            "omitidos_duplicados": 0,
+                            "no_pdf_omitidos": 0,
+                            "faltantes_pdf": 0,
+                            "file_errors": 0,
+                            "status": "FALTANTE",
+                            "detail": "No se encontró carpeta en orígenes",
+                        })
                         _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "GASELAG_SIN_CARPETA", "message": "No se encontró carpeta Gaselag para la serie en los orígenes."})
                         _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
                         continue
                     if len(folders) > 1:
                         audit["ois_duplicadas"].append({"oi": oi_label, "carpetas": [str(p) for p in folders]})
+                        audit["detalle_por_oi"].append({
+                            "oi": oi_label,
+                            "origen_folder": " | ".join(str(p) for p in folders),
+                            "dest_folder": "",
+                            "pdf_detectados": 0,
+                            "pdf_copiados": 0,
+                            "omitidos_no_conforme": 0,
+                            "omitidos_duplicados": 0,
+                            "no_pdf_omitidos": 0,
+                            "faltantes_pdf": 0,
+                            "file_errors": 0,
+                            "status": "DUPLICADA",
+                            "detail": "Múltiples carpetas en orígenes",
+                        })
                         _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "GASELAG_CARPETA_DUPLICADA", "message": "Se encontraron múltiples carpetas Gaselag para la misma serie. No se copiará hasta corregir."})
                         _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
                         continue
@@ -979,6 +1214,8 @@ def _copy_conformes_worker(
                     dup_primary: Dict[str, str] = {}
                     total_pdfs_in_oi = 0
                     omitted_nonpdf = 0
+                    omitted_dup = 0
+                    faltantes_pdf = 0
 
                     try:
                         with os.scandir(src_folder) as it:
@@ -1027,7 +1264,10 @@ def _copy_conformes_worker(
                         missing = sorted([s for s in conforme_set if s not in series_present], key=lambda x: x)
                         if missing:
                             audit["series_faltantes"].append({"oi": oi_label, "count": len(missing), "series": missing[:50]})
+                            faltantes_pdf = len(missing)
                             audit["archivos"]["pdf_omitidos_no_encontrado"] += len(missing)
+                            for s in missing:
+                                audit["faltantes_detalle"].append({"oi": oi_label, "serie": s})
 
                     audit["archivos"]["pdf_detectados"] += total_pdfs_in_oi
                     audit["archivos"]["archivos_no_pdf_omitidos"] += omitted_nonpdf
@@ -1048,6 +1288,7 @@ def _copy_conformes_worker(
 
                         if serie in seen_global:
                             audit["archivos"]["pdf_omitidos_duplicados"] += 1
+                            omitted_dup += 1
                             _mark_global_duplicate(serie, oi_label)
                             continue
 
@@ -1062,6 +1303,20 @@ def _copy_conformes_worker(
                         copied_candidates += 1
 
                     audit["archivos"]["pdf_omitidos_no_conforme"] += omitted_nc
+                    audit["detalle_por_oi"].append({
+                        "oi": oi_label,
+                        "origen_folder": str(src_folder),
+                        "dest_folder": str(Path(ruta_destino)),
+                        "pdf_detectados": total_pdfs_in_oi,
+                        "pdf_copiados": copied_candidates,
+                        "omitidos_no_conforme": omitted_nc,
+                        "omitidos_duplicados": omitted_dup,
+                        "no_pdf_omitidos": omitted_nonpdf,
+                        "faltantes_pdf": faltantes_pdf,
+                        "file_errors": 0,
+                        "status": "OK",
+                        "detail": "",
+                    })
                     audit["ois_ok"] += 1
                     _emit(operation_id, {"type": "oi_done", "oi": oi_label, "copiados": copied_candidates, "omitidos_no_conforme": omitted_nc, "pdf_detectados": total_pdfs_in_oi})
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, message=f"Escaneo {i}/{total_ois}")
@@ -1167,11 +1422,39 @@ def _copy_conformes_worker(
             folders = _find_oi_folders_in_origins(oi_tag, rutas_origen)
             if len(folders) == 0:
                 audit["ois_faltantes"].append({"oi": oi_tag, "detalle": "No se encontró carpeta de lote en rutas origen."})
+                audit["detalle_por_oi"].append({
+                    "oi": oi_tag,
+                    "origen_folder": "",
+                    "dest_folder": "",
+                    "pdf_detectados": 0,
+                    "pdf_copiados": 0,
+                    "omitidos_no_conforme": 0,
+                    "omitidos_duplicados": 0,
+                    "no_pdf_omitidos": 0,
+                    "faltantes_pdf": 0,
+                    "file_errors": 0,
+                    "status": "FALTANTE",
+                    "detail": "No se encontró carpeta en orígenes",
+                })
                 _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "OI_SIN_CARPETA", "message": "No se encontró carpeta para la OI en los orígenes."})
                 _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
                 continue
             if len(folders) > 1:
                 audit["ois_duplicadas"].append({"oi": oi_tag, "carpetas": [str(p) for p in folders]})
+                audit["detalle_por_oi"].append({
+                    "oi": oi_tag,
+                    "origen_folder": " | ".join(str(p) for p in folders),
+                    "dest_folder": "",
+                    "pdf_detectados": 0,
+                    "pdf_copiados": 0,
+                    "omitidos_no_conforme": 0,
+                    "omitidos_duplicados": 0,
+                    "no_pdf_omitidos": 0,
+                    "faltantes_pdf": 0,
+                    "file_errors": 0,
+                    "status": "DUPLICADA",
+                    "detail": "Múltiples carpetas en orígenes",
+                })
                 _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "OI_CARPETA_DUPLICADA", "message": "Se encontraron múltiples carpetas para la misma OI. No se copiará hasta corregir."})
                 _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
                 continue
@@ -1180,6 +1463,20 @@ def _copy_conformes_worker(
             dest_folder = Path(ruta_destino) / src_folder.name
             if dest_folder.exists():
                 audit["destinos_duplicados"].append({"oi": oi_tag, "destino": str(dest_folder)})
+                audit["detalle_por_oi"].append({
+                    "oi": oi_tag,
+                    "origen_folder": str(src_folder),
+                    "dest_folder": str(dest_folder),
+                    "pdf_detectados": 0,
+                    "pdf_copiados": 0,
+                    "omitidos_no_conforme": 0,
+                    "omitidos_duplicados": 0,
+                    "no_pdf_omitidos": 0,
+                    "faltantes_pdf": 0,
+                    "file_errors": 0,
+                    "status": "DESTINO_EXISTE",
+                    "detail": "El destino ya existe",
+                })
                 _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "DESTINO_DUPLICADO", "message": "La carpeta destino ya existe. No se copiará hasta corregir."})
                 _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
                 continue
@@ -1191,6 +1488,8 @@ def _copy_conformes_worker(
             omitted_nc = 0
             detected_pdf = 0
             omitted_nonpdf = 0
+            omitted_dup = 0
+            faltantes_pdf = 0
             total_pdfs_in_oi = 0
 
             try:
@@ -1199,6 +1498,20 @@ def _copy_conformes_worker(
                     dest_created = True
                 except FileExistsError:
                     audit["destinos_duplicados"].append({"oi": oi_tag, "destino": str(dest_folder)})
+                    audit["detalle_por_oi"].append({
+                        "oi": oi_tag,
+                        "origen_folder": str(src_folder),
+                        "dest_folder": str(dest_folder),
+                        "pdf_detectados": 0,
+                        "pdf_copiados": 0,
+                        "omitidos_no_conforme": 0,
+                        "omitidos_duplicados": 0,
+                        "no_pdf_omitidos": 0,
+                        "faltantes_pdf": 0,
+                        "file_errors": 0,
+                        "status": "DESTINO_EXISTE",
+                        "detail": "El destino ya existe",
+                    })
                     _emit(operation_id, {"type": "oi_warn", "oi": oi_tag, "code": "DESTINO_DUPLICADO", "message": "La carpeta destino ya existe. No se copiará hasta corregir."})
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_tag)
                     continue
@@ -1273,7 +1586,10 @@ def _copy_conformes_worker(
                     missing = sorted([s for s in conforme_set if s not in series_present], key=lambda x: x)
                     if missing:
                         audit["series_faltantes"].append({"oi": oi_tag, "count": len(missing), "series": missing[:50]})
+                        faltantes_pdf = len(missing)
                         audit["archivos"]["pdf_omitidos_no_encontrado"] += len(missing)
+                        for s in missing:
+                            audit["faltantes_detalle"].append({"oi": oi_tag, "serie": s})
                         sample = ", ".join(missing[:6])
                         more = "" if len(missing) <= 6 else f" (+{len(missing) - 6} más)"
                         _record_oi_warn(
@@ -1325,6 +1641,7 @@ def _copy_conformes_worker(
                             # Omitir copias extra si la serie está duplicada (se copia solo el “primary”)
                             if serie in dup_primary and entry.name != dup_primary[serie]:
                                 audit["archivos"]["pdf_omitidos_duplicados"] += 1
+                                omitted_dup += 1
                                 if verbose_events:
                                     _emit(operation_id, {"type": "file_skip", "oi": oi_tag, "serie": serie, "file": entry.name, "reason": "DUPLICADO"})
                                 if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
@@ -1385,6 +1702,21 @@ def _copy_conformes_worker(
                 if oi_ok:
                     audit["ois_ok"] += 1
 
+                audit["detalle_por_oi"].append({
+                    "oi": oi_tag,
+                    "origen_folder": str(src_folder),
+                    "dest_folder": str(dest_folder),
+                    "pdf_detectados": detected_pdf,
+                    "pdf_copiados": copied,
+                    "omitidos_no_conforme": omitted_nc,
+                    "omitidos_duplicados": omitted_dup,
+                    "no_pdf_omitidos": omitted_nonpdf,
+                    "faltantes_pdf": faltantes_pdf,
+                    "file_errors": file_error_count,
+                    "status": "OK" if oi_ok else "ERROR",
+                    "detail": "",
+                })
+
                 _emit(operation_id, {"type": "oi_done", "oi": oi_tag, "copiados": copied, "omitidos_no_conforme": omitted_nc, "pdf_detectados": detected_pdf})
 
                 # Progreso por OI (cierra al valor exacto i/total_ois)
@@ -1413,11 +1745,39 @@ def _copy_conformes_worker(
                 folders = gaselag_folders.get(serie_key, [])
                 if len(folders) == 0:
                     audit["ois_faltantes"].append({"oi": oi_label, "detalle": "No se encontró carpeta de lote Gaselag en rutas origen."})
+                    audit["detalle_por_oi"].append({
+                        "oi": oi_label,
+                        "origen_folder": "",
+                        "dest_folder": "",
+                        "pdf_detectados": 0,
+                        "pdf_copiados": 0,
+                        "omitidos_no_conforme": 0,
+                        "omitidos_duplicados": 0,
+                        "no_pdf_omitidos": 0,
+                        "faltantes_pdf": 0,
+                        "file_errors": 0,
+                        "status": "FALTANTE",
+                        "detail": "No se encontró carpeta en orígenes",
+                    })
                     _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "GASELAG_SIN_CARPETA", "message": "No se encontró carpeta Gaselag para la serie en los orígenes."})
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
                     continue
                 if len(folders) > 1:
                     audit["ois_duplicadas"].append({"oi": oi_label, "carpetas": [str(p) for p in folders]})
+                    audit["detalle_por_oi"].append({
+                        "oi": oi_label,
+                        "origen_folder": " | ".join(str(p) for p in folders),
+                        "dest_folder": "",
+                        "pdf_detectados": 0,
+                        "pdf_copiados": 0,
+                        "omitidos_no_conforme": 0,
+                        "omitidos_duplicados": 0,
+                        "no_pdf_omitidos": 0,
+                        "faltantes_pdf": 0,
+                        "file_errors": 0,
+                        "status": "DUPLICADA",
+                        "detail": "Múltiples carpetas en orígenes",
+                    })
                     _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "GASELAG_CARPETA_DUPLICADA", "message": "Se encontraron múltiples carpetas Gaselag para la misma serie. No se copiará hasta corregir."})
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
                     continue
@@ -1426,6 +1786,20 @@ def _copy_conformes_worker(
                 dest_folder = Path(ruta_destino) / src_folder.name
                 if dest_folder.exists():
                     audit["destinos_duplicados"].append({"oi": oi_label, "destino": str(dest_folder)})
+                    audit["detalle_por_oi"].append({
+                        "oi": oi_label,
+                        "origen_folder": str(src_folder),
+                        "dest_folder": str(dest_folder),
+                        "pdf_detectados": 0,
+                        "pdf_copiados": 0,
+                        "omitidos_no_conforme": 0,
+                        "omitidos_duplicados": 0,
+                        "no_pdf_omitidos": 0,
+                        "faltantes_pdf": 0,
+                        "file_errors": 0,
+                        "status": "DESTINO_EXISTE",
+                        "detail": "El destino ya existe",
+                    })
                     _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "DESTINO_DUPLICADO", "message": "La carpeta destino ya existe. No se copiará hasta corregir."})
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
                     continue
@@ -1437,6 +1811,8 @@ def _copy_conformes_worker(
                 omitted_nc = 0
                 detected_pdf = 0
                 omitted_nonpdf = 0
+                omitted_dup = 0
+                faltantes_pdf = 0
                 total_pdfs_in_oi = 0
 
                 try:
@@ -1445,6 +1821,20 @@ def _copy_conformes_worker(
                         dest_created = True
                     except FileExistsError:
                         audit["destinos_duplicados"].append({"oi": oi_label, "destino": str(dest_folder)})
+                        audit["detalle_por_oi"].append({
+                            "oi": oi_label,
+                            "origen_folder": str(src_folder),
+                            "dest_folder": str(dest_folder),
+                            "pdf_detectados": 0,
+                            "pdf_copiados": 0,
+                            "omitidos_no_conforme": 0,
+                            "omitidos_duplicados": 0,
+                            "no_pdf_omitidos": 0,
+                            "faltantes_pdf": 0,
+                            "file_errors": 0,
+                            "status": "DESTINO_EXISTE",
+                            "detail": "El destino ya existe",
+                        })
                         _emit(operation_id, {"type": "oi_warn", "oi": oi_label, "code": "DESTINO_DUPLICADO", "message": "La carpeta destino ya existe. No se copiará hasta corregir."})
                         _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label)
                         continue
@@ -1515,7 +1905,10 @@ def _copy_conformes_worker(
                         missing = sorted([s for s in conforme_set if s not in series_present], key=lambda x: x)
                         if missing:
                             audit["series_faltantes"].append({"oi": oi_label, "count": len(missing), "series": missing[:50]})
+                            faltantes_pdf = len(missing)
                             audit["archivos"]["pdf_omitidos_no_encontrado"] += len(missing)
+                            for s in missing:
+                                audit["faltantes_detalle"].append({"oi": oi_label, "serie": s})
                             sample = ", ".join(missing[:6])
                             more = "" if len(missing) <= 6 else f" (+{len(missing) - 6} m?s)"
                             _record_oi_warn(
@@ -1564,6 +1957,7 @@ def _copy_conformes_worker(
                                 # Omitir copiar extra por duplicado
                                 if serie in dup_primary and entry.name != dup_primary[serie]:
                                     audit["archivos"]["pdf_omitidos_duplicados"] += 1
+                                    omitted_dup += 1
                                     if verbose_events:
                                         _emit(operation_id, {"type": "file_skip", "oi": oi_label, "serie": serie, "file": entry.name, "reason": "DUPLICADO"})
                                     if total_pdfs_in_oi > 0 and (processed_in_oi % EMIT_EVERY == 0 or processed_in_oi == total_pdfs_in_oi):
@@ -1624,6 +2018,21 @@ def _copy_conformes_worker(
                     audit["archivos"]["archivos_no_pdf_omitidos"] += omitted_nonpdf
                     if oi_ok:
                         audit["ois_ok"] += 1
+
+                    audit["detalle_por_oi"].append({
+                        "oi": oi_label,
+                        "origen_folder": str(src_folder),
+                        "dest_folder": str(dest_folder),
+                        "pdf_detectados": detected_pdf,
+                        "pdf_copiados": copied,
+                        "omitidos_no_conforme": omitted_nc,
+                        "omitidos_duplicados": omitted_dup,
+                        "no_pdf_omitidos": omitted_nonpdf,
+                        "faltantes_pdf": faltantes_pdf,
+                        "file_errors": file_error_count,
+                        "status": "OK" if oi_ok else "ERROR",
+                        "detail": "",
+                    })
 
                     _emit(operation_id, {"type": "oi_done", "oi": oi_label, "copiados": copied, "omitidos_no_conforme": omitted_nc, "pdf_detectados": detected_pdf})
                     _emit_progress(operation_id, i=i, total_ois=total_ois, oi_tag=oi_label, message=f"Carpetas procesadas {i}/{total_ois}")
@@ -1803,3 +2212,26 @@ def log02_copiar_conformes_poll(operation_id: str, cursor: int = -1) -> Log02Cop
 def log02_copiar_conformes_cancel(operation_id: str) -> Dict[str, Any]:
     ok = cancel_manager.cancel(operation_id)
     return {"ok": bool(ok)}
+
+@router.get("/copiar-conformes/reporte/{operation_id}")
+def log02_copiar_conformes_reporte(
+    operation_id: str,
+    format_: str = Query("xlsx", description="Formato de descarga: xlsx|csv", alias="format"),
+) -> Any:
+    audit = _get_complete_audit(operation_id)
+    if audit is None:
+        raise HTTPException(status_code=404, detail="Operación no encontrada o sin auditoría.")
+    fmt = (format_ or "xlsx").strip().lower()
+    if fmt not in ("xlsx", "csv"):
+        raise HTTPException(status_code=400, detail="Formato inválido. Use xlsx o csv.")
+    if fmt == "csv":
+        data = _build_report_csv(audit)
+        headers = {"Content-Disposition": f'attachment; filename="LOG02_AUDITORIA_{operation_id}.csv"'}
+        return StreamingResponse(io.BytesIO(data), media_type="text/csv; charset=utf-8", headers=headers)
+    data = _build_report_xlsx(audit)
+    headers = {"Content-Disposition": f'attachment; filename="LOG02_AUDITORIA_{operation_id}.xlsx"'}
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )

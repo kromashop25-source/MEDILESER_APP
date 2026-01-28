@@ -13,6 +13,7 @@ import {
   subscribeLog02CopyConformesProgress,
   pollLog02CopyConformesProgress,
   log02CopyConformesCancel,
+  log02CopyConformesReport,
 } from "../../api/oiTools";
 import { translateProgressStage  } from "../oi_tools/progressTranslations";
 
@@ -1264,6 +1265,28 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
   const copyStartTitle =
     !resultado?.ok ? "Falta validar rutas" : !runSelected?.id ? "Falta seleccionar corrida" : "";
 
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  const downloadReport = async (format: "xlsx" | "csv") => {
+    // Usa tu state real del operationId (ajusta el nombre si difiere)
+    const op = copyOperationId; // <-- si tu archivo usa copyOperationId, reemplazar aquí
+    if (!op) return;
+    try {
+      setDownloadingReport(true);
+      const blob = await log02CopyConformesReport(op, format);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `LOG02_AUDITORIA_${op}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
 
   return (
     <div className="container-fluid">
@@ -1985,7 +2008,25 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
                         {copyAudit ? (
                           <div className="mT-15">
-                            <h6 className="c-grey-900 mB-10">Auditoría de copiado</h6>
+                            <div className="d-flex align-items-center justify-content-between gap-10 mB-10">
+                              <h6 className="c-grey-900 mB-0">Auditoría de copiado</h6>
+                              <div className="d-flex gap-5">
+                                <button
+                                  className="btn btn-sm btn-outline-light"
+                                  disabled={downloadingReport || !copyOperationId}
+                                  onClick={() => downloadReport("csv")}
+                                >
+                                  Descargar CSV
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-outline-light"
+                                  disabled={downloadingReport || !copyOperationId}
+                                  onClick={() => downloadReport("xlsx")}
+                                >
+                                  Descargar Excel
+                                </button>
+                              </div>
+                            </div>
                             <div className="row g-2">
                               <div className="col-12 col-md-4">
                                 <div className="alert alert-light mB-0">

@@ -661,8 +661,20 @@ export async function pollLog02CopyConformesProgress(
 }
 
 export async function log02CopyConformesCancel(operationId: string): Promise<void> {
-  await api.post(`/logistica/log02/copiar-conformes/cancel/${encodeURIComponent(operationId)}`);
-} 
+  const res = await api.post(`/logistica/log02/copiar-conformes/cancel/${encodeURIComponent(operationId)}`);
+  return res.data;
+}
+
+export async function log02CopyConformesReport(
+  operationId: string,
+  format: "xlsx" | "csv"
+): Promise<Blob> {
+  const res = await api.get(
+    `/logistica/log02/copiar-conformes/reporte/${encodeURIComponent(operationId)}`,
+    { params: { format }, responseType: "blob" }
+  );
+  return res.data as Blob;
+}
 
 
 // ================================
