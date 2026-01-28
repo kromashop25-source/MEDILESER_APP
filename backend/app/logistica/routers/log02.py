@@ -17,6 +17,8 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
+from pypdf import PdfReader, PdfWriter
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from app.api.auth import get_current_user_session
@@ -280,6 +282,7 @@ class Log02CopyConformesStartRequest(BaseModel):
     ruta_destino: str = Field(..., description="Ruta destino (lectura/escritura). Se crearán carpetas por OI (mismo nombre exacto del lote).")
     output_mode: str = Field("keep_structure", description="Modo de salida: keep_structure (actual) o consolidate (carpeta consolidada).")
     group_size: int = Field(0, description="Tamaño N de grupo para subcarpetas en modo consolidate (0 => sin subcarpetas).")
+    generate_merged_pdfs: bool = Field(False, description="En modo consolidate: genera PDFs consoldados (global si group_size=; por grupo si group_size>0).")
 
 class Log02CopyConformesStartResponse(BaseModel):
     operation_id: str
@@ -843,6 +846,7 @@ def _copy_conformes_worker(
         ruta_destino: str,
         output_mode: str = "keep_structure",
         group_size: int = 0,
+        generate_merged_pdfs: bool = False,
 ) -> None:
     """
     Worker en hilo: copia PDFs conformes por OI, emitiendo progreso NDJSON.
@@ -1358,6 +1362,7 @@ def _copy_conformes_worker(
             copied = 0
             file_error_count = 0
             total = len(tasks)
+            copied_dest_paths: List[Optional[Path]] = [None] * total
             EMIT_EVERY = 25
 
             def _dest_for_index(idx: int) -> Path:
@@ -1391,6 +1396,7 @@ def _copy_conformes_worker(
                 try:
                     shutil.copy2(src, str(dest_path))
                     copied += 1
+                    copied_dest_paths[idx] = dest_path
                     if verbose_events:
                         _emit(operation_id, {"type": "file_ok", "oi": oi_label, "serie": serie, "file": fname})
                 except Exception as e:
@@ -1404,6 +1410,90 @@ def _copy_conformes_worker(
             audit["archivos"]["pdf_copiados"] += copied
             if file_error_count > 0:
                 audit["ois_error"].append({"oi": "CONSOLIDADO", "code": "FILE_ERROR", "detail": f"{file_error_count} archivo(s) con error de copia."})
+
+            # ===============================================================================
+            # Opcional: generar PDFs consolidados (merge) en modo consolidate
+            # - Si group_size == 0: 1 PDF global: <RANGO_GLOBAL>.pdf
+            # - Si gropu_size > 0: 1 PDF por grupo: <RANGO_GRUPO>.pdf (en raíz de dest_root)
+            # - (No se genera el PDF global cuando hay supcarpetas.)
+            # ===============================================================================
+            if generate_merged_pdfs:
+                MAX_MERGE_PDFS = 2000
+                try:
+                    MAX_MERGE_PDFS = int(os.getenv("LOG02_MAX_MERGE_PDFS", "2000") or "2000")
+                except Exception:
+                    MAX_MERGE_PDFS = 2000
+
+                def _merge_pdf(output_pdf: Path, inputs: List[Path], label: str) -> Dict[str, Any]:
+                    info: Dict[str, Any] = {"label": label, "output": str(output_pdf), "inputs": len(inputs), "created": False}
+                    if not inputs:
+                        info["skipped_reason"] = "Sin PDFs para consolidar."
+                        return info
+                    if len(inputs) > MAX_MERGE_PDFS:
+                        info["skipped_reason"] = "El PDF consolidado ya existe (no se sobrescribe)."
+                        _emit(operation_id, {"type": "oi_warn", "oi": "CONSOLIDADO", "code": "MERGE_EXISTS", "message": f"{label}: {info['skipped_reason']}"})
+                        return info
+                    
+                    writer = PdfWriter()
+                    skipped: List[str] = []
+                    for p in inputs:
+                        if cancel_token.is_cancelled():
+                            info["skipped_reason"] = "Cancelado por el usuario."
+                            return info
+                        try:
+                            reader = PdfReader(str(p))
+                            for page in reader.pages:
+                                writer.add_page(page)
+                        except Exception as e:
+                            skipped.append(str(p))
+                            _emit(operation_id, {"type": "oi_warn", "oi": "CONSOLIDADO", "code": "MERGE_INPUT_ERROR", "message": f"{label}: no se pudo leer {p.name}. {type(e).__name__}: {e}"})
+                            continue
+                    try:
+                        with open(output_pdf, "wb") as f:
+                            writer.write(f)
+                        info["created"] = True
+                        info["skipped_inputs"] = skipped
+                        _emit(operation_id, {"type": "status", "stage": "merge_pdf", "message": f"{label}: PDF consolidado creado ({output_pdf.name})."})
+                    except Exception as e:
+                        info["skipped_reason"] = f"No se pudo escribir PDF consolidado. {type(e).__name__}: {e}"
+                        _emit(operation_id, {"type": "oi_warn", "oi": "CONSOLIDADO", "code": "MERGE_WRITE_ERROR", "message": f"{label}: {info['skipped_reason']}"})
+                    return info
+                
+                copied_paths_all: List[Path] = [p for p in copied_dest_paths if isinstance(p, Path) and p.exists()]
+
+                audit["pdfs_consolidados"] = {
+                    "enabled": True,
+                    "group_size": int(group_size or 0),
+                    "max_merge_pdfs": MAX_MERGE_PDFS,
+                    "global": None,
+                    "grupos": [],
+                }
+
+                if group_size <= 0:
+                    # PDF global en raíz de la carpeta consolidada
+                    out_pdf = dest_root / f"{consolidated_name}.pdf"
+                    _emit(operation_id, {"type": "status", "stage": "merge_pdf", "message": "Generando PDF consolidado global..."})
+                    audit["pdfs_consolidados"]["global"] = _merge_pdf(out_pdf, copied_paths_all, "GLOBAL")
+                else:
+                    # PDFs por grupo, ubicados en la raíz (no dentro de subcarpetas)
+                    total_i = total
+                    gcount = (total_i + group_size - 1) // group_size
+                    for g in range(gcount):
+                        start_i = g * group_size
+                        end_i = min(total_i - 1, (g + 1) * group_size - 1)
+                        s_ini = str(tasks[start_i]["serie"])
+                        s_fin = str(tasks[end_i]["serie"])
+                        label = f"GRUPO {g + 1}/{gcount}"
+                        group_name = f"{s_ini}_AL_{s_fin}"
+                        out_pdf = dest_root / f"{group_name}.pdf"
+                        group_paths: List[Path] = []
+                        for j in range(start_i, end_i + 1):
+                            p = copied_dest_paths[j]
+                            if isinstance(p, Path) and p.exists():
+                                group_paths.append(p)
+                        _emit(operation_id, {"type": "status", "stage": "merge_pdf", "message": f"Generando PDF consolidado por grupo ({label})..."})
+                        audit["pdfs_consolidados"]["groups"].append(_merge_pdf(out_pdf, group_paths, label))
+
 
             _emit(operation_id, {"type": "complete", "message": "Copiado finalizado.", "audit": audit, "percent": 100.0})
             return                        
@@ -2091,6 +2181,8 @@ def log02_copiar_conformes_start(payload: Log02CopyConformesStartRequest) -> Log
     if group_size < 0:
         group_size = 0
 
+    generate_merged_pdfs = bool(getattr(payload, "generate_merged_pdfs", False))
+
 
     operation_id = str(uuid.uuid4())
     cancel_token = cancel_manager.create(operation_id)
@@ -2107,6 +2199,7 @@ def log02_copiar_conformes_start(payload: Log02CopyConformesStartRequest) -> Log
             "ruta_destino": ruta_destino,
             "output_mode": output_mode,
             "group_size": group_size,
+            "generate_merged_pdfs": generate_merged_pdfs,
         },
         daemon=True,
     )

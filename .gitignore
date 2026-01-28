@@ -17,6 +17,7 @@ Thumbs.db
 
 backend/app/data/uploads/
 backend/app/oi_tools/data/uploads/
+backend/app/data/logistica/
 backend/app/data/tmp/
 backend/data/*.db*
 Thumbs.db

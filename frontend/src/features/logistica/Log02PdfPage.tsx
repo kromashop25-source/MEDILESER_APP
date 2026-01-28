@@ -23,6 +23,16 @@ function badge(ok?: boolean | null) {
   return "badge bg-secondary";
 }
 
+function runStatusBadge(status?: string) {
+  const s = (status || "").toString().trim().toUpperCase();
+  if (!s) return "badge bg-secondary";
+  if (s === "COMPLETADO" || s === "COMPLETED") return "badge bg-success";
+  if (s === "ERROR" || s === "FALLIDO" || s === "FAILED") return "badge bg-danger";
+  if (s === "PROCESANDO" || s === "RUNNING" || s === "EN_PROCESO") return "badge bg-warning text-dark";
+  if (s === "CANCELADO" || s === "CANCELLED") return "badge bg-secondary";
+  return "badge bg-secondary";
+}
+
 type ExplorerMode = "origen" | "destino";
 
 // Wizard UI
@@ -40,6 +50,7 @@ const DEBUG_PROGRESS =
 const DEBUG_PROGRESS_PREFIX = "[log02-copy-progress]";
 const STREAM_SILENCE_MS = 2000;
 const POLL_INTERVAL_MS = 500;
+const MIN_LOADING_MS = 600;
 
 function debugProgress(...args: any[]) {
   if (!DEBUG_PROGRESS) return;
@@ -115,6 +126,7 @@ export default function Log02PdfPage() {
   const [groupSize, setGroupSize] = useState<number>(0);
   const [groupSizeInput, setGroupSizeInput] = useState<string>("0");
   const [editingGroupSize, setEditingGroupSize] = useState<boolean>(false);
+  const [generateMergedPdfs, setGenerateMergedPdfs] = useState<boolean>(false);
   
 
   const [validando, setValidando] = useState<boolean>(false);
@@ -130,6 +142,9 @@ export default function Log02PdfPage() {
   const [runsError, setRunsError] = useState<string>("");
   const [runs, setRuns] = useState<Log01HistoryListItem[]>([]);
   const [runSelected, setRunSelected] = useState<Log01HistoryListItem | null>(null);
+  const [showRunsLoading, setShowRunsLoading] = useState<boolean>(false);
+  const runsLoadingStartedAtRef = useRef<number>(0);
+  const runsLoadingTimerRef = useRef<number | null>(null);
 
   // filtros opcionales del modal
   const [runQ, setRunQ] = useState<string>("");
@@ -228,15 +243,18 @@ export default function Log02PdfPage() {
         destino?: string;
         output_mode?: OutputMode;
         group_size?: number;
+        generate_merged_pdfs?: boolean;
       }
       const origenes = Array.isArray(parsed.origenes) ? parsed.origenes : [];
       const destino = typeof parsed?.destino === "string" ? parsed.destino : "";
       const om = parsed?.output_mode === "keep_structure" ? "keep_structure" : "consolidate";
       const gs = typeof parsed?.group_size === "number" && Number.isFinite(parsed.group_size) ? parsed.group_size : 0;
+      const gen = typeof parsed?.generate_merged_pdfs === "boolean" ? parsed.generate_merged_pdfs : false;
       if (origenes.length) setRutasOrigen(origenes);
       if (destino) setRutaDestino(destino);
       setOutputMode(om);
       setGroupSize(Math.max(0, Math.trunc(gs)));
+      setGenerateMergedPdfs(gen);
     } catch {
       // ignorar
     }
@@ -251,12 +269,13 @@ export default function Log02PdfPage() {
         destino: rutaDestino,
         output_mode: outputMode,
         group_size: Math.max(0, Math.trunc(groupSize || 0)),
+        generate_merged_pdfs: generateMergedPdfs,
       };
       localStorage.setItem(LS_KEY, JSON.stringify(payload));
     } catch {
       // ignorar
-  }
-}, [rutasOrigen, rutaDestino, outputMode, groupSize]);
+    }
+  }, [rutasOrigen, rutaDestino, outputMode, groupSize, generateMergedPdfs]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -268,6 +287,47 @@ export default function Log02PdfPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!runModalOpen) {
+      if (runsLoadingTimerRef.current != null) {
+        window.clearTimeout(runsLoadingTimerRef.current);
+        runsLoadingTimerRef.current = null;
+      }
+      runsLoadingStartedAtRef.current = 0;
+      setShowRunsLoading(false);
+      return;
+    }
+
+    if (runsLoading) {
+      if (runsLoadingTimerRef.current != null) {
+        window.clearTimeout(runsLoadingTimerRef.current);
+        runsLoadingTimerRef.current = null;
+      }
+      runsLoadingStartedAtRef.current = Date.now();
+      setShowRunsLoading(true);
+      return;
+    }
+
+    if (!showRunsLoading) return;
+    const elapsed = Date.now() - runsLoadingStartedAtRef.current;
+    const delay = Math.max(0, MIN_LOADING_MS - elapsed);
+    if (runsLoadingTimerRef.current != null) {
+      window.clearTimeout(runsLoadingTimerRef.current);
+    }
+    runsLoadingTimerRef.current = window.setTimeout(() => {
+      runsLoadingTimerRef.current = null;
+      if (!mountedRef.current) return;
+      setShowRunsLoading(false);
+    }, delay);
+
+    return () => {
+      if (runsLoadingTimerRef.current != null) {
+        window.clearTimeout(runsLoadingTimerRef.current);
+        runsLoadingTimerRef.current = null;
+      }
+    };
+  }, [runsLoading, runModalOpen, showRunsLoading]);
+
 function limpiarConfiguracion() {
   setRutasOrigen([""]);
   setRutaDestino("");
@@ -277,6 +337,7 @@ function limpiarConfiguracion() {
   setRunSelected(null);
   setOutputMode("consolidate");
   setGroupSize(0);
+  setGenerateMergedPdfs(false);
   setCopyAudit(null);
   setCopyWarnings([]);
   setCopyErrors([]);
@@ -1064,6 +1125,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         ruta_destino: destino,
         output_mode: outputMode,
         group_size: Math.max(0, Math.trunc(groupSize || 0)),
+        generate_merged_pdfs: outputMode === "consolidate" ? generateMergedPdfs : false,
       });
 
       const opId = start.operation_id;
@@ -1821,6 +1883,52 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                   : `Se crean subcarpetas de ${groupSizeSafe} PDFs (último grupo puede ser menor).`}
                               </div>
                             </div>
+
+                            {outputMode === "consolidate" ? (
+                              <div className="col-12">
+                                <div className="form-check mT-10">
+                                  <input
+                                    className="form-check-input"
+                                    type="checkbox"
+                                    id="log02-gen-merged-pdfs"
+                                    checked={generateMergedPdfs}
+                                    onChange={(e) => setGenerateMergedPdfs(e.target.checked)}
+                                    disabled={copying}
+                                  />
+                                  <label className="form-check-label" htmlFor="log02-gen-merged-pdfs">
+                                    <strong>Generar PDFs consolidados (merge)</strong>{" "}
+                                    <span className="text-muted small">
+                                      {groupSizeSafe > 0
+                                        ? "(1 PDF por grupo, guardado en la carpeta principal)"
+                                        : "(1 PDF global en la carpeta principal)"}
+                                    </span>
+                                  </label>
+                                </div>
+
+                                {generateMergedPdfs ? (
+                                  <div className="alert alert-warning small mT-10 mB-0">
+                                    <div className="mB-5">
+                                      <strong>Advertencia:</strong> consolidar muchos PDFs puede tardar y generar archivos muy grandes.
+                                    </div>
+                                    {groupSizeSafe > 0 ? (
+                                      <div>
+                                        Se generarán <strong>PDFs por grupo</strong> en la carpeta principal consolidada.
+                                        <strong> No se genera PDF global</strong> cuando hay subcarpetas.
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        Se generará <strong>1 PDF global</strong> con todos los certificados. Si son muchos,
+                                        considera usar subcarpetas (N &gt; 0) para evitar un PDF gigante.
+                                      </div>
+                                    )}
+                                    <div className="mT-5">
+                                      Si el volumen supera el límite configurado, el merge se omitirá y verás una advertencia en el
+                                      progreso.
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                         <div className="d-flex flex-wrap gap-10 mB-10">
@@ -2185,149 +2293,199 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       {runModalOpen ? (
         <>
           <div className="modal fade show" style={{ display: "block" }} role="dialog" aria-modal="true">
-            <div className="modal-dialog modal-lg" role="document">
+            <div className="modal-dialog modal-lg modal-dialog-scrollable" role="document">
               <div className="modal-content">
                 <div className="modal-header">
                   <h5 className="modal-title">Seleccionar corrida de LOG-01 (Historial)</h5>
-                  <button type="button" className="close" aria-label="Close" onClick={() => setRunModalOpen(false)}>
-                    <span aria-hidden="true">&times;</span>
-                  </button>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    aria-label="Cerrar"
+                    onClick={() => setRunModalOpen(false)}
+                  />
                 </div>
 
                 <div className="modal-body">
-                  <div className="text-muted small mB-10">
-                    Por defecto se cargan las <strong>últimas 5 corridas completadas</strong>. Puedes usar filtros si lo
-                    necesitas.
+                  <div className="vi-card mB-10">
+                    <div className="d-flex align-items-center justify-content-between mB-10">
+                      <div className="small text-muted">Filtros</div>
+                    </div>
+
+                    <div className="text-muted small mB-10">
+                      Por defecto se cargan las <strong>últimas 5 corridas completadas</strong>. Puedes usar filtros si lo
+                      necesitas.
+                    </div>
+
+                   {runsError ? (
+                      <div className="alert alert-danger" role="alert">
+                        {runsError}
+                      </div>
+                    ) : null}
+
+                    <form
+                      className="row g-2 align-items-end"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void buscarCorridasConFiltros();
+                      }}
+                    >
+                      <div className="col-12 col-md-4">
+                        <label className="form-label">Buscar</label>
+                        <input
+                          className="form-control form-control-sm"
+                          value={runQ}
+                          onChange={(e) => setRunQ(e.target.value)}
+                          placeholder="Serie / OI / usuario..."
+                        />
+                      </div>
+                      <div className="col-6 col-md-2">
+                        <label className="form-label">Desde</label>
+                        <input
+                          className="form-control form-control-sm"
+                          type="date"
+                          value={runDateFrom}
+                          onChange={(e) => setRunDateFrom(e.target.value)}
+                        />
+                      </div>
+                      <div className="col-6 col-md-2">
+                        <label className="form-label">Hasta</label>
+                        <input
+                          className="form-control form-control-sm"
+                          type="date"
+                          value={runDateTo}
+                          onChange={(e) => setRunDateTo(e.target.value)}
+                        />
+                      </div>
+                      <div className="col-6 col-md-2">
+                        <label className="form-label">Origen</label>
+                        <input
+                          className="form-control form-control-sm"
+                          value={runSource}
+                          onChange={(e) => setRunSource(e.target.value)}
+                          placeholder="AUTO/BASES/..."
+                        />
+                      </div>
+                      <div className="col-6 col-md-2">
+                        <label className="form-label">Estado</label>
+                        <input
+                          className="form-control form-control-sm"
+                          value={runStatus}
+                          onChange={(e) => setRunStatus(e.target.value)}
+                          placeholder="COMPLETADO"
+                        />
+                      </div>
+
+                      <div className="col-12 d-flex align-items-center justify-content-between">
+                        <div className="btn-group" role="group" aria-label="Acciones filtros">
+                          <button type="submit" className="btn btn-sm btn-primary" disabled={runsLoading}>
+                            {runsLoading ? (
+                              <span className="d-flex align-items-center gap-10">
+                                <img
+                                  src="/medileser/Spinner-Logo-Medileser.gif"
+                                  alt="Cargando"
+                                  style={{ width: 18, height: 18 }}
+                                />
+                                Buscando...
+                              </span>
+                            ) : (
+                              "Aplicar filtros"
+                            )}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-auto"
+                          onClick={() => {
+                            setRunQ("");
+                            setRunDateFrom("");
+                            setRunDateTo("");
+                            setRunSource("");
+                            setRunStatus("COMPLETADO");
+                            void cargarUltimasCorridasExitosas(5);
+                          }}
+                          disabled={runsLoading}
+                        >
+                          {runsLoading ? (
+                            <span className="d-flex align-items-center gap-10">
+                              <img
+                                src="/medileser/Spinner-Logo-Medileser.gif"
+                                alt="Cargando"
+                                style={{ width: 18, height: 18 }}
+                              />
+                              Cargando...
+                            </span>
+                          ) : (
+                            "Ver últimas 5 exitosas"
+                          )}
+                        </button>
+                      </div>
+                    </form>
                   </div>
 
-                  {runsError ? (
-                    <div className="alert alert-danger" role="alert">
-                      {runsError}
+                  <div className="vi-card">
+                    <div className="d-flex align-items-center justify-content-between mB-10">
+                      <div className="small text-muted">Resultados</div>
+                      <div className="small text-muted">
+                        {showRunsLoading ? "Actualizando..." : `${runs.length} corrida(s)`}
+                      </div>
                     </div>
-                  ) : null}
 
-                  <form
-                    className="row g-2 align-items-end"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void buscarCorridasConFiltros();
-                    }}
-                  >
-                    <div className="col-12 col-md-4">
-                      <label className="form-label">Buscar</label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={runQ}
-                        onChange={(e) => setRunQ(e.target.value)}
-                        placeholder="Serie / OI / usuario..."
-                      />
-                    </div>
-                    <div className="col-6 col-md-2">
-                      <label className="form-label">Desde</label>
-                      <input
-                        className="form-control form-control-sm"
-                        type="date"
-                        value={runDateFrom}
-                        onChange={(e) => setRunDateFrom(e.target.value)}
-                      />
-                    </div>
-                    <div className="col-6 col-md-2">
-                      <label className="form-label">Hasta</label>
-                      <input
-                        className="form-control form-control-sm"
-                        type="date"
-                        value={runDateTo}
-                        onChange={(e) => setRunDateTo(e.target.value)}
-                      />
-                    </div>
-                    <div className="col-6 col-md-2">
-                      <label className="form-label">Origen</label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={runSource}
-                        onChange={(e) => setRunSource(e.target.value)}
-                        placeholder="AUTO/BASES/..."
-                      />
-                    </div>
-                    <div className="col-6 col-md-2">
-                      <label className="form-label">Estado</label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={runStatus}
-                        onChange={(e) => setRunStatus(e.target.value)}
-                        placeholder="COMPLETADO"
-                      />
-                    </div>
-                  <div className="col-12 d-flex gap-10">
-                      <button type="submit" className="btn btn-sm btn-primary" disabled={runsLoading}>
-                        {runsLoading ? "Buscando..." : "Aplicar filtros"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-auto"
-                        onClick={() => {
-                          setRunQ("");
-                          setRunDateFrom("");
-                          setRunDateTo("");
-                          setRunSource("");
-                          setRunStatus("COMPLETADO");
-                          void cargarUltimasCorridasExitosas(5);
-                        }}
-                        disabled={runsLoading}
-                      >
-                        Ver últimas 5 exitosas
-                      </button>
-                    </div>
-                  </form>
-
-                  <hr />
-
-                  {runsLoading ? (
-                    <div className="text-muted small">Cargando corridas...</div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-sm mB-0">
-                        <thead>
-                          <tr className="small">
-                            <th style={{ width: 90 }}>ID</th>
-                            <th>Creado</th>
-                            <th style={{ width: 120 }}>Origen</th>
-                            <th style={{ width: 140 }}>Estado</th>
-                            <th style={{ width: 120 }}></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {runs.length ? (
-                            runs.map((it) => (
-                              <tr key={it.id} className="small">
-                                <td>
-                                  <strong>#{it.id}</strong>
-                                </td>
-                                <td>{formatDateTime(it.created_at)}</td>
-                                <td>{it.source || "N/D"}</td>
-                                <td>{it.status || "N/D"}</td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-outline-primary"
-                                    onClick={() => seleccionarCorrida(it)}
-                                  >
-                                    Usar
-                                  </button>
+                    {showRunsLoading ? (
+                      <div className="d-flex align-items-center gap-10 text-muted small">
+                        <img
+                          src="/medileser/Spinner-Logo-Medileser.gif"
+                          alt="Cargando"
+                          style={{ width: 28, height: 28 }}
+                        />
+                        <span>Cargando corridas...</span>
+                      </div>
+                    ) : (
+                      <div className="table-responsive">
+                        <table className="table table-sm mB-0">
+                          <thead>
+                            <tr className="small">
+                              <th style={{ width: 110 }}>ID</th>
+                              <th>Creado</th>
+                              <th style={{ width: 140 }}>Origen</th>
+                              <th style={{ width: 150 }}>Estado</th>
+                              <th style={{ width: 110 }} className="text-end"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {runs.length ? (
+                              runs.map((it) => (
+                                <tr key={it.id} className="small">
+                                  <td>
+                                    <span className="badge bg-secondary font-monospace">#{it.id}</span>
+                                  </td>
+                                  <td>{formatDateTime(it.created_at)}</td>
+                                  <td>{it.source || "N/D"}</td>
+                                  <td>
+                                    <span className={runStatusBadge(it.status)}>{it.status || "N/D"}</span>
+                                  </td>
+                                  <td className="text-end">
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-primary"
+                                      onClick={() => seleccionarCorrida(it)}
+                                    >
+                                      Usar
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr className="small">
+                                <td colSpan={5} className="text-muted">
+                                  No se encontraron corridas con esos filtros.
                                 </td>
                               </tr>
-                            ))
-                          ) : (
-                            <tr className="small">
-                              <td colSpan={5} className="text-muted">
-                                Sin resultados.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="modal-footer">
@@ -2338,7 +2496,10 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show"></div>
+          <div
+            className="modal-backdrop fade show"
+            onClick={() => setRunModalOpen(false)}
+          ></div>
         </>
       ) : null}
 
