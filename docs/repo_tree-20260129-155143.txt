@@ -289,8 +289,8 @@ MEDILESER_APP
 │   │   │       │   ├── ui.html
 │   │   │       │   └── vector-maps.html
 │   │   │       ├── assets
-│   │   │       │   ├── index-5wp0Y-U3.css
-│   │   │       │   └── index-UuS36hK2.js
+│   │   │       │   ├── index-DXnbE77G.js
+│   │   │       │   └── index-XSinboQt.css
 │   │   │       ├── medileser
 │   │   │       │   ├── banner.jpg
 │   │   │       │   ├── loading.png
@@ -317,18 +317,27 @@ MEDILESER_APP
 │   │   │       ├── 10
 │   │   │       │   ├── BD_AA25130585_AL_AA25133464.xlsx
 │   │   │       │   ├── BD_AA25130585_AL_AA25133464__MANIFIESTO.json
-│   │   │       │   └── BD_AA25130585_AL_AA25133464__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25130585_AL_AA25133464__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_QA25410931_AL_QA25419630.xlsx
+│   │   │       │   ├── BD_QA25410931_AL_QA25419630__MANIFIESTO.json
+│   │   │       │   └── BD_QA25410931_AL_QA25419630__NO_CONFORME_FINAL.json
 │   │   │       ├── 11
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_KA25083701_AL_KA25088700.xlsx
+│   │   │       │   ├── BD_KA25083701_AL_KA25088700__MANIFIESTO.json
+│   │   │       │   └── BD_KA25083701_AL_KA25088700__NO_CONFORME_FINAL.json
 │   │   │       ├── 12
 │   │   │       │   ├── BD_AA25128701_AL_AA25131100.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25131100__MANIFIESTO.json
 │   │   │       │   ├── BD_AA25128701_AL_AA25131100__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
 │   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
@@ -338,41 +347,68 @@ MEDILESER_APP
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
-│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_PA25627301_AL_PA25634500.xlsx
+│   │   │       │   ├── BD_PA25627301_AL_PA25634500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25627301_AL_PA25634500__NO_CONFORME_FINAL.json
 │   │   │       ├── 14
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
-│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_PA25620701_AL_PA25634500.xlsx
+│   │   │       │   ├── BD_PA25620701_AL_PA25634500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25620701_AL_PA25634500__NO_CONFORME_FINAL.json
 │   │   │       ├── 15
 │   │   │       │   ├── BD_AA25131916_AL_AA25133604.xlsx
 │   │   │       │   ├── BD_AA25131916_AL_AA25133604__MANIFIESTO.json
 │   │   │       │   ├── BD_AA25131916_AL_AA25133604__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_KA25088701_AL_KA25091200.xlsx
+│   │   │       │   ├── BD_KA25088701_AL_KA25091200__MANIFIESTO.json
+│   │   │       │   ├── BD_KA25088701_AL_KA25091200__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
 │   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
 │   │   │       ├── 16
 │   │   │       │   ├── BD_AA25128701_AL_AA25129900.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25129900__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_AA25129900__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25129900__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_KA25088701_AL_KA25091200.xlsx
+│   │   │       │   ├── BD_KA25088701_AL_KA25091200__MANIFIESTO.json
+│   │   │       │   └── BD_KA25088701_AL_KA25091200__NO_CONFORME_FINAL.json
 │   │   │       ├── 17
 │   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_KA25101201_AL_KA25102700.xlsx
+│   │   │       │   ├── BD_KA25101201_AL_KA25102700__MANIFIESTO.json
+│   │   │       │   └── BD_KA25101201_AL_KA25102700__NO_CONFORME_FINAL.json
 │   │   │       ├── 18
 │   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_KA25083701_AL_KA25084700.xlsx
+│   │   │       │   ├── BD_KA25083701_AL_KA25084700__MANIFIESTO.json
+│   │   │       │   └── BD_KA25083701_AL_KA25084700__NO_CONFORME_FINAL.json
 │   │   │       ├── 19
 │   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   ├── BD_AA25128701_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_QB25007201_AL_QB25007800.xlsx
+│   │   │       │   ├── BD_QB25007201_AL_QB25007800__MANIFIESTO.json
+│   │   │       │   └── BD_QB25007201_AL_QB25007800__NO_CONFORME_FINAL.json
 │   │   │       ├── 2
 │   │   │       │   ├── BD_AA25128701_AL_AA25130500.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25130500__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_AA25130500__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25130500__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_PA25588101_AL_QA25426630.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_QA25426630__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_QA25426630__NO_CONFORME_FINAL.json
 │   │   │       ├── 20
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
@@ -389,6 +425,22 @@ MEDILESER_APP
 │   │   │       │   ├── BD_AA25128701_AL_AA25133700.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25133700__MANIFIESTO.json
 │   │   │       │   └── BD_AA25128701_AL_AA25133700__NO_CONFORME_FINAL.json
+│   │   │       ├── 24
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
+│   │   │       ├── 25
+│   │   │       │   ├── BD_AA25128701_AL_AA25131700.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25131700__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25131700__NO_CONFORME_FINAL.json
+│   │   │       ├── 26
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
+│   │   │       ├── 27
+│   │   │       │   ├── BD_AA25129302_AL_AA25129900.xlsx
+│   │   │       │   ├── BD_AA25129302_AL_AA25129900__MANIFIESTO.json
+│   │   │       │   └── BD_AA25129302_AL_AA25129900__NO_CONFORME_FINAL.json
 │   │   │       ├── 3
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
@@ -396,27 +448,45 @@ MEDILESER_APP
 │   │   │       ├── 4
 │   │   │       │   ├── BD_AA25128701_AL_KA25079700.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_KA25079700__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_KA25079700__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_KA25079700__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
+│   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
 │   │   │       ├── 5
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
 │   │   │       ├── 6
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_AA25129300__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_AA25129300__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
 │   │   │       ├── 7
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │       │   ├── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
 │   │   │       │   ├── BD_PA25588101_AL_QA25426630.xlsx
 │   │   │       │   ├── BD_PA25588101_AL_QA25426630__MANIFIESTO.json
 │   │   │       │   └── BD_PA25588101_AL_QA25426630__NO_CONFORME_FINAL.json
 │   │   │       ├── 8
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630.xlsx
 │   │   │       │   ├── BD_AA25128701_AL_QA25426630__MANIFIESTO.json
-│   │   │       │   └── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_AA25128701_AL_QA25426630__NO_CONFORME_FINAL.json
+│   │   │       │   ├── BD_KA25083701_AL_KA25088700.xlsx
+│   │   │       │   ├── BD_KA25083701_AL_KA25088700__MANIFIESTO.json
+│   │   │       │   └── BD_KA25083701_AL_KA25088700__NO_CONFORME_FINAL.json
 │   │   │       └── 9
 │   │   │           ├── BD_AA25129302_AL_AA25129900.xlsx
 │   │   │           ├── BD_AA25129302_AL_AA25129900__MANIFIESTO.json
-│   │   │           └── BD_AA25129302_AL_AA25129900__NO_CONFORME_FINAL.json
+│   │   │           ├── BD_AA25129302_AL_AA25129900__NO_CONFORME_FINAL.json
+│   │   │           ├── BD_PA25588101_AL_PA25593500.xlsx
+│   │   │           ├── BD_PA25588101_AL_PA25593500__MANIFIESTO.json
+│   │   │           └── BD_PA25588101_AL_PA25593500__NO_CONFORME_FINAL.json
 │   │   ├── oi_tools
 │   │   │   └── formato_ac_runs
 │   │   │       ├── 1
@@ -465,7 +535,8 @@ MEDILESER_APP
 │   ├── medileser_app_2026-01-13_220004.sql
 │   ├── MEDILESER_APP_BITACORA _SCRUM.xlsx
 │   ├── Pruebas_Desempeño_Excel.md
-│   └── Pruebas_E2E_Excel.md
+│   ├── Pruebas_E2E_Excel.md
+│   └── repo_tree-20260126-091611.txt
 ├── frontend
 │   ├── public
 │   │   ├── adminator
@@ -661,13 +732,14 @@ MEDILESER_APP
 ├── .env
 ├── .gitignore
 ├── backup_medileser.ps1
-├── BASE.sql
 ├── build_frontend_and_copy.bat
-├── DATA MEDILESER.sql
 ├── INSTALACION.md
 ├── INSTALAR VENV.txt
 ├── instalar_dependencias.bat
+├── medileser_app_2026-01-28_220004.sql
 ├── README.md
 ├── requirements.txt
 ├── RESULTADOS BD.txt
-└── run_backend.bat
+├── run_backend.bat
+├── run_medileser_app.bat
+└── run_registro_vi_server.bat

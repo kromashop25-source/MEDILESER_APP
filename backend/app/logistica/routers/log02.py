@@ -13,6 +13,8 @@ import threading
 import uuid
 import time
 import shutil
+import errno
+import random
 from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -808,6 +810,24 @@ def _build_conforme_map(manifest_payload: Dict[str, Any]) -> Dict[str, set[str]]
 def _is_log02_verbose() -> bool:
     v = os.getenv("VI_LOG02_VERBOSE", "").strip().lower()
     return v in ("1", "true", "yes", "on")
+
+def _is_retryable_copy_error(e: BaseException) -> bool:
+    """
+    Determina si un error de I/O al copiar es razonablemente retryable:
+    - Windows shares: WinError 32/33 (archivo en uso / lock)
+    - PermissionError transitorio (antivirus/SMB)
+    - errno EACCES/EBUSY/EPERM
+    """
+    if isinstance(e, PermissionError):
+        return True
+    if isinstance(e, OSError):
+        winerr = getattr(e, "winerror", None)
+        if winerr in (32, 33): # sharing violation / lock violation
+            return True
+        if e.errno in (errno.EACCES, errno.EBUSY, errno.EPERM):
+            return True
+    return False
+###### CONTINUAR AQUI
 
 def _find_oi_folders_in_origins(oi_tag: str, rutas_origen: List[str]) -> List[Path]:
     """
