@@ -51,6 +51,7 @@ const DEBUG_PROGRESS_PREFIX = "[log02-copy-progress]";
 const STREAM_SILENCE_MS = 2000;
 const POLL_INTERVAL_MS = 500;
 const MIN_LOADING_MS = 600;
+const MERGE_MAX_PDFS = 3000;
 
 function debugProgress(...args: any[]) {
   if (!DEBUG_PROGRESS) return;
@@ -78,6 +79,17 @@ function formatDateTime(value?: string | null): string {
   const parts = fmt.formatToParts(d);
   const get = (t: string) => parts.find((p) => p.type === t)?.value || "";
   return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
+}
+
+function getSummaryNumber(summary: any, key: string): string {
+  const v = summary?.[key];
+  return typeof v === "number" ? String(v) : "N/D";
+}
+
+function getSummaryString(summary: any, key: string): string {
+  const v = summary?.[key];
+  if (typeof v === "string" && v.trim()) return v.trim();
+  return "N/D";
 }
 
 function isAbortLikeError(err: unknown): boolean {
@@ -126,6 +138,9 @@ export default function Log02PdfPage() {
   const [groupSize, setGroupSize] = useState<number>(0);
   const [groupSizeInput, setGroupSizeInput] = useState<string>("0");
   const [editingGroupSize, setEditingGroupSize] = useState<boolean>(false);
+  const [mergeGroupSize, setMergeGroupSize] = useState<number>(0);
+  const [mergeGroupSizeInput, setMergeGroupSizeInput] = useState<string>("0");
+  const [editingMergeGroupSize, setEditingMergeGroupSize] = useState<boolean>(false);
   const [generateMergedPdfs, setGenerateMergedPdfs] = useState<boolean>(false);
   
 
@@ -182,6 +197,7 @@ export default function Log02PdfPage() {
   const lastStreamEventAtRef = useRef<number>(0);
   const mountedRef = useRef<boolean>(true);
   const activeOperationIdRef = useRef<string>("");
+  const mergeGroupSizeAutoRef = useRef<boolean>(true);
 
 
 
@@ -243,17 +259,27 @@ export default function Log02PdfPage() {
         destino?: string;
         output_mode?: OutputMode;
         group_size?: number;
+        merge_group_size?: number;
         generate_merged_pdfs?: boolean;
       }
       const origenes = Array.isArray(parsed.origenes) ? parsed.origenes : [];
       const destino = typeof parsed?.destino === "string" ? parsed.destino : "";
       const om = parsed?.output_mode === "keep_structure" ? "keep_structure" : "consolidate";
       const gs = typeof parsed?.group_size === "number" && Number.isFinite(parsed.group_size) ? parsed.group_size : 0;
+      const mgs = typeof parsed?.merge_group_size === "number" && Number.isFinite(parsed.merge_group_size)
+        ? parsed.merge_group_size
+        : null;
       const gen = typeof parsed?.generate_merged_pdfs === "boolean" ? parsed.generate_merged_pdfs : false;
       if (origenes.length) setRutasOrigen(origenes);
       if (destino) setRutaDestino(destino);
       setOutputMode(om);
       setGroupSize(Math.max(0, Math.trunc(gs)));
+      if (mgs != null) {
+        setMergeGroupSize(Math.max(0, Math.trunc(mgs)));
+        mergeGroupSizeAutoRef.current = false;
+      } else {
+        setMergeGroupSize(Math.max(0, Math.trunc(gs)));
+      }
       setGenerateMergedPdfs(gen);
     } catch {
       // ignorar
@@ -269,13 +295,14 @@ export default function Log02PdfPage() {
         destino: rutaDestino,
         output_mode: outputMode,
         group_size: Math.max(0, Math.trunc(groupSize || 0)),
+        merge_group_size: Math.max(0, Math.trunc(mergeGroupSize || 0)),
         generate_merged_pdfs: generateMergedPdfs,
       };
       localStorage.setItem(LS_KEY, JSON.stringify(payload));
     } catch {
       // ignorar
     }
-  }, [rutasOrigen, rutaDestino, outputMode, groupSize, generateMergedPdfs]);
+  }, [rutasOrigen, rutaDestino, outputMode, groupSize, mergeGroupSize, generateMergedPdfs]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -337,6 +364,10 @@ function limpiarConfiguracion() {
   setRunSelected(null);
   setOutputMode("consolidate");
   setGroupSize(0);
+  setEditingGroupSize(false);
+  setMergeGroupSize(0);
+  setMergeGroupSizeInput("0");
+  setEditingMergeGroupSize(false);
   setGenerateMergedPdfs(false);
   setCopyAudit(null);
   setCopyWarnings([]);
@@ -349,6 +380,7 @@ function limpiarConfiguracion() {
   setWizardStep(1);
   setLiveEvents([]);
   setLiveOpen(false);
+  mergeGroupSizeAutoRef.current = true;
   try {
     localStorage.removeItem(LS_KEY);
   } catch {
@@ -1125,6 +1157,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
         ruta_destino: destino,
         output_mode: outputMode,
         group_size: Math.max(0, Math.trunc(groupSize || 0)),
+        merge_group_size: Math.max(0, Math.trunc(mergeGroupSize || 0)),
         generate_merged_pdfs: outputMode === "consolidate" ? generateMergedPdfs : false,
       });
 
@@ -1303,12 +1336,28 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
   const groupSizeDisabled = outputMode !== "consolidate";
   const groupSizeSafe = Math.max(0, Math.trunc(groupSize || 0));
+  const mergeGroupSizeSafe = Math.max(0, Math.trunc(mergeGroupSize || 0));
+  const mergeLimitExceeded =
+    generateMergedPdfs && mergeGroupSizeSafe > 0 && mergeGroupSizeSafe > MERGE_MAX_PDFS;
 
   // Mantener el string del input sincronizado cuando No se está editando
   useEffect(() => {
     if (editingGroupSize) return;
     setGroupSizeInput(String(groupSizeSafe));
   }, [groupSizeSafe, editingGroupSize]);
+
+  useEffect(() => {
+    if (editingMergeGroupSize) return;
+    setMergeGroupSizeInput(String(mergeGroupSizeSafe));
+  }, [mergeGroupSizeSafe, editingMergeGroupSize]);
+
+  // Mantener merge_group_size en sync con group_size hasta que el usuario lo cambie
+  useEffect(() => {
+    if (!mergeGroupSizeAutoRef.current) return;
+    if (editingMergeGroupSize) return;
+    if (mergeGroupSizeSafe === groupSizeSafe) return;
+    setMergeGroupSize(groupSizeSafe);
+  }, [groupSizeSafe, editingMergeGroupSize, mergeGroupSizeSafe]);
 
   // Si se deshabilita el input (cambia de modo), salir del modo edición
   useEffect(() => {
@@ -1317,6 +1366,13 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       setGroupSizeInput(String(groupSizeSafe));
     }
   }, [groupSizeDisabled, editingGroupSize, groupSizeSafe]);
+
+  useEffect(() => {
+    if (groupSizeDisabled && editingMergeGroupSize) {
+      setEditingMergeGroupSize(false);
+      setMergeGroupSizeInput(String(mergeGroupSizeSafe));
+    }
+  }, [groupSizeDisabled, editingMergeGroupSize, mergeGroupSizeSafe]);
 
   function goStep(step: WizardStep) {
     if (step === 2 && !canGoStep2) return;
@@ -1843,6 +1899,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                 min={0}
                                 step={1}
                                 className="form-control form-control-sm"
+                                style={{ maxWidth: 360, width: "20%" }}
                                 value={editingGroupSize ? groupSizeInput : groupSizeSafe}
                                 disabled={copying || groupSizeDisabled}
                                 onChange={(e) => {
@@ -1898,33 +1955,75 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                   <label className="form-check-label" htmlFor="log02-gen-merged-pdfs">
                                     <strong>Generar PDFs consolidados (merge)</strong>{" "}
                                     <span className="text-muted small">
-                                      {groupSizeSafe > 0
-                                        ? "(1 PDF por grupo, guardado en la carpeta principal)"
+                                      {mergeGroupSizeSafe > 0
+                                        ? `(1 PDF cada ${mergeGroupSizeSafe} PDFs, guardado en la carpeta principal)`
                                         : "(1 PDF global en la carpeta principal)"}
                                     </span>
                                   </label>
                                 </div>
 
                                 {generateMergedPdfs ? (
-                                  <div className="alert alert-warning small mT-10 mB-0">
-                                    <div className="mB-5">
-                                      <strong>Advertencia:</strong> consolidar muchos PDFs puede tardar y generar archivos muy grandes.
-                                    </div>
-                                    {groupSizeSafe > 0 ? (
-                                      <div>
-                                        Se generarán <strong>PDFs por grupo</strong> en la carpeta principal consolidada.
-                                        <strong> No se genera PDF global</strong> cuando hay subcarpetas.
+                                  <div className="mT-10">
+                                    <div className="row g-2">
+                                      <div className="col-12 col-md-6">
+                                        <label className="form-label">Agrupar PDFs para consolidado por N</label>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          step={1}
+                                          className="form-control form-control-sm"
+                                          style={{ maxWidth: 360, width: "20%" }}
+                                          value={editingMergeGroupSize ? mergeGroupSizeInput : mergeGroupSizeSafe}
+                                          onChange={(e) => {
+                                            mergeGroupSizeAutoRef.current = false;
+                                            const v = e.target.value;
+                                            setMergeGroupSizeInput(v);
+                                            if (v === "") return;
+                                            const raw = Number(v);
+                                            const next = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 0;
+                                            setMergeGroupSize(next);
+                                          }}
+                                          onFocus={() => {
+                                            setEditingMergeGroupSize(true);
+                                            if (mergeGroupSizeSafe === 0) setMergeGroupSizeInput("");
+                                            else setMergeGroupSizeInput(String(mergeGroupSizeSafe));
+                                          }}
+                                          onBlur={() => {
+                                            setEditingMergeGroupSize(false);
+                                            const v = (mergeGroupSizeInput || "").trim();
+                                            if (!v) {
+                                              setMergeGroupSize(0);
+                                              setMergeGroupSizeInput("0");
+                                              return;
+                                            }
+                                            const raw = Number(v);
+                                            const next = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : 0;
+                                            setMergeGroupSize(next);
+                                            setMergeGroupSizeInput(String(next));
+                                          }}
+                                          placeholder="0"
+                                          disabled={copying}
+                                        />
+                                        <div className="small text-muted">
+                                          {mergeGroupSizeSafe > 0
+                                            ? `Se consolidarán ${mergeGroupSizeSafe} PDFs por archivo (en la carpeta principal).`
+                                            : "N=0: se genera 1 PDF global con todos los certificados."}
+                                        </div>
                                       </div>
-                                    ) : (
-                                      <div>
-                                        Se generará <strong>1 PDF global</strong> con todos los certificados. Si son muchos,
-                                        considera usar subcarpetas (N &gt; 0) para evitar un PDF gigante.
-                                      </div>
-                                    )}
-                                    <div className="mT-5">
-                                      Si el volumen supera el límite configurado, el merge se omitirá y verás una advertencia en el
-                                      progreso.
                                     </div>
+
+                                    {mergeLimitExceeded ? (
+                                      <div className="alert alert-warning small mT-10 mB-0">
+                                        <div className="mB-5">
+                                          <strong>Advertencia:</strong> el máximo por PDF consolidado es{" "}
+                                          <strong>{MERGE_MAX_PDFS}</strong> PDFs.
+                                        </div>
+                                        <div>
+                                          Has configurado <strong>{mergeGroupSizeSafe}</strong>. El merge se omitirá y verás una
+                                          advertencia en el progreso. Ajusta N a {MERGE_MAX_PDFS} o menos.
+                                        </div>
+                                      </div>
+                                    ) : null}
                                   </div>
                                 ) : null}
                               </div>
@@ -2441,12 +2540,15 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                       </div>
                     ) : (
                       <div className="table-responsive">
-                        <table className="table table-sm mB-0">
+                        <table className="table table-sm mB-0 text-center">
                           <thead>
                             <tr className="small">
                               <th style={{ width: 110 }}>ID</th>
                               <th>Creado</th>
                               <th style={{ width: 140 }}>Origen</th>
+                              <th style={{ width: 140 }}>Serie inicial</th>
+                              <th style={{ width: 140 }}>Serie final</th>
+                              <th style={{ width: 110 }}>Conformes</th>
                               <th style={{ width: 150 }}>Estado</th>
                               <th style={{ width: 110 }} className="text-end"></th>
                             </tr>
@@ -2455,28 +2557,43 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                             {runs.length ? (
                               runs.map((it) => (
                                 <tr key={it.id} className="small">
-                                  <td>
-                                    <span className="badge bg-secondary font-monospace">#{it.id}</span>
-                                  </td>
-                                  <td>{formatDateTime(it.created_at)}</td>
-                                  <td>{it.source || "N/D"}</td>
-                                  <td>
-                                    <span className={runStatusBadge(it.status)}>{it.status || "N/D"}</span>
-                                  </td>
-                                  <td className="text-end">
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-primary"
-                                      onClick={() => seleccionarCorrida(it)}
-                                    >
-                                      Usar
-                                    </button>
-                                  </td>
+                                  {(() => {
+                                    const summary = it.summary_json as any;
+                                    const serieIni = getSummaryString(summary, "serie_ini");
+                                    const serieFin = getSummaryString(summary, "serie_fin");
+                                    const conformes = getSummaryNumber(summary, "series_conformes");
+                                    return (
+                                      <>
+                                        <td>
+                                          <span className="badge bg-secondary font-monospace">#{it.id}</span>
+                                        </td>
+                                        <td>{formatDateTime(it.created_at)}</td>
+                                        <td>{it.source || "N/D"}</td>
+                                        <td>{serieIni}</td>
+                                        <td>{serieFin}</td>
+                                        <td>
+                                          <strong>{conformes}</strong>
+                                        </td>
+                                        <td>
+                                          <span className={runStatusBadge(it.status)}>{it.status || "N/D"}</span>
+                                        </td>
+                                        <td className="text-end">
+                                          <button
+                                            type="button"
+                                            className="btn btn-sm btn-primary"
+                                            onClick={() => seleccionarCorrida(it)}
+                                          >
+                                            Usar
+                                          </button>
+                                        </td>
+                                      </>
+                                    );
+                                  })()}
                                 </tr>
                               ))
                             ) : (
                               <tr className="small">
-                                <td colSpan={5} className="text-muted">
+                                <td colSpan={8} className="text-muted">
                                   No se encontraron corridas con esos filtros.
                                 </td>
                               </tr>

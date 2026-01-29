@@ -586,6 +586,7 @@ export type Log02CopyConformesStartRequest = {
   ruta_destino: string;
   output_mode?: "keep_structure" | "consolidate";
   group_size?: number; // N (0 => sin subcarpetas)
+  merge_group_size?: number; // N (0 => PDF global)
   generate_merged_pdfs?: boolean;
 };
 

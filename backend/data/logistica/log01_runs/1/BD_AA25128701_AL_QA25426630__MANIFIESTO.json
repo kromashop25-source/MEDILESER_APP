@@ -1,19 +1,19 @@
 {
-  "operation_id": "18de2fb0-9338-46b8-b583-994322645a39",
-  "generated_at": "2026-01-13T18:24:05Z",
+  "operation_id": "bff043de-e272-4723-a078-0a3c0fac5fe6",
+  "generated_at": "2026-01-14T21:29:10Z",
   "output_excel": "BD_AA25128701_AL_QA25426630.xlsx",
   "source": "AUTO",
   "totals": {
-    "files_total": 28,
-    "files_ok": 24,
+    "files_total": 27,
+    "files_ok": 23,
     "files_error": 4,
-    "rows_read": 15415,
-    "series_total_dedup": 15246,
-    "series_conformes": 14904,
+    "rows_read": 14815,
+    "series_total_dedup": 14665,
+    "series_conformes": 14323,
     "series_no_conformes_final": 342,
-    "series_duplicates_eliminated": 169,
+    "series_duplicates_eliminated": 150,
     "files_rejected": 4,
-    "origin_no_conformes_total": 511,
+    "origin_no_conformes_total": 492,
     "final_no_conformes_total": 342
   },
   "by_oi_origen": [
@@ -334,35 +334,6 @@
         "AA25129289"
       ],
       "total_no_conforme": 29
-    },
-    {
-      "oi": "OI-1144-2025",
-      "oi_num": 1144,
-      "source_files": [
-        "Base Comercial OI-1144-2025.xlsx"
-      ],
-      "series_no_conforme": [
-        "AA25130585",
-        "AA25130685",
-        "AA25130699",
-        "AA25130705",
-        "AA25130741",
-        "AA25130744",
-        "AA25130762",
-        "AA25130780",
-        "AA25130812",
-        "AA25130832",
-        "AA25130855",
-        "AA25130857",
-        "AA25130859",
-        "AA25130923",
-        "AA25131026",
-        "AA25131037",
-        "AA25131078",
-        "AA25131083",
-        "AA25131087"
-      ],
-      "total_no_conforme": 19
     },
     {
       "oi": "OI-1146-2025",
@@ -1030,12 +1001,6 @@
     {
       "oi": "OI-1141-2025",
       "oi_num": 1141,
-      "series_no_conforme": [],
-      "total_no_conforme": 0
-    },
-    {
-      "oi": "OI-1144-2025",
-      "oi_num": 1144,
       "series_no_conforme": [],
       "total_no_conforme": 0
     },

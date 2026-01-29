@@ -1,0 +1,319 @@
+{
+  "operation_id": "11ae70ad-675d-482e-ba64-0941e3e0ff45",
+  "generated_at": "2026-01-26T17:28:07Z",
+  "output_excel": "BD_KA25088701_AL_KA25091200.xlsx",
+  "source": "AUTO",
+  "totals": {
+    "files_total": 10,
+    "files_ok": 10,
+    "files_error": 0,
+    "rows_read": 2619,
+    "series_total_dedup": 2500,
+    "series_conformes": 2500,
+    "series_no_conformes_final": 0,
+    "series_duplicates_eliminated": 119,
+    "files_rejected": 0,
+    "origin_no_conformes_total": 119,
+    "final_no_conformes_total": 0
+  },
+  "by_oi_origen": [
+    {
+      "oi": "OI-1356-2025",
+      "oi_num": 1356,
+      "oi_year": 2025,
+      "source_files": [
+        "Base Comercial OI-1356-2025.xlsx"
+      ],
+      "series_no_conforme": [
+        "KA25088720",
+        "KA25088735",
+        "KA25088736",
+        "KA25088775",
+        "KA25088785",
+        "KA25088800",
+        "KA25088828",
+        "KA25088830",
+        "KA25088834",
+        "KA25088871",
+        "KA25088883",
+        "KA25088889",
+        "KA25088912",
+        "KA25088913",
+        "KA25088939",
+        "KA25089000",
+        "KA25089002",
+        "KA25089014",
+        "KA25089025",
+        "KA25089045",
+        "KA25089097",
+        "KA25089112",
+        "KA25089127",
+        "KA25089137",
+        "KA25089139",
+        "KA25089169",
+        "KA25089173",
+        "KA25089187",
+        "KA25089225",
+        "KA25089227",
+        "KA25089240",
+        "KA25089246",
+        "KA25089251",
+        "KA25089258",
+        "KA25089277",
+        "KA25089294",
+        "KA25089295",
+        "KA25089296",
+        "KA25089326",
+        "KA25089384",
+        "KA25089402",
+        "KA25089427",
+        "KA25089443",
+        "KA25089489",
+        "KA25089497",
+        "KA25089526",
+        "KA25089574",
+        "KA25089588",
+        "KA25089627",
+        "KA25089653",
+        "KA25089675"
+      ],
+      "total_no_conforme": 51
+    },
+    {
+      "oi": "OI-1357-2025",
+      "oi_num": 1357,
+      "oi_year": 2025,
+      "source_files": [
+        "Base Comercial OI-1357-2025.xlsx"
+      ],
+      "series_no_conforme": [
+        "KA25089706",
+        "KA25089715",
+        "KA25089727",
+        "KA25089738",
+        "KA25089769",
+        "KA25089791",
+        "KA25089811",
+        "KA25089832",
+        "KA25089841",
+        "KA25089856",
+        "KA25089878",
+        "KA25089898",
+        "KA25089962",
+        "KA25089983",
+        "KA25089997",
+        "KA25090008",
+        "KA25090025",
+        "KA25090045",
+        "KA25090057",
+        "KA25090087",
+        "KA25090276",
+        "KA25090362",
+        "KA25090374",
+        "KA25090413",
+        "KA25090462",
+        "KA25090503",
+        "KA25090504",
+        "KA25090626",
+        "KA25090653",
+        "KA25090668",
+        "KA25090675",
+        "KA25090678",
+        "KA25090681"
+      ],
+      "total_no_conforme": 33
+    },
+    {
+      "oi": "OI-1388-2025",
+      "oi_num": 1388,
+      "oi_year": 2025,
+      "source_files": [
+        "Base Comercial OI-1388-2025.xlsx"
+      ],
+      "series_no_conforme": [
+        "KA25090713",
+        "KA25090719",
+        "KA25090735",
+        "KA25090736",
+        "KA25090738",
+        "KA25090742",
+        "KA25090747",
+        "KA25090752",
+        "KA25090755",
+        "KA25090762",
+        "KA25090767",
+        "KA25090775",
+        "KA25090777",
+        "KA25090814",
+        "KA25090817",
+        "KA25090851",
+        "KA25090877",
+        "KA25090914",
+        "KA25090919",
+        "KA25090941",
+        "KA25091083",
+        "KA25091155",
+        "KA25091181"
+      ],
+      "total_no_conforme": 23
+    },
+    {
+      "oi": "OI-0001-2026",
+      "oi_num": 1,
+      "oi_year": 2026,
+      "source_files": [
+        "Base Comercial OI-0001-2026.xlsx"
+      ],
+      "series_no_conforme": [
+        "KA25089588"
+      ],
+      "total_no_conforme": 1
+    },
+    {
+      "oi": "OI-0014-2026",
+      "oi_num": 14,
+      "oi_year": 2026,
+      "source_files": [
+        "Base Comercial OI-0014-2026.xlsx"
+      ],
+      "series_no_conforme": [
+        "KA25090713",
+        "KA25090941"
+      ],
+      "total_no_conforme": 2
+    },
+    {
+      "oi": "OI-0019-2026",
+      "oi_num": 19,
+      "oi_year": 2026,
+      "source_files": [
+        "Base Comercial OI-0019-2026.xlsx"
+      ],
+      "series_no_conforme": [
+        "KA25089715",
+        "KA25089769",
+        "KA25089791",
+        "KA25089841",
+        "KA25089962",
+        "KA25089997",
+        "KA25090668",
+        "KA25090681"
+      ],
+      "total_no_conforme": 8
+    },
+    {
+      "oi": "OI-0023-2026",
+      "oi_num": 23,
+      "oi_year": 2026,
+      "source_files": [
+        "Base Comercial OI-0023-2026.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0048-2026",
+      "oi_num": 48,
+      "oi_year": 2026,
+      "source_files": [
+        "Base Comercial OI-0048-2026.xlsx"
+      ],
+      "series_no_conforme": [
+        "KA25090941"
+      ],
+      "total_no_conforme": 1
+    },
+    {
+      "oi": "OI-0056-2026",
+      "oi_num": 56,
+      "oi_year": 2026,
+      "source_files": [
+        "Base Comercial OI-0056-2026.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0088-2026",
+      "oi_num": 88,
+      "oi_year": 2026,
+      "source_files": [
+        "Base Comercial OI-0088-2026.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    }
+  ],
+  "by_oi": [
+    {
+      "oi": "OI-1356-2025",
+      "oi_num": 1356,
+      "oi_year": 2025,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1357-2025",
+      "oi_num": 1357,
+      "oi_year": 2025,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1388-2025",
+      "oi_num": 1388,
+      "oi_year": 2025,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0001-2026",
+      "oi_num": 1,
+      "oi_year": 2026,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0014-2026",
+      "oi_num": 14,
+      "oi_year": 2026,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0019-2026",
+      "oi_num": 19,
+      "oi_year": 2026,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0023-2026",
+      "oi_num": 23,
+      "oi_year": 2026,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0048-2026",
+      "oi_num": 48,
+      "oi_year": 2026,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0056-2026",
+      "oi_num": 56,
+      "oi_year": 2026,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-0088-2026",
+      "oi_num": 88,
+      "oi_year": 2026,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    }
+  ]
+}

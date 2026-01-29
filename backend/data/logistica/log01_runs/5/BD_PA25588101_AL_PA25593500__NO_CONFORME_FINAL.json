@@ -1,0 +1,32 @@
+{
+  "operation_id": "09cd71b0-9279-4b0c-8390-f1ca86e15e78",
+  "generated_at": "2026-01-15T16:34:41Z",
+  "total_no_conforme_final": 5,
+  "items": [
+    {
+      "oi": "OI-1384-2025",
+      "oi_num": 1384,
+      "serie": "PA25590605"
+    },
+    {
+      "oi": "OI-1384-2025",
+      "oi_num": 1384,
+      "serie": "PA25591253"
+    },
+    {
+      "oi": "OI-1384-2025",
+      "oi_num": 1384,
+      "serie": "PA25591805"
+    },
+    {
+      "oi": "OI-1384-2025",
+      "oi_num": 1384,
+      "serie": "PA25591807"
+    },
+    {
+      "oi": "OI-1384-2025",
+      "oi_num": 1384,
+      "serie": "PA25592045"
+    }
+  ]
+}

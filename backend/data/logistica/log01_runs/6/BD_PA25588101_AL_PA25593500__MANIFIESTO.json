@@ -1,0 +1,184 @@
+{
+  "operation_id": "06be4a2f-0e45-4288-82ca-c411d2ab4a7e",
+  "generated_at": "2026-01-15T17:26:08Z",
+  "output_excel": "BD_PA25588101_AL_PA25593500.xlsx",
+  "source": "AUTO",
+  "totals": {
+    "files_total": 4,
+    "files_ok": 4,
+    "files_error": 0,
+    "rows_read": 5499,
+    "series_total_dedup": 5400,
+    "series_conformes": 5395,
+    "series_no_conformes_final": 5,
+    "series_duplicates_eliminated": 99,
+    "files_rejected": 0,
+    "origin_no_conformes_total": 99,
+    "final_no_conformes_total": 5
+  },
+  "by_oi_origen": [
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "source_files": [
+        "BD_92014813_LOTE 5400_PA25588101 AL PA25593500.xlsx"
+      ],
+      "series_no_conforme": [
+        "PA25588203",
+        "PA25588249",
+        "PA25588277",
+        "PA25588294",
+        "PA25588322",
+        "PA25588494",
+        "PA25588503",
+        "PA25588547",
+        "PA25588560",
+        "PA25588569",
+        "PA25588578",
+        "PA25588600",
+        "PA25588613",
+        "PA25588625",
+        "PA25588628",
+        "PA25588666",
+        "PA25588668",
+        "PA25588677",
+        "PA25588755",
+        "PA25588760",
+        "PA25588867",
+        "PA25588874",
+        "PA25588911",
+        "PA25589133",
+        "PA25589248",
+        "PA25589332",
+        "PA25589361",
+        "PA25589630",
+        "PA25589636",
+        "PA25589708",
+        "PA25589723",
+        "PA25589811",
+        "PA25589928",
+        "PA25589946",
+        "PA25589951",
+        "PA25590069",
+        "PA25590103",
+        "PA25590106",
+        "PA25590152",
+        "PA25590203",
+        "PA25590310",
+        "PA25590380",
+        "PA25590412",
+        "PA25590465",
+        "PA25590486",
+        "PA25590508",
+        "PA25590574",
+        "PA25590603",
+        "PA25590605",
+        "PA25590633",
+        "PA25590634",
+        "PA25590686",
+        "PA25590712",
+        "PA25590741",
+        "PA25590797",
+        "PA25590935",
+        "PA25590936",
+        "PA25590962",
+        "PA25590995",
+        "PA25591012",
+        "PA25591024",
+        "PA25591112",
+        "PA25591205",
+        "PA25591253",
+        "PA25591272",
+        "PA25591325",
+        "PA25591348",
+        "PA25591415",
+        "PA25591447",
+        "PA25591479",
+        "PA25591585",
+        "PA25591760",
+        "PA25591801",
+        "PA25591804",
+        "PA25591805",
+        "PA25591807",
+        "PA25591835",
+        "PA25591901",
+        "PA25591940",
+        "PA25592034",
+        "PA25592045",
+        "PA25592079",
+        "PA25592214",
+        "PA25592516",
+        "PA25592698",
+        "PA25592722",
+        "PA25592913",
+        "PA25592983",
+        "PA25593086",
+        "PA25593088",
+        "PA25593105",
+        "PA25593171",
+        "PA25593202",
+        "PA25593250"
+      ],
+      "total_no_conforme": 94
+    },
+    {
+      "oi": "OI-0002-2026",
+      "oi_num": 2,
+      "source_files": [
+        "Base Comercial OI-0002-2026.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1257-2025",
+      "oi_num": 1257,
+      "source_files": [
+        "Base Comercial OI-1257-2025.xlsx"
+      ],
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1384-2025",
+      "oi_num": 1384,
+      "source_files": [
+        "Base Comercial OI-1384-2025.xlsx"
+      ],
+      "series_no_conforme": [
+        "PA25590605",
+        "PA25591253",
+        "PA25591805",
+        "PA25591807",
+        "PA25592045"
+      ],
+      "total_no_conforme": 5
+    }
+  ],
+  "by_oi": [
+    {
+      "oi": "GASELAG",
+      "oi_num": 0,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1257-2025",
+      "oi_num": 1257,
+      "series_no_conforme": [],
+      "total_no_conforme": 0
+    },
+    {
+      "oi": "OI-1384-2025",
+      "oi_num": 1384,
+      "series_no_conforme": [
+        "PA25590605",
+        "PA25591253",
+        "PA25591805",
+        "PA25591807",
+        "PA25592045"
+      ],
+      "total_no_conforme": 5
+    }
+  ]
+}
