@@ -434,6 +434,20 @@ def _build_report_csv(audit: Dict[str, Any]) -> bytes:
     ]:
         w.writerow(["resumen", "", "", k, arch.get(k, "")])
 
+    # io
+    io_raw = audit.get("io")
+    io_d: Dict[str, Any] = io_raw if isinstance(io_raw, dict) else {}
+    for k in [
+        "copy_ok",
+        "copy_fail",
+        "copy_attempts",
+        "copy_retries",
+        "copy_retryable_errors",
+        "copy_locked",
+        "copy_slow",
+    ]:
+        w.writerow(["io", "", "", k, io_d.get(k, "")])
+
     # por OI
     det = audit.get("detalle_por_oi")
     if isinstance(det, list):
@@ -494,6 +508,21 @@ def _build_report_xlsx(audit: Dict[str, Any]) -> bytes:
         "archivos_no_pdf_omitidos",
     ]:
         ws0.append([k, arch.get(k, "")])
+
+    io_raw = audit.get("io")
+    io_d: Dict[str, Any] = io_raw if isinstance(io_raw, dict) else {}
+    ws0.append(["---", "---"])
+    ws0.append(["IO", ""])
+    for k in [
+        "copy_ok",
+        "copy_fail",
+        "copy_attempts",
+        "copy_retries",
+        "copy_retryable_errors",
+        "copy_locked",
+        "copy_slow",
+    ]:
+        ws0.append([k, io_d.get(k, "")])
     _autosize_ws(ws0)
 
     ws1 = wb.create_sheet("Por OI")
@@ -827,7 +856,125 @@ def _is_retryable_copy_error(e: BaseException) -> bool:
         if e.errno in (errno.EACCES, errno.EBUSY, errno.EPERM):
             return True
     return False
-###### CONTINUAR AQUI
+
+def _sleep_ms_with_cancel(ms: int, cancel_token: CancelToken) -> None:
+    """
+    Sleep en chunks para respetar cancelación sin timeouts globales.
+    """
+    remaining = max(0, int(ms))
+    step = 100 #ms
+    while remaining > 0:
+        if cancel_token.is_cancelled():
+            return
+        s = min(step, remaining) / 1000.0
+        time.sleep(s)
+        remaining -= step
+
+def _copy2_atomic_with_retries(
+        *,
+        src_path: str | Path,
+        dest_path: Path,
+        cancel_token: CancelToken,
+        operation_id: str,
+        audit_io: Dict[str, Any],
+        oi_label: str,
+        serie: str,
+        filename: str,
+        max_attempts: int,
+        base_ms: int,
+        max_ms: int,
+        slow_ms: int,
+        verbose_events: bool,
+) -> bool:
+    """
+    Copia con:
+    - reintentos controlados en errores retryables
+    - copia atómica: a .tmp + os.replace
+    - medición simple de tiempo (slow copy)
+    """
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_name = f".tmp_{uuid.uuid4().hex}_{dest_path.name}"
+    tmp_path = dest_path.parent / tmp_name
+
+    attempt = 0
+    while attempt < max_attempts:
+        if cancel_token.is_cancelled():
+            return False
+        attempt += 1
+        audit_io["copy_attempts"] += 1
+        t0 = time.perf_counter()
+        try:
+            # Limpieza preventiva del tmp si quedó de un intento previo
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+            shutil.copy2(src_path, str(tmp_path))
+            os.replace(str(tmp_path), str(dest_path))
+
+            elapsed_ms = int((time.perf_counter() - t0) * 1000.0)
+            audit_io["copy_ok"] += 1
+
+            if elapsed_ms >= slow_ms:
+                audit_io["copy_slow"] += 1
+                if len(audit_io["slow_samples"]) < 10:
+                    audit_io["slow_samples"].append(
+                        {"oi": oi_label, "serie": serie, "file": filename, "ms": elapsed_ms}
+                    )
+                if verbose_events:
+                    _emit(operation_id, {"type": "file_slow", "oi": oi_label, "serie": serie, "file": filename, "ms": elapsed_ms})
+
+            return True
+        except Exception as e:
+            # Best-effort cleanup tmp
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            
+            retryable = _is_retryable_copy_error(e)
+            if not retryable:
+                audit_io["copy_fail"] += 1
+                return False
+            
+            # Retryable
+            audit_io["copy_retryable_errors"] += 1
+            winerr = getattr(e, "winerror", None)
+            if winerr in (32, 33): 
+                audit_io["copy_locked"] += 1
+
+            if attempt >= max_attempts:
+                audit_io["copy_fail"] += 1
+                return False
+
+            # backoff con jitter, acotado
+            backoff = min(max_ms, base_ms * (2 ** (attempt -1)))
+            backoff = int(backoff + random.randint(0, 75))
+            audit_io["copy_retries"] += 1
+
+            if verbose_events:
+                _emit(
+                    operation_id,
+                    {
+                        "type": "file_retry",
+                        "oi": oi_label,
+                        "serie": serie,
+                        "file": filename,
+                        "attempt": attempt,
+                        "wait_ms": backoff,
+                        "message": f"Retry por I/O ({type(e).__name__}).",
+                    },
+                )
+            _sleep_ms_with_cancel(backoff, cancel_token)
+    audit_io["copy_fail"] += 1
+    return False
+
+
+
+
 
 def _find_oi_folders_in_origins(oi_tag: str, rutas_origen: List[str]) -> List[Path]:
     """
@@ -915,6 +1062,13 @@ def _copy_conformes_worker(
         use_conforme_allowlist = bool(conformes_map)
         verbose_events = _is_log02_verbose()
         
+        # PB-LOG-021 knobs (Settings)
+        st = get_settings()
+        io_max_attempts = max(1, int(getattr(st, "log02_copy_max_attempts", 5)))
+        io_base_ms = max(0, int(getattr(st, "log02_copy_retry_base_ms", 200)))
+        io_max_ms = max(io_base_ms, int(getattr(st, "log02_copy_retry_max_ms", 2000)))
+        io_slow_ms = max(0, int(getattr(st, "log02_copy_slow_ms", 3000)))
+
         gaselag_series_map = _build_gaselag_serie_map(manifest)
         gaselag_keys = sorted(gaselag_series_map.keys())
 
@@ -964,7 +1118,18 @@ def _copy_conformes_worker(
                 "pdf_omitidos_no_encontrado": 0,  # series esperadas sin PDF
                 "archivos_no_pdf_omitidos": 0,
             },
+            "io": {
+                "copy_ok": 0,
+                "copy_fail": 0,
+                "copy_attempts": 0,
+                "copy_retries": 0,
+                "copy_retryable_errors": 0,
+                "copy_locked": 0,
+                "copy_slow": 0,
+                "slow_samples": [],
+            },
         }
+        audit_io = audit["io"]
 
         output_mode_norm = (output_mode or "keep_structure").strip().lower()
         if output_mode_norm not in ("keep_structure", "consolidate"):
@@ -1416,11 +1581,29 @@ def _copy_conformes_worker(
                 dest_path = dest_folder / fname
 
                 try:
-                    shutil.copy2(src, str(dest_path))
-                    copied += 1
-                    copied_dest_paths[idx] = dest_path
-                    if verbose_events:
-                        _emit(operation_id, {"type": "file_ok", "oi": oi_label, "serie": serie, "file": fname})
+                    ok = _copy2_atomic_with_retries(
+                        src_path=src,
+                        dest_path=dest_path,
+                        cancel_token=cancel_token,
+                        operation_id=operation_id,
+                        audit_io=audit_io,
+                        oi_label=oi_label,
+                        serie=serie,
+                        filename=fname,
+                        max_attempts=io_max_attempts,
+                        base_ms=io_base_ms,
+                        max_ms=io_max_ms,
+                        slow_ms=io_slow_ms,
+                        verbose_events=verbose_events,
+                    )
+                    if ok:
+                        copied += 1
+                        copied_dest_paths[idx] = dest_path
+                        if verbose_events:
+                            _emit(operation_id, {"type": "file_ok", "oi": oi_label, "serie": serie, "file": fname})
+                    else:
+                        file_error_count += 1
+                        _emit(operation_id, {"type": "file_error", "oi": oi_label, "serie": serie, "file": fname, "message": "Error copiando PDF (reintentos agotados o cancelado)."})
                 except Exception as e:
                     file_error_count += 1
                     _emit(operation_id, {"type": "file_error", "oi": oi_label, "serie": serie, "file": fname, "message": f"Error copiando PDF. {type(e).__name__}: {e}"})
@@ -1847,10 +2030,30 @@ def _copy_conformes_worker(
                                 continue
 
                             try:
-                                shutil.copy2(str(entry.path), str(dest_folder / entry.name))
-                                copied += 1
-                                if verbose_events:
-                                    _emit(operation_id, {"type": "file_ok", "oi": oi_tag, "serie": serie, "file": entry.name})
+                                dest_path = dest_folder / entry.name
+                                ok = _copy2_atomic_with_retries(
+                                    src_path=str(entry.path),
+                                    dest_path=dest_path,
+                                    cancel_token=cancel_token,
+                                    operation_id=operation_id,
+                                    audit_io=audit_io,
+                                    oi_label=oi_tag,
+                                    serie=serie,
+                                    filename=entry.name,
+                                    max_attempts=io_max_attempts,
+                                    base_ms=io_base_ms,
+                                    max_ms=io_max_ms,
+                                    slow_ms=io_slow_ms,
+                                    verbose_events=verbose_events,
+                                )
+                                if ok:
+                                    copied += 1
+                                    if verbose_events:
+                                        _emit(operation_id, {"type": "file_ok", "oi": oi_tag, "serie": serie, "file": entry.name})
+                                else:
+                                    file_error_count += 1
+                                    _emit(operation_id, {"type": "file_error", "oi": oi_tag, "serie": serie, "file": entry.name, "message": "Error copiando PDF (reintentos agotados o cancelado)."})
+
                             except Exception as e:
                                 file_error_count += 1
                                 _emit(operation_id, {"type": "file_error", "oi": oi_tag, "serie": serie, "file": entry.name, "message": f"Error copiando PDF. {type(e).__name__}: {e}"})
@@ -2164,10 +2367,29 @@ def _copy_conformes_worker(
                                     continue
 
                                 try:
-                                    shutil.copy2(str(entry.path), str(dest_folder / entry.name))
-                                    copied += 1
-                                    if verbose_events:
-                                        _emit(operation_id, {"type": "file_ok", "oi": oi_label, "serie": serie, "file": entry.name})
+                                    dest_path = dest_folder / entry.name
+                                    ok = _copy2_atomic_with_retries(
+                                        src_path=str(entry.path),
+                                        dest_path=dest_path,
+                                        cancel_token=cancel_token,
+                                        operation_id=operation_id,
+                                        audit_io=audit_io,
+                                        oi_label=oi_label,
+                                        serie=serie,
+                                        filename=entry.name,
+                                        max_attempts=io_max_attempts,
+                                        base_ms=io_base_ms,
+                                        max_ms=io_max_ms,
+                                        slow_ms=io_slow_ms,
+                                        verbose_events=verbose_events,
+                                    )
+                                    if ok:
+                                        copied += 1
+                                        if verbose_events:
+                                            _emit(operation_id, {"type": "file_ok", "oi": oi_label, "serie": serie, "file": entry.name})
+                                    else:
+                                        file_error_count += 1
+                                        _emit(operation_id, {"type": "file_error", "oi": oi_label, "serie": serie, "file": entry.name, "message": "Error copiando PDF (reintentos agotados o cancelado)."})
                                 except Exception as e:
                                     file_error_count += 1
                                     _emit(operation_id, {"type": "file_error", "oi": oi_label, "serie": serie, "file": entry.name, "message": f"Error copiando PDF. {type(e).__name__}: {e}"})

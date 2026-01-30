@@ -414,8 +414,9 @@ def process_log01_files(
 
     _emit(operation_id, {"type": "status", "stage": "received", "message": "Archivos recibidos", "progress": 0})
 
-    # 1) Consolidar serie -> (oi mayor, estado final)
+    # 1) Consolidar serie -> (estado final por OI mayor; CONFORME prevalece si existe)
     series: Dict[str, SerieInfo] = {}
+    series_meta: Dict[str, Dict[str, Any]] = {}
     total_files = len(file_items)
     ok_files = 0
     bad_files = 0
@@ -705,14 +706,61 @@ def process_log01_files(
                 extracted += 1
                 prev = series.get(serie)
                 if source_type == "BASES":
-                    # dedupe por OI mayor (anio, luego numero)
-                    if prev is None or _oi_compare_key(oi_year, oi_num) > _oi_compare_key(prev.oi_year, prev.oi_num):
-                        series[serie] = SerieInfo(
-                            oi_num=oi_num or 0,
-                            oi_year=oi_year or 0,
-                            estado=estado,
-                            values=row_values,
-                        )
+                    # Dedupe por serie:
+                    # - Se queda con la OI mayor dentro del mismo estado.
+                    # - Si existe CONFORME en alguna OI, prevalece sobre NO CONFORME.
+                    oi_key = _oi_compare_key(oi_year, oi_num)
+                    meta = series_meta.setdefault(
+                        serie,
+                        {
+                            "has_conforme": False,
+                            "has_no_conforme": False,
+                            "latest_key": None,
+                            "latest_estado": None,
+                            "latest_oi_year": None,
+                            "latest_oi_num": None,
+                            "best_conforme_key": None,
+                            "best_conforme_oi_year": None,
+                            "best_conforme_oi_num": None,
+                            "best_no_conforme_key": None,
+                            "best_no_conforme_oi_year": None,
+                            "best_no_conforme_oi_num": None,
+                        },
+                    )
+
+                    # track latest overall (para auditoría)
+                    if meta["latest_key"] is None or oi_key > meta["latest_key"]:
+                        meta["latest_key"] = oi_key
+                        meta["latest_estado"] = estado
+                        meta["latest_oi_year"] = oi_year or 0
+                        meta["latest_oi_num"] = oi_num or 0
+
+                    if estado == "CONFORME":
+                        meta["has_conforme"] = True
+                        if meta["best_conforme_key"] is None or oi_key > meta["best_conforme_key"]:
+                            meta["best_conforme_key"] = oi_key
+                            meta["best_conforme_oi_year"] = oi_year or 0
+                            meta["best_conforme_oi_num"] = oi_num or 0
+                            series[serie] = SerieInfo(
+                                oi_num=oi_num or 0,
+                                oi_year=oi_year or 0,
+                                estado=estado,
+                                values=row_values,
+                            )
+                    else:
+                        meta["has_no_conforme"] = True
+                        if meta["best_no_conforme_key"] is None or oi_key > meta["best_no_conforme_key"]:
+                            meta["best_no_conforme_key"] = oi_key
+                            meta["best_no_conforme_oi_year"] = oi_year or 0
+                            meta["best_no_conforme_oi_num"] = oi_num or 0
+                            # Solo se usa NO CONFORME si no existe CONFORME.
+                            if not meta["has_conforme"]:
+                                series[serie] = SerieInfo(
+                                    oi_num=oi_num or 0,
+                                    oi_year=oi_year or 0,
+                                    estado=estado,
+                                    values=row_values,
+                                )
                 else:
                     # GASELAG: no hay OI real; mantenemos oi_num=0 para no inventar OI-XXXX
                     if prev is None or (prev.oi_num == 0 and prev.oi_year == 0):
@@ -867,6 +915,28 @@ def process_log01_files(
     series_conformes = len(conformes)
     series_no_conformes_final = series_total_dedup - series_conformes
     series_duplicates_eliminated = max(rows_total_read - series_total_dedup, 0)
+
+    # Auditoría: series con NO CONFORME más reciente que una CONFORME
+    conflict_series: List[Dict[str, Any]] = []
+    for serie, meta in series_meta.items():
+        if (
+            meta.get("has_conforme")
+            and meta.get("has_no_conforme")
+            and meta.get("latest_estado") == "NO CONFORME"
+        ):
+            conflict_series.append(
+                {
+                    "serie": serie,
+                    "latest_oi_year": meta.get("latest_oi_year"),
+                    "latest_oi_num": meta.get("latest_oi_num"),
+                    "latest_estado": meta.get("latest_estado"),
+                    "best_conforme_oi_year": meta.get("best_conforme_oi_year"),
+                    "best_conforme_oi_num": meta.get("best_conforme_oi_num"),
+                    "best_no_conforme_oi_year": meta.get("best_no_conforme_oi_year"),
+                    "best_no_conforme_oi_num": meta.get("best_no_conforme_oi_num"),
+                }
+            )
+    conflict_series.sort(key=lambda x: _natural_key(x.get("serie") or ""))
 
     # 3) Render a plantilla LOG01 (fila 2+, item desde 1)
     st = get_settings()
@@ -1055,6 +1125,10 @@ def process_log01_files(
         # Detalle técnico
         "detail": {
             "series_duplicates_eliminated": series_duplicates_eliminated,
+            "series_conflict_no_conforme_post_conforme": {
+                "count": len(conflict_series),
+                "items": conflict_series[:100],
+            },
         },
     }
 

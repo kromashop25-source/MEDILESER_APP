@@ -3,12 +3,13 @@ const TYPE_MAP: Record<string, string> = {
   progress: "progreso",
   complete: "completado",
   error: "error",
+  file_retry: "reintentando",
 };
 
 const STAGE_MAP: Record<string, string> = {
   file: "archivo",
   file_done: "archivo procesado",
-  file_error: "archoivo con error",
+  file_error: "archivo con error",
   render: "generando",
   failed: "fallido",
   received: "recibido",
@@ -33,20 +34,20 @@ const STAGE_MAP: Record<string, string> = {
 };
 
 const WORD_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/\bcomplete(d)?\b/gi, "completado"],
-  [/\bstopped_blank\b/gi, "detenido (en blanco)"],
-  [/\bskipped_incremental\b/gi, "omitido (incremental)"],
-  [/\bskipped\b/gi, "omitido"],
-  [/\bprocessing\b/gi, "procesando"],
-  [/\bopening\b/gi, "abriendo"],
-  [/\breading\b/gi, "leyendo"],
-  [/\bwriting\b/gi, "escribiendo"],
-  [/\bsaving\b/gi, "guardando"],
-  [/\breceived\b/gi, "recibido"],
-  [/\bloading\b/gi, "cargando"],
-  [/\bupload(ing)?\b/gi, "subiendo"],
-  [/\bdownload(ing)?\b/gi, "descargando"],
-  [/\bmerge(s|d|ing)?\b/gi, "consolidando"],
+  [/\\bcomplete(d)?\\b/gi, "completado"],
+  [/\\bstopped_blank\\b/gi, "detenido (en blanco)"],
+  [/\\bskipped_incremental\\b/gi, "omitido (incremental)"],
+  [/\\bskipped\\b/gi, "omitido"],
+  [/\\bprocessing\\b/gi, "procesando"],
+  [/\\bopening\\b/gi, "abriendo"],
+  [/\\breading\\b/gi, "leyendo"],
+  [/\\bwriting\\b/gi, "escribiendo"],
+  [/\\bsaving\\b/gi, "guardando"],
+  [/\\breceived\\b/gi, "recibido"],
+  [/\\bloading\\b/gi, "cargando"],
+  [/\\bupload(ing)?\\b/gi, "subiendo"],
+  [/\\bdownload(ing)?\\b/gi, "descargando"],
+  [/\\bmerge(s|d|ing)?\\b/gi, "consolidando"],
 ];
 
 function capitalize(s: string) {

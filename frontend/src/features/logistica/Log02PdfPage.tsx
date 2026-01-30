@@ -176,6 +176,7 @@ export default function Log02PdfPage() {
   const [copyProgress, setCopyProgress] = useState<number>(0);
   const [copyStage, setCopyStage] = useState<string>("");
   const [copyMessage, setCopyMessage] = useState<string>("");
+  const [copyRetryCount, setCopyRetryCount] = useState<number>(0);
   const [copyOi, setCopyOi] = useState<string>("");
   const [copyWarnings, setCopyWarnings] = useState<Array<{ oi: string; code?: string; message: string }>>([]);
   const [copyErrors, setCopyErrors] = useState<Array<{ oi?: string; file?: string; message: string }>>([]);
@@ -862,13 +863,46 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
   }
 
   function onCopyEvent(ev: any) {
-    const type = String(ev?.type || "");
-    aplicarProgreso(ev);
+    const e = { ...(ev || {}) } as any;
+    const type = String(e?.type || "");
+    aplicarProgreso(e);
+
+    // UX: mostrar reintentos de archivo en el panel "Detalle en vivo".
+    // El backend emite type=file_retry cuando detecta archivos bloqueados / errores transitorios.
+    if (type === "file_retry") {
+      setCopyRetryCount((prev) => prev + 1);
+      // Normalizar mensaje para UI (fallback si backend no lo envía).
+      const oi = String(e.oi || "").trim();
+      const file = String(e.file || e.filename || "").trim();
+      const attempt = e.attempt ?? e.try ?? e.retry;
+      const maxAttempts = e.max_attempts ?? e.maxAttempts ?? e.max;
+      const waitMs = e.wait_ms ?? e.delay_ms ?? e.sleep_ms ?? e.waitMs;
+
+      let attemptTxt = "";
+      if (attempt != null && maxAttempts != null) attemptTxt = ` (intento ${attempt}/${maxAttempts})`;
+      else if (attempt != null) attemptTxt = ` (intento ${attempt})`;
+      
+      let waitTxt = "";
+      if (typeof waitMs === "number" && isFinite(waitMs)) {
+        const s = Math.max(1, Math.ceil(waitMs / 1000));
+        waitTxt = ` — esperando ${s}s`;
+      } 
+
+      const prefix = oi ? `${oi}: ` : "";
+      if (!e.message) {
+        e.message = `${prefix}Reintentando archivo${file ? ` ${file}` : ""}${attemptTxt}${waitTxt}`;
+      }
+
+      // Propagar el mensaje al evento original para que quede visible también en el panel en vivo.
+      if (ev && typeof ev === "object" && !ev.message) {
+        ev.message = e.message;
+      }
+    }
 
     if (type === "status" || type === "progress") {
-      const stage = ev?.stage ? String(ev.stage) : type;
+      const stage = e?.stage ? String(e.stage) : "";
       if (stage) setCopyStage(stage);
-      if (typeof ev?.message === "string" && ev.message) setCopyMessage(ev.message);
+      if (typeof e?.message === "string" && e.message) setCopyMessage(e.message);
       if (stage) {
         const stageNorm = stage.toLowerCase();
         if (stageNorm === "cancelado" || stageNorm === "cancelled") {
@@ -882,25 +916,25 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
       return;
     }
     if (type === "oi") {
-      if (typeof ev?.oi === "string") setCopyOi(ev.oi);
+      if (typeof e?.oi === "string") setCopyOi(e.oi);
       return;
     }
     if (type === "oi_warn") {
-      const oi = String(ev?.oi || "");
-      const msg = String(ev?.message || "");
-      const code = ev?.code ? String(ev.code) : undefined;
+      const oi = String(e?.oi || "");
+      const msg = String(e?.message || "");
+      const code = e?.code ? String(e.code) : undefined;
       if (oi && msg) setCopyWarnings((prev) => [... prev, { oi, code, message: msg}]);
       return;
     }
     if (type === "oi_error" || type === "file_error") {
-      const oi = ev?.oi ? String(ev.oi) : undefined;
-      const file = ev?.file ? String(ev.file) : undefined;
-      const msg = String(ev?.message || "Error");
+      const oi = e?.oi ? String(e.oi) : undefined;
+      const file = e?.file ? String(e.file) : undefined;
+      const msg = String(e?.message || "Error");
       setCopyErrors((prev) => [...prev, { oi, file, message: msg}]);
       return;
     }
     if (type === "error") {
-      const msg = String(ev?.message || "Fallo en el proceso.");
+      const msg = String(e?.message || "Fallo en el proceso.");
       setCopyErrors((prev) => [...prev, { message: msg}]);
       setCopyMessage(msg);
       setCopyStage("error");
@@ -911,10 +945,10 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     }
     if (type === "complete") {
       copyCompletedRef.current = true;
-      if (typeof ev?.message === "string") setCopyMessage(ev.message);
+      if (typeof e?.message === "string") setCopyMessage(e.message);
       setCopyStage("completado");
       setCopyProgress(100);
-      setCopyAudit(ev?.audit ?? null);
+      setCopyAudit(e?.audit ?? null);
       setCopying(false);
       stopPolling("complete");
       stopStream("complete");
@@ -947,11 +981,17 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
 
     // Live log (soporte): registrar eventos relevantes sin saturar memoria
     const shouldLog =
+      type === "hello" ||
       type === "status" ||
       type === "progress" ||
+      type === "ping" ||
       type === "oi" ||
+      type === "oi_done" ||
+      type === "file_ok" ||
+      type === "file_skip" ||
       type === "oi_warn" ||
       type === "oi_error" ||
+      type === "file_retry" ||
       type === "file_error" ||
       type === "error" ||
       type === "complete";
@@ -1139,6 +1179,7 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
     setCopyStage("inicio");
     setCopyMessage("Iniciando copiado...");
     setCopyProgress(0);
+    setCopyRetryCount(0);
     setCopyOi("");
     setCopyOperationId("");
     setLiveEvents([]);
@@ -2086,6 +2127,9 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                             {copyWarnings.length ? (
                               <span className="badge bg-warning vi-text-contrast">Advertencias: {copyWarnings.length}</span>
                             ) : null}
+                            {copyRetryCount > 0 ? (
+                              <span className="badge bg-warning vi-text-contrast">Reintentando: {copyRetryCount}</span>
+                            ) : null}
                             {copyErrors.length ? (
                               <span className="badge bg-danger">Errores: {copyErrors.length}</span>
                             ) : null}
@@ -2170,7 +2214,10 @@ function seleccionarCorrida(it: Log01HistoryListItem) {
                                         typeof ev.progress === "number" ? ` | ${Math.round(ev.progress)}%` : ""
                                       }${ev.message ? ` | ${ev.message}` : ""}`;
                                       return (
-                                        <div key={`le-${idx}`} className="vi-logline">
+                                        <div
+                                          key={`le-${idx}`}
+                                          className={`vi-logline ${String(ev?.type || "").toLowerCase() === "file_retry" ? "text-warning" : ""}`}
+                                        >
                                           {line}
                                         </div>
                                       );

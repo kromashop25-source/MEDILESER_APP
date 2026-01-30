@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -50,14 +50,14 @@ class Settings(BaseSettings):
     log02_unc_roots: List[str] = []
 
     # ===========================================
-    # LOG-02 (PB-LOG-021): handering I/O copiado
+    # LOG-02 (PB-LOG-021): hardening I/O copiado
     # ===========================================
-    # Intentos máximos por archivo al copiar (reintentos controlados antes locks/PermissionError).
+    # Intentos máximos por archivo al copiar (reintentos controlados ante locks/PermissionError).
     log02_copy_max_attempts: int = 5
-    # Backoff base (ms) y máximo (ms) entre reintentos
+    # Backoff base (ms) y máximo (ms) entre reintentos.
     log02_copy_retry_base_ms: int = 200
     log02_copy_retry_max_ms: int = 2000
-    # Umbral para marcar copias "lentas" (ms) en auditoría
+    # Umbral para marcar copias "lentas" (ms) en auditoría.
     log02_copy_slow_ms: int = 3000
     # Ruta relativa (desde app/) a la plantilla Excel
     # Nota: el template vive en app/data/templates/vi/
@@ -178,3 +178,4 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
